@@ -503,6 +503,11 @@ public sealed partial class TopTabStrip : UserControl
 				timer.IsRepeating = false;
 				timer.Tick += (_, _) =>
 				{
+					if (App.IsClosing)
+					{
+						return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+					}
+
 					tries = 0;
 					Try();
 				};

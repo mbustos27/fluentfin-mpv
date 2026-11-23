@@ -23,7 +23,7 @@ public sealed class OutsideSettingsXamlTests
 		var heading = Section.Elements().First();
 		Assert.Equal("Look up lists online", (string?)heading.Attribute("Text"));
 		Assert.Equal("Level2", (string?)heading.Attribute("AutomationProperties.HeadingLevel"));
-		Assert.Contains("Nothing about your server, account or libraries is sent", (string?)Named(Section, "OutsideListsIntro").Attribute("Text"), StringComparison.Ordinal);
+		Assert.Contains("Nothing about the server you use, your account or your libraries is sent", (string?)Named(Section, "OutsideListsIntro").Attribute("Text"), StringComparison.Ordinal);
 	}
 
 	[Theory]
@@ -59,7 +59,7 @@ public sealed class OutsideSettingsXamlTests
 		Assert.All(settings.Switches, s =>
 		{
 			Assert.StartsWith("Sent: ", s.WhatIsSent, StringComparison.Ordinal);
-			Assert.Contains("Not sent: your server, account, libraries or anything you watch.", s.WhatIsSent, StringComparison.Ordinal);
+			Assert.Contains("Not sent: the server you use, your account, libraries or anything you watch.", s.WhatIsSent, StringComparison.Ordinal);
 			Assert.Equal(s.Name + " status", s.StatusName);
 			Assert.Equal(Uri.UriSchemeHttps, s.Link.Uri.Scheme);
 			Assert.EndsWith("Off by default.", s.Description, StringComparison.Ordinal);

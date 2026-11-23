@@ -161,10 +161,25 @@
                     </ctk:SettingsExpander>
                     <ctk:SettingsExpander
                         x:Name="NixieKindsExpander"
-                        Description="The kinds of collection Nixie makes from your server's own data, on the Collections page and Home. Nothing is sent anywhere."
+                        Description="The kinds of collection Nixie makes from the server's own data, on the Collections page and Home. Nothing is sent anywhere."
                         Header="Made by Nixie collections"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE8FD;}"
                         ItemsSource="{x:Bind CollectionsSettings.Kinds}">
+                        <ctk:SettingsExpander.ItemTemplate>
+                            <DataTemplate x:DataType="sc:CollectionSwitch">
+                                <ctk:SettingsCard Header="{x:Bind Name}">
+                                    <ToggleSwitch AutomationProperties.Name="{x:Bind Name}" IsOn="{x:Bind IsOn, Mode=TwoWay}" />
+                                </ctk:SettingsCard>
+                            </DataTemplate>
+                        </ctk:SettingsExpander.ItemTemplate>
+                    </ctk:SettingsExpander>
+                    <!--  1.7.3 fix round (BH-173-m2): the filters Nixie adds to each library's strip, with the switches 1.7.2 had  -->
+                    <ctk:SettingsExpander
+                        x:Name="NixieLibraryFiltersExpander"
+                        Description="Filters Nixie adds to each library's strip, from the server's own data. Only on this PC."
+                        Header="Made by Nixie filters in libraries"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE71C;}"
+                        ItemsSource="{x:Bind CollectionsSettings.LibraryFilters}">
                         <ctk:SettingsExpander.ItemTemplate>
                             <DataTemplate x:DataType="sc:CollectionSwitch">
                                 <ctk:SettingsCard Header="{x:Bind Name}">
@@ -191,7 +206,7 @@
                         Margin="1,0,0,4"
                         Foreground="{ThemeResource GlassTextSecondaryBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="Public lists Nixie fetches and matches to your libraries on this PC. Nothing about your server, account or libraries is sent. Each one is off until you turn it on."
+                        Text="Public lists Nixie fetches and matches to your libraries on this PC. Nothing about the server you use, your account or your libraries is sent. Each one is off until you turn it on."
                         TextWrapping="WrapWholeWords" />
                     <ctk:SettingsExpander
                         x:Name="TmdbExportsExpander"
@@ -416,7 +431,7 @@
                         <ToggleSwitch AutomationProperties.Name="Look up intros online" IsOn="{x:Bind ViewModel.LookUpIntrosOnline, Mode=TwoWay}" />
                         <ctk:SettingsExpander.Items>
                             <ctk:SettingsCard
-                                Description="Sent: the show's public ID, season, episode and length. Not sent: your server, account or file names. For anime, AniSkip finds the show through arm.haglund.dev."
+                                Description="Sent: the show's public ID, season, episode and length. Not sent: the server you use, your account or file names. For anime, AniSkip finds the show through arm.haglund.dev."
                                 Header="What is sent">
                                 <StackPanel Orientation="Horizontal" Spacing="12">
                                     <HyperlinkButton Content="TheIntroDB" NavigateUri="https://theintrodb.org" />
@@ -435,7 +450,7 @@
                     -->
                     <ctk:SettingsCard
                         x:Name="AdsAndPreviewsCard"
-                        Description="Ad breaks and previews your server marks, if it marks any."
+                        Description="Ad breaks and previews the server marks, if it marks any."
                         Header="Ads and previews the server marks"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE789;}"
                         Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
@@ -810,7 +825,7 @@
                         ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
                         ActionIconToolTip="Opens in your browser"
                         Click="OnContributeClick"
-                        Description="Nixie's code, ideas and fixes are on GitHub: github.com/mbustos27/fluentfin-mpv."
+                        Description="Nixie's code, ideas and fixes are on GitHub: github.com/mbustos27/nixie."
                         Header="Contribute"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE943;}"
                         IsClickEnabled="True" />

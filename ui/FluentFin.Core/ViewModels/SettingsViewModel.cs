@@ -645,7 +645,7 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	/// <summary>1.6.1 (BH-151-m2): Playback preferences' failed Save, in words that name an ended sign-in.</summary>
 	internal static string ChangeDidNotReach() => LoadMessages.ActionFailed($"Your change didn't reach {LoadMessages.ServerName()}",
-		$"Your change didn't reach {LoadMessages.ServerName()}. Check that the server is running and that this PC can reach it, then try again.");
+		$"Your change didn't reach {LoadMessages.ServerName()}. Check this PC's connection, then try again."); // 1.7.3 (rule 11): it said "Check that the server is running"
 
 	/// <summary>
 	/// fluentfin-mpv: saves this page's four fields into the user's configuration as the server has it now, read just

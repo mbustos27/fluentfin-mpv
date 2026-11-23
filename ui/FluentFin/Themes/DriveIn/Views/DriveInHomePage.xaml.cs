@@ -44,6 +44,11 @@ public sealed partial class DriveInHomePage : Page
 		_noticeTimer.IsRepeating = false;
 		_noticeTimer.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			if (ViewModel.Notice is not { } notice)
 			{
 				return;
@@ -66,6 +71,8 @@ public sealed partial class DriveInHomePage : Page
 			// the view model outlives the page (a theme switch makes a new one): listen only while shown
 			ViewModel.PropertyChanged -= OnViewModelChanged;
 			ViewModel.PropertyChanged += OnViewModelChanged;
+			ViewModel.State.PropertyChanged -= OnHomeStateChanged; // 1.7.3: the sign's "Nothing up next" waits for Home's load
+			ViewModel.State.PropertyChanged += OnHomeStateChanged;
 			Watch(null, null);
 			// the lot is opaque: nothing of the window's soft artwork shows behind Home
 			AmbientBackdrop.Set(null);
@@ -77,6 +84,7 @@ public sealed partial class DriveInHomePage : Page
 		{
 			_noticeTimer.Stop();
 			ViewModel.PropertyChanged -= OnViewModelChanged;
+			ViewModel.State.PropertyChanged -= OnHomeStateChanged;
 			Unwatch();
 		};
 	}
@@ -98,8 +106,18 @@ public sealed partial class DriveInHomePage : Page
 				break;
 			case nameof(HomeViewModel.NextUpItems):
 			case nameof(HomeViewModel.IsContinueLoading):
+			case nameof(HomeViewModel.IsNextUpLoading): // 1.7.3: the sign's "Nothing up next" once Next Up is in
 				Refresh();
 				break;
+		}
+	}
+
+	// 1.7.3: Home's load done (or not), with a problem or not: whether the sign may say "Nothing up next"
+	private void OnHomeStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName is nameof(LoadState.Status) or nameof(LoadState.HasProblem))
+		{
+			Sign.IsNextUpKnown = ComingUpSign.KnowsNextUp(ViewModel.IsNextUpLoading, ViewModel.State.Status, ViewModel.State.HasProblem);
 		}
 	}
 
@@ -146,8 +164,9 @@ public sealed partial class DriveInHomePage : Page
 		Screen.Slides = features;
 		DriveInHome.Sync(ContinueShown, DriveInHome.ContinueRow(ViewModel.ContinueItems, x => x.Id, features));
 		DriveInRows.SetSubtitle(ContinueRow, DriveInHome.InProgressText(ViewModel.ContinueItems.Count));
-		Sign.Items = [.. ViewModel.NextUpItems];
-		Sign.UpNextCount = ViewModel.DriveInUpNextCount;
+		// 1.7.3: the sign's entries and its link's count from one list, the one the link opens (Next Up)
+		Sign.IsNextUpKnown = ComingUpSign.KnowsNextUp(ViewModel.IsNextUpLoading, ViewModel.State.Status, ViewModel.State.HasProblem);
+		Sign.Items = ViewModel.DriveInUpNext();
 		ContinueRow.Visibility = RowVisibility(ViewModel.IsContinueLoading, ContinueShown.Count);
 		TryArrivalFocus();
 	}
@@ -280,6 +299,11 @@ public sealed partial class DriveInHomePage : Page
 		timer.Interval = TimeSpan.FromMilliseconds(50);
 		timer.Tick += (t, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			if (XamlRoot is null)
 			{
 				t.Stop();

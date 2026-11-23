@@ -26,7 +26,7 @@ uninstall it, use Settings > Apps. From the zip:
    nothing in it to open.) The app is not code-signed, so Windows SmartScreen may warn the first time:
    choose "More info", then "Run anyway". For a desktop or Start menu shortcut, make one to this
    Nixie.exe.
-3. Add your Jellyfin server and sign in. Videos play with the player "MPV (jellyfin-mpv-shim)"
+3. Add the Jellyfin server you use and sign in. Videos play with the player "MPV (jellyfin-mpv-shim)"
    (Settings > Playback).
 
 Where your data is
@@ -40,14 +40,14 @@ Where your data is
 - Nothing is written to this folder. From the zip nothing is installed: to remove Nixie, delete
   this folder and %LOCALAPPDATA%\Nixie. Installed with the .msi: uninstall it in Settings > Apps,
   and delete %LOCALAPPDATA%\Nixie too to remove your data. The old %LOCALAPPDATA%\Seaglass and
-  %LOCALAPPDATA%\FluentFinMpv, if you have them, can go once Nixie shows your servers and journal.
+  %LOCALAPPDATA%\FluentFinMpv, if you have them, can go once Nixie shows the servers you use and your journal.
 
 Reporting a problem
 -------------------
-https://github.com/mbustos27/fluentfin-mpv/issues
+https://github.com/mbustos27/nixie/issues
 Say which version (shown in the title bar), your Windows version, what you did and what happened.
 The logs in %LOCALAPPDATA%\Nixie\Logs help; access tokens are removed from them, but they do
-name your server's address and your items, so read them before you attach them.
+name the server's address and your items, so read them before you attach them.
 
 Source and licence
 ------------------

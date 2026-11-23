@@ -41,7 +41,7 @@
                 FontSize="22"
                 Foreground="{ThemeResource GlassTextSecondaryBrush}"
                 LineHeight="32"
-                Text="A Jellyfin client for Windows. Sign in with your server account."
+                Text="A Jellyfin client for Windows. Sign in with your Jellyfin account."
                 TextWrapping="Wrap" />
         </StackPanel>
         <!--  the sunset's bands along the foot of the window  -->

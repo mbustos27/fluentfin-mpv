@@ -2,14 +2,14 @@
 
 *Last updated for Nixie 1.7 (November 2026).*
 
-Nixie is a free, open-source (GPL-3.0) Windows app for watching your own Jellyfin server. It has no account of its own, no
+Nixie is a free, open-source (GPL-3.0) Windows app for watching films and shows from a Jellyfin server. It has no account of its own, no
 analytics, no telemetry and no crash reporting. **Nixie collects nothing about you.** What it keeps, it keeps on your PC,
-in Nixie's data folder (`%LOCALAPPDATA%\Nixie`), and on your own Jellyfin server.
+in Nixie's data folder (`%LOCALAPPDATA%\Nixie`), and on the Jellyfin server you use.
 
 ## What leaves your PC, and where it goes
 
-- **Your Jellyfin server.** Nixie signs in to the server you choose and plays from it, like any Jellyfin app. Your server
-  belongs to you or to whoever runs it; Nixie sends nothing about it anywhere else.
+- **The Jellyfin server you use.** Nixie signs in to the server you choose and plays from it, like any Jellyfin app. The
+  server belongs to whoever runs it; Nixie sends nothing about it anywhere else.
 - **GitHub, for updates** (on by default; **Settings → Updates → Check for updates** turns it off). Nixie asks GitHub for
   the latest Nixie release when it opens, every 4 hours while it stays open, and when you come back to it after an hour or
   more. When there is a newer one, an installed copy downloads its installer and checksum from GitHub (github.com hands the
@@ -36,7 +36,7 @@ downloads each **whole public list**, the same list everyone gets, and matches i
 **What is sent:** the list's fixed address (the same for every Nixie user), a User-Agent naming Nixie, its version and
 its GitHub page, the key the source needs (below), and your IP address.
 
-**What is never sent:** a title, an id or a name from your library, how many titles you have, anything you watched, your
+**What is never sent:** a title, an id or a name from your library, how many titles you have, anything you watched, the
 server's address, or your account. Which lists Nixie asks for, and when, depends only on the switches you turned on,
 never on what is in your library.
 
@@ -52,7 +52,7 @@ Settings' "What is sent" card for each source says the same. Nixie never shows a
 
 - **No sign-in, ever.** Nixie never signs you in to Trakt, never asks for a Trakt account, and never sends Trakt what you
   watch. Nixie uses Trakt but is not endorsed or certified by Trakt.
-- **No pictures from TMDb or Trakt.** Nixie matches the lists only; every poster you see comes from your own server.
+- **No pictures from TMDb or Trakt.** Nixie matches the lists only; every poster you see comes from the server you use.
 - **TMDb's key.** Nixie's own TMDb key is built into the release, so TMDb trending works without one of yours. If you
   enter your own token in Settings, Nixie uses it instead; it is stored encrypted with Windows (DPAPI), so only your
   Windows account on this PC can read it. Either is sent only to `api.themoviedb.org`, in the request's `Authorization`
@@ -75,8 +75,8 @@ use its page.
 - To remove everything Nixie keeps on your PC at once (saved lists, settings, saved sign-ins, the TV journal), close
   Nixie and delete the folder `%LOCALAPPDATA%\Nixie`. Uninstalling Nixie (Settings → Apps in Windows) removes the
   program but leaves that folder, so delete it as well.
-- What your Jellyfin server keeps (watch history, favourites, ratings you choose to send) is on that server; its own
-  settings or its administrator can remove it.
+- What the Jellyfin server keeps (watch history, favourites, ratings you choose to send) is on that server, and its owner
+  can remove it.
 
 ## Questions
 

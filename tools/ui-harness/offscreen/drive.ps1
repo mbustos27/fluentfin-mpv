@@ -712,6 +712,10 @@ function Step-Close([string]$What = 'close') {
     $timings["$($What)_hidden_ms"] = $hidden
     $timings["$($What)_exit_ms"] = if ($script:ui.HasExited) { $at.ElapsedMilliseconds } else { $null }
     Check "$($What): FluentFin exited" $script:ui.HasExited "after $($timings["$($What)_exit_ms"]) ms (window hidden after $hidden ms)"
+    # 1.7.3 fix round: a crash at the close (0xC000027B, a stowed exception, then Windows Error Reporting's seconds) still ended
+    # within the 20 s and passed the check above (verify-package's NoMpv run of the first 1.7.3 build); a clean close exits 0
+    $code = try { if ($script:ui.HasExited) { $script:ui.ExitCode } else { $null } } catch { $null }
+    Check "$($What): a clean exit (exit code 0, not a crash)" ($code -eq 0) $(if ($null -ne $code) { '0x{0:X8}' -f $code } elseif ($script:ui.HasExited) { 'exit code not readable' } else { 'still running' })
     Start-Sleep -Milliseconds 800
     $alive = @($tree | Where-Object { Get-TrackedProcess ([int]$_.ProcessId) })
     Check "$($What): nothing FluentFin started survives" ($alive.Count -eq 0) $(if ($alive) { ($alive | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ',' } else { 'none' })

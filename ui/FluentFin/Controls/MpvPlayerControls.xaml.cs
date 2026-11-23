@@ -265,6 +265,14 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnTick(DispatcherQueueTimer sender, object args)
 	{
+		// 1.7.3 fix round (the close crash): not in the window's teardown (a XAML read there threw out of the dispatcher's
+		// callback: 0xc000027b)
+		if (App.IsClosing)
+		{
+			sender.Stop();
+			return;
+		}
+
 		WakeOnCursorMove();
 		Controls?.Tick();
 		KeepKeyboardSomewhere();

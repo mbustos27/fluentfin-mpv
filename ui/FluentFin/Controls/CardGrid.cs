@@ -378,6 +378,11 @@ internal sealed class CardGrid
 		timer.Interval = TimeSpan.FromMilliseconds(100);
 		timer.Tick += (t, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			var root = _repeater.XamlRoot;
 			if (root is null)
 			{

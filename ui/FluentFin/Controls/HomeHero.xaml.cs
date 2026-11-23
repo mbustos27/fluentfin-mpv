@@ -35,7 +35,13 @@ public sealed partial class HomeHero : UserControl
 	{
 		InitializeComponent();
 		Visibility = Visibility.Collapsed;
-		_timer.Tick += (_, _) => Advance();
+		_timer.Tick += (_, _) =>
+		{
+			if (!App.IsClosing) // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			{
+				Advance();
+			}
+		};
 		Loaded += (_, _) =>
 		{
 			// 1.2.0: a share of the window's height, as the item pages' hero (HeroLayout)

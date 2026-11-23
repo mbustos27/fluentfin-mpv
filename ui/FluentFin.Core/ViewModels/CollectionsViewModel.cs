@@ -189,12 +189,70 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 
 	public const string ReadStoppedText = "Nixie couldn't finish reading your libraries. It will try again next time.";
 
-	/// <summary>1.7.1 (BH-171-m1): the line under the title: while the first read runs, or when it stopped part way.</summary>
-	public bool ShowsReadingLine => IsReadingIndex || IsReadStopped;
+	/// <summary>
+	/// 1.7.1 (BH-171-m1): the line under the title: while the first read runs, or when it stopped part way. 1.7.3 fix round
+	/// (BH-173-m1): or when a whole index made nothing (<see cref="IsNixieEmpty"/>).
+	/// </summary>
+	public bool ShowsReadingLine => IsReadingIndex || IsReadStopped || IsNixieEmpty;
 
-	partial void OnIsReadingIndexChanged(bool value) => OnPropertyChanged(nameof(ShowsReadingLine));
+	partial void OnIsReadingIndexChanged(bool value)
+	{
+		SayNixieEmpty();
+		OnPropertyChanged(nameof(ShowsReadingLine));
+	}
 
-	partial void OnIsReadStoppedChanged(bool value) => OnPropertyChanged(nameof(ShowsReadingLine));
+	partial void OnIsReadStoppedChanged(bool value)
+	{
+		SayNixieEmpty();
+		OnPropertyChanged(nameof(ShowsReadingLine));
+	}
+
+	// 1.7.3 fix round (BH-173-m1)
+	/// <summary>
+	/// A whole index made no Made by Nixie collection (the throwaway's 25,736 films with no tags made none, and the page showed
+	/// the server's row alone, with no word): the line says so, and what Nixie looks for. Never during a read.
+	/// </summary>
+	[ObservableProperty]
+	public partial bool IsNixieEmpty { get; private set; }
+
+	partial void OnIsNixieEmptyChanged(bool value)
+	{
+		SayNixieEmpty();
+		OnPropertyChanged(nameof(ShowsReadingLine));
+	}
+
+	/// <summary>What the line says when Made by Nixie made nothing (rule 11: what Nixie looks for, nothing about the server).</summary>
+	public const string NixieEmptyText = "Made by Nixie has nothing to show yet. It makes collections of films in one franchise, titles that share a keyword, "
+		+ "and well-rated titles you haven't watched, and found too few of them in your libraries.";
+
+	/// <summary>When every kind of Made by Nixie collection is turned off.</summary>
+	public const string NixieOffText = "Every kind of Made by Nixie collection is turned off in Settings > Collections.";
+
+	private string _nixieEmptyText = NixieEmptyText;
+
+	// the reading line's words: a read running or stopped says so first
+	private void SayNixieEmpty()
+	{
+		if (IsNixieEmpty && !IsReadingIndex && !IsReadStopped)
+		{
+			ReadingText = _nixieEmptyText;
+		}
+	}
+
+	// whether every kind a switch turns off is off
+	private bool EveryKindOff()
+	{
+		try
+		{
+			var off = CollectionSettings.KindsOff(settings);
+			return SmartCollectionKinds.PageOrder.Concat(SmartCollectionKinds.Picks).Where(x => x != SmartCollectionKind.Award).All(off.Contains);
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+	}
+	// end 1.7.3 fix round
 
 	public const string ReadingStart = "Nixie is reading your libraries to make its collections…";
 
@@ -235,6 +293,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		_loaded = false;
 		_nixieRowsLogged = false;
 		IsReadStopped = false;
+		IsNixieEmpty = false; // 1.7.3 fix round (BH-173-m1): said again by this visit's rows
 		_firstRows = new(TaskCreationOptions.RunContinuationsAsynchronously);
 		// 1.7 keyless: the outside lists (awards, TMDb's names) as they arrive, and a refresh of the stale ones
 		Outside.OutsideListsSnapshot.SharedChanged -= OnOutsideChanged;
@@ -284,12 +343,11 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	{
 		var boxSets = JellyfinClient.GetBoxSets();
 		var playlists = JellyfinClient.GetPlaylists();
-		var saved = store.SavedAsync();
-		var favorites = store.FavoritesAsync();
+		var mine = PinsAndFilters(); // 1.7.3: after the retired kinds' pins and filters are removed
 		var known = index.SavedAsync(); // 1.7.1: the index in memory, else the saved one (never the server's: that comes behind it)
 		// 1.7.1: its collections made while the server's sets come (the franchises an admin boxed are left out once they are in)
 		var building = BuildSoon(known);
-		await Task.WhenAll(boxSets, playlists, saved, favorites, building);
+		await Task.WhenAll(boxSets, playlists, mine, building);
 		var current = known.Result;
 		if (boxSets.Result is null && playlists.Result is null && current is null)
 		{
@@ -298,8 +356,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 
 		_boxSets = boxSets.Result?.Items ?? [];
 		_playlists = playlists.Result?.Items ?? [];
-		_saved = saved.Result;
-		_favorites = favorites.Result;
+		(_saved, _favorites) = mine.Result;
 		IsReadingIndex = current is null;
 		_firstVisit = current is null;
 		ReadingText = ReadingStart;
@@ -316,8 +373,18 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		}
 		catch (Exception ex) when (latest is not null)
 		{
-			// 1.7.2: a failed Made by Nixie never fails the load: the server's rows without it (as 1.7.0 showed them)
-			MadeByNixieFailed(ex);
+			// 1.7.2: a failed Made by Nixie never fails the load: the server's rows without it (as 1.7.0 showed them).
+			// 1.7.3: logged as what failed: Made by Nixie's making (ShowAsync says so), or anything else in showing the rows,
+			// with its own type and place (it was all "Made by Nixie couldn't be made")
+			if (ex is MadeByNixieException made)
+			{
+				MadeByNixieFailed(made.InnerException!);
+			}
+			else
+			{
+				_log.LogWarning("Collections: the rows couldn't be shown ({Error} in {Where}); shown again without Made by Nixie", ex.GetType().Name, Where(ex));
+			}
+
 			await ShowAsync(null);
 		}
 
@@ -443,15 +510,46 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	private async Task<IReadOnlyList<SmartCollection>> Build(IndexSnapshot snapshot)
 	{
 		var made = await SmartCollectionCatalog.BuildAllAsync(snapshot, SmartCollectionCatalog.Now(_time), null, CollectionSettings.KindsOff(settings)); // 1.6.1 (BH-160-m1): the local date
-		// 1.7 trending: the public lists' collections (Trending, Popular, Most anticipated, Box office), matched on this PC
+		made = [.. made.Where(x => SmartCollectionCatalog.Published.Contains(x.Kind))]; // 1.7.3 (P0-3): the published kinds only
+		// 1.7 trending: the public lists' collections (Trending, Popular, Most anticipated, Box office), matched on this PC.
+		// 1.7.3: in a catch of their own, as each kind's builder is: a throw there took every Made by Nixie row away
 		if (Outside.TrendingServices.Collections is { } trending)
 		{
-			var lists = await Task.Run(() => trending.For(snapshot));
-			made = [.. made, .. lists];
+			made = [.. made, .. await TrendingMatch.Safely(() => trending.For(snapshot), [], _log)];
 		}
 		// end 1.7 trending
 		return made;
 	}
+
+	// 1.7.3 (the owner's answer 2): the user's saved filters and pins, once the pins and filters of the kinds that went
+	// (directors, actors, studios, networks) are taken out; a filter of theirs whose removal failed isn't listed either
+	private async Task<(IReadOnlyList<SmartCollection> Saved, IReadOnlySet<string> Favorites)> PinsAndFilters()
+	{
+		await RetiredCollections.ForgetAsync(store, _log);
+		var saved = await store.SavedAsync();
+		return ([.. saved.Where(x => !RetiredCollections.IsGone(x.Filter?.PresetId))], await store.FavoritesAsync());
+	}
+
+	// 1.7.3 (P0-3): the pinned collections of the kinds the presets strip still makes but Nixie no longer publishes (a decade,
+	// a genre mix, a country), each made by its id; none when there are no such pins. Off the UI thread.
+	private async Task<IReadOnlyList<SmartCollection>> PinnedOnDemand(IndexSnapshot snapshot, IReadOnlyList<SmartCollection> made)
+	{
+		var ids = _favorites.Where(NixiePresets.IsStripOnly).Except(made.Select(x => x.Id)).ToList();
+		if (ids.Count == 0)
+		{
+			return [];
+		}
+
+		var now = SmartCollectionCatalog.Now(_time);
+		// fix round (BH-173-M2): by its id, every title of its rule (a genre mix past the strip's twelve is still found)
+		return await Task.Run(() => (IReadOnlyList<SmartCollection>)[.. ids.Select(id => SmartCollectionCatalog.Find(snapshot, id, now, whole: true)).OfType<SmartCollection>()]);
+	}
+
+	// 1.7.3: a throw's place for the log: its type and method, never its message (which could name a title)
+	private static string Where(Exception ex) => ex.TargetSite is { } site ? $"{site.DeclaringType?.Name}.{site.Name}" : "an unknown place";
+
+	// 1.7.3: Made by Nixie's own making failed (not the page around it): ShowAsync throws this, and the load says so
+	private sealed class MadeByNixieException(Exception inner) : Exception("Made by Nixie couldn't be made", inner);
 
 	// 1.7.1: a franchise the admin boxed shows once, as the box set
 	private IReadOnlyList<SmartCollection> Unboxed(IReadOnlyList<SmartCollection> made)
@@ -553,7 +651,21 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 				await making(snapshot);
 			}
 
-			var made = snapshot is null ? [] : Unboxed(built ?? await Build(snapshot));
+			IReadOnlyList<SmartCollection> made = [];
+			IReadOnlyList<SmartCollection> pinned = [];
+			if (snapshot is not null)
+			{
+				try
+				{
+					made = Unboxed(built ?? await Build(snapshot));
+					pinned = await PinnedOnDemand(snapshot, made); // 1.7.3
+				}
+				catch (Exception ex) when (ex is not OperationCanceledException)
+				{
+					throw new MadeByNixieException(ex); // 1.7.3: said as Made by Nixie's (the load's catch)
+				}
+			}
+
 			lock (_showing)
 			{
 				if (asked < _shown)
@@ -562,7 +674,12 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 				}
 
 				_shown = asked;
-				ShowLocked(made);
+				ShowLocked(made, pinned);
+				// 1.7.3 fix round (BH-173-m1): a whole index that made nothing says so (none of a first read's pages, nor a show
+				// without an index: a read that failed)
+				_nixieEmptyText = EveryKindOff() ? NixieOffText : NixieEmptyText;
+				IsNixieEmpty = snapshot is { Reading: null } && made.Count == 0 && !Place.SeeAll;
+				SayNixieEmpty();
 				if (Rows.Count > 0 || GridTiles.Count > 0)
 				{
 					_firstRows.TrySetResult();
@@ -583,7 +700,8 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		}
 	}
 
-	private void ShowLocked(IReadOnlyList<SmartCollection> made)
+	/// <param name="pinnedOnDemand">1.7.3: the pinned collections of kinds no longer published (Saved shows them).</param>
+	private void ShowLocked(IReadOnlyList<SmartCollection> made, IReadOnlyList<SmartCollection> pinnedOnDemand)
 	{
 		MadeByNixieCount = made.Count;
 		var rows = new List<CollectionsRow>();
@@ -591,7 +709,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		var server = _boxSets.Select((x, i) => CollectionTile.Server(x, names[i])).ToList();
 		var playlists = _playlists.Select(x => CollectionTile.Server(x, x.Name ?? "")).ToList();
 		var nixie = made.Select(CollectionTile.Made).ToList();
-		var pinned = made.Where(x => _favorites.Contains(x.Id)).Select(CollectionTile.Made);
+		var pinned = made.Where(x => _favorites.Contains(x.Id)).Concat(pinnedOnDemand).Select(CollectionTile.Made);
 		var saved = _saved.Select(CollectionTile.Made).Concat(pinned).ToList();
 
 		if (Place.SeeAll)
@@ -730,3 +848,33 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	/// <summary>A row's "See all": the Collections page with every tile of that row.</summary>
 	public void SeeAll(CollectionsRow row) => commands.OpenCollectionsAt(new CollectionsPlace(row.Section, row.Kind, SeeAll: true));
 }
+
+// 1.7.3
+/// <summary>
+/// The trending lists' collections matched against the index, off the UI thread, inside a catch of their own, as each kind's
+/// builder is (<see cref="SmartCollectionCatalog"/>'s per-kind catch): a throw there leaves out the trending collections
+/// only, and is said once in the log (the exception's type: no titles). The Collections page and Home took every Made by
+/// Nixie row away with it.
+/// </summary>
+internal static class TrendingMatch
+{
+	private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ILogger, object> Said = new();
+
+	public static async Task<T> Safely<T>(Func<T> match, T none, ILogger? log)
+	{
+		try
+		{
+			return await Task.Run(match);
+		}
+		catch (Exception ex) when (ex is not OperationCanceledException)
+		{
+			if (log is not null && Said.TryAdd(log, Said))
+			{
+				log.LogWarning("Made by Nixie: the trending collections couldn't be matched ({Error}); the other kinds still are", ex.GetType().Name);
+			}
+
+			return none;
+		}
+	}
+}
+// end 1.7.3

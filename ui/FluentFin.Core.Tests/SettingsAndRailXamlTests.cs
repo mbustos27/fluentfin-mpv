@@ -160,9 +160,12 @@ public sealed class SettingsAndRailXamlTests
 	[Fact]
 	public void AboutLinks_GoToThisProject()
 	{
-		Assert.Equal("https://github.com/mbustos27/fluentfin-mpv", SettingsViewModel.ContributeUrl);
-		Assert.Equal("https://github.com/mbustos27/fluentfin-mpv/issues/new", SettingsViewModel.ReportProblemUrl);
-		Assert.Equal(new Uri("https://github.com/mbustos27/fluentfin-mpv/blob/main/LICENSE"), SettingsViewModel.LicenseUri);
+		Assert.Equal("https://github.com/mbustos27/nixie", SettingsViewModel.ContributeUrl);
+		Assert.Equal("https://github.com/mbustos27/nixie/issues/new", SettingsViewModel.ReportProblemUrl);
+		Assert.Equal(new Uri("https://github.com/mbustos27/nixie/blob/main/LICENSE"), SettingsViewModel.LicenseUri);
+		// 1.7.3: the Contribute card's words name the repository as it is now (it said mbustos27/fluentfin-mpv)
+		var contribute = Load(Settings).Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "ContributeCard");
+		Assert.Equal("Nixie's code, ideas and fixes are on GitHub: github.com/mbustos27/nixie.", (string?)contribute.Attribute("Description"));
 	}
 
 	[Fact]

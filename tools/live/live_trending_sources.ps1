@@ -38,7 +38,7 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $csproj = [xml](Get-Content -Raw (Join-Path $repo 'ui\FluentFin\FluentFin.csproj'))
 $version = @($csproj.SelectNodes('//PropertyGroup/Version') | Where-Object { $_.GetAttribute('Condition') -match "== ''" } | ForEach-Object { $_.InnerText.Trim() })[0]
-$userAgent = "Nixie/$version (https://github.com/mbustos27/fluentfin-mpv)"
+$userAgent = "Nixie/$version (https://github.com/mbustos27/nixie)"
 
 function Get-Secret([string]$name) {
     foreach ($scope in 'Process', 'User') {

@@ -10,7 +10,7 @@ namespace FluentFin.Core.Tests;
 /// <summary>Seaglass: the opt-in update notice. Recorded GitHub responses only; nothing here touches the network.</summary>
 public sealed class UpdateTests : IDisposable
 {
-	private const string Repo = "https://github.com/mbustos27/fluentfin-mpv";
+	private const string Repo = "https://github.com/mbustos27/nixie";
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "nixie-update-tests-" + Guid.NewGuid().ToString("N"));
 
 	public void Dispose()
@@ -188,7 +188,7 @@ public sealed class UpdateTests : IDisposable
 		Assert.Equal(UpdateCheckStatus.Available, result.Status);
 		Assert.Equal("1.2.0", result.Release!.Version);
 		var request = Assert.Single(handler.Requests);
-		Assert.Equal("https://api.github.com/repos/mbustos27/fluentfin-mpv/releases/latest", request.RequestUri!.ToString());
+		Assert.Equal("https://api.github.com/repos/mbustos27/nixie/releases/latest", request.RequestUri!.ToString());
 		Assert.Equal("Nixie/1.1.1", request.Headers.UserAgent.ToString());
 		Assert.Empty(request.Headers.Authorization is null ? [] : new[] { "auth" });
 		Assert.False(request.Headers.Contains("Cookie"));
@@ -606,22 +606,23 @@ public sealed class UpdateTests : IDisposable
 	}
 
 	[Theory]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi", true)]
-	[InlineData("http://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/a.msi", false)]
-	[InlineData("https://github.com.evil.example/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
-	[InlineData("https://evil.example/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
-	[InlineData("https://github.com@evil.example/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
-	[InlineData("https://github.com:8443/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/../../../../evil/x/raw/a.msi", false)]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/%2e%2e/%2e%2e/a.msi", false)]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/%2E./a.msi", false)]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/.%2e/a.msi", false)]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1%2f..%2fa.msi", false)]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1\\..\\a.msi", false)]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/", false)]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv2/releases/download/v1/a.msi", false)]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1/a.msi#x", false)]
-	[InlineData("https://GITHUB.com/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", true)]
+	[InlineData("https://github.com/mbustos27/nixie/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi", true)]
+	[InlineData("http://github.com/mbustos27/nixie/releases/download/v1.2.0/a.msi", false)]
+	[InlineData("https://github.com.evil.example/mbustos27/nixie/releases/download/v1/a.msi", false)]
+	[InlineData("https://evil.example/mbustos27/nixie/releases/download/v1/a.msi", false)]
+	[InlineData("https://github.com@evil.example/mbustos27/nixie/releases/download/v1/a.msi", false)]
+	[InlineData("https://github.com:8443/mbustos27/nixie/releases/download/v1/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/nixie/releases/download/../../../../evil/x/raw/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/nixie/releases/download/%2e%2e/%2e%2e/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/nixie/releases/download/%2E./a.msi", false)]
+	[InlineData("https://github.com/mbustos27/nixie/releases/download/.%2e/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/nixie/releases/download/v1%2f..%2fa.msi", false)]
+	[InlineData("https://github.com/mbustos27/nixie/releases/download/v1\\..\\a.msi", false)]
+	[InlineData("https://github.com/mbustos27/nixie/releases/download/", false)]
+	[InlineData("https://github.com/mbustos27/nixie2/releases/download/v1/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/nixie/releases/download/v1/a.msi#x", false)]
+	[InlineData("https://GITHUB.com/mbustos27/nixie/releases/download/v1/a.msi", true)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi", false)]   // 1.7.3: the old name
 	public void IsDownload_AcceptsOnlyThisRepositorysReleaseAssets(string url, bool expected) =>
 		Assert.Equal(expected, UpdateSource.IsDownload(url));
 
@@ -639,15 +640,15 @@ public sealed class UpdateTests : IDisposable
 	public async Task Coordinator_AStoredReleaseIsCheckedAgain_BeforeItIsOffered()
 	{
 		var stored = new UpdateState(DateTimeOffset.UtcNow, new ReleaseInfo("1.2.0", "https://evil.example/page", "n", "Nixie-1.2.0-win-x64.msi",
-			"https://github.com/mbustos27/fluentfin-mpv/releases/download/%2e%2e/%2e%2e/evil/a.msi",
-			"https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi.sha256"), null).ToJson();
+			"https://github.com/mbustos27/nixie/releases/download/%2e%2e/%2e%2e/evil/a.msi",
+			"https://github.com/mbustos27/nixie/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi.sha256"), null).ToJson();
 		var (settings, _) = FakeSettings(enabled: true, stored);
 		var coordinator = new UpdateCoordinator(settings.Object, new UpdateChecker(new HttpClient(new Fake(_ => throw new HttpRequestException("offline"))), "1.1.1"), () => DateTimeOffset.UtcNow, "1.1.1");
 
 		await coordinator.TickAsync();         // 1.3.1: the start check asks; offline, the stored release is what is offered
 
 		Assert.False(coordinator.Notice!.HasInstaller);
-		Assert.StartsWith("https://github.com/mbustos27/fluentfin-mpv/releases/", coordinator.Notice.PageUrl);
+		Assert.StartsWith("https://github.com/mbustos27/nixie/releases/", coordinator.Notice.PageUrl);
 	}
 
 	[Fact]

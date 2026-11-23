@@ -17,19 +17,21 @@ public sealed class AwardBuilder : ISmartCollectionBuilder
 	public IEnumerable<SmartCollection> Build(BuildContext context)
 	{
 		var awards = context.Outside.Lists.Where(x => x.Kind == OutsideListKind.Award).ToList();
-		if (awards.Count == 0)
+		var made = new List<SmartCollection>();
+		if (awards.Count > 0)
 		{
-			yield break;
-		}
-
-		var matcher = new OutsideMatcher(context.Index);
-		foreach (var award in awards)
-		{
-			var titles = matcher.MatchAll(award.Items.Select(x => x.Ref));
-			if (titles.Count >= Least)
+			var matcher = context.Matcher; // 1.7.3 (P0-2b): matched to the titles, copies collapsed
+			foreach (var award in awards)
 			{
-				yield return Make.Of($"award:{award.Id}", Kind, award.Title, award.Why, hasOwnOrder: true, titles);
+				var titles = matcher.MatchAll(award.Items.Select(x => x.Ref));
+				if (titles.Count >= Least)
+				{
+					made.Add(Make.Of($"award:{award.Id}", Kind, award.Title, award.Why, hasOwnOrder: true, titles));
+				}
 			}
 		}
+
+		context.Gates.Count(Kind, awards.Count, made.Count, made.Count); // 1.7.3 (P0-1)
+		return made;
 	}
 }

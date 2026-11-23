@@ -150,9 +150,9 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		ApiException { ResponseStatusCode: 403 } =>
 			$"{url} doesn't let this account sign in (it may be disabled, or not allowed on this device). Ask the server's administrator.",
 		ApiException { ResponseStatusCode: >= 500 } api =>
-			$"{url} answered with an error ({api.ResponseStatusCode}): it may be starting up or have a problem. Wait a moment and try again; if it keeps happening, check the server's logs.",
+			$"{url} answered with an error ({api.ResponseStatusCode}): it may be starting up or have a problem. Wait a moment and try again; if it keeps happening, its owner may need to know.",
 		ApiException api =>
-			$"{url} answered with an error ({api.ResponseStatusCode}). Check that this is your Jellyfin server's address, then try again.",
+			$"{url} answered with an error ({api.ResponseStatusCode}). Check that this is the address of the Jellyfin server you use, then try again.",
 		HttpRequestException secure when IsSecureConnectionFailure(secure) => (https, secure.InnerException) switch
 		{
 			(HttpsProblem.PlainHttp, _) =>
@@ -164,7 +164,8 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 				$"Couldn't set up a secure (HTTPS) connection to {url}. Check that this is the server's HTTPS address and port, " +
 				"or use its http:// address, then try again.",
 		},
-		HttpRequestException => $"Can't reach {url}. Check that the server is running, that the address and port are right, and that this PC can reach it (VPN, firewall), then try again.",
+		// 1.7.3 (rule 11): what the user can do on this PC (it said "Check that the server is running", and "check the server's logs" for a 5xx)
+		HttpRequestException => $"Can't reach {url}. Check that the address and port are right and that this PC can reach it (VPN, firewall), then try again.",
 		// fluentfin-mpv: the server page's timeout (or the HTTP client's own)
 		OperationCanceledException => $"{url} didn't answer in time. Check the address and port, and that this PC can reach the server (VPN, firewall), then try again.",
 		_ => $"Something went wrong talking to {url}. Try again; if it keeps happening, the app's log has the details.",

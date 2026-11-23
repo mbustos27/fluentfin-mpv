@@ -10,7 +10,7 @@ as strict as GitHub where the app depends on it (the 1.4.0 bug hunt: "each fake 
     -resource core); the 61st request within the hour gets 403 with remaining 0, as GitHub's primary limit does.
   * {"mode"}: "ok"; "ratelimited" (403, remaining 0, reset in 15 minutes); "retry-after" (429 with Retry-After: 90);
     "refuse" (403 with requests left: refused for another reason); "error" (502); "hang" (no answer for 30 s).
-  * {"repository": "owner/name"} other than mbustos27/fluentfin-mpv: the repository was renamed; GitHub answers the old
+  * {"repository": "owner/name"} other than mbustos27/nixie (the app's since 1.7.3): the repository was renamed; GitHub answers the old
     address with 301 to /repositories/<id>/..., here /__harness/release/repositories/4242/latest, whose answer names the
     new repository in its pages, its API address and its assets.
 - GET /__harness/release/download/v<version>/<asset>: the installer (deterministic bytes, {"size"}, 24 MB by default) and
@@ -30,7 +30,7 @@ import re
 import threading
 import time
 
-DEFAULT_REPOSITORY = "mbustos27/fluentfin-mpv"
+DEFAULT_REPOSITORY = "mbustos27/nixie"
 RENAMED_ID = 4242
 NO_AGENT = {"message": "Request forbidden by administrative rules. Please make sure your request has a User-Agent header "
                        "(https://docs.github.com/en/rest/overview/resources-in-the-rest-api#user-agent-required). "

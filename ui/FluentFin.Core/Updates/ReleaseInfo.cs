@@ -9,9 +9,13 @@ public static class UpdateSource
 	/// <summary>
 	/// Nixie 1.5 (bug hunt BH-140X-m3): the repository, "owner/name", in one place. tools\release names the same one (a test pins
 	/// them together). After a rename on GitHub, a release is still taken from the repository GitHub's redirect names
-	/// (<see cref="RepositoryOf"/>, <see cref="ReleaseInfo.Parse(string?, bool)"/>).
+	/// (<see cref="RepositoryOf"/>, <see cref="ReleaseInfo.Parse(string?, bool)"/>). 1.7.3: mbustos27/nixie, the repository's
+	/// name since 2026-11-22; copies up to 1.7.2 ask <see cref="OldRepository"/> and follow GitHub's redirect here.
 	/// </summary>
-	public const string Repository = "mbustos27/fluentfin-mpv";
+	public const string Repository = "mbustos27/nixie";
+
+	/// <summary>1.7.3: the repository's name up to 1.7.2, which those copies still ask; GitHub redirects it to <see cref="Repository"/>.</summary>
+	public const string OldRepository = "mbustos27/fluentfin-mpv";
 
 	public const string RepositoryUrl = "https://github.com/" + Repository;
 	public const string LatestReleaseApi = "https://api.github.com/repos/" + Repository + "/releases/latest";
@@ -131,7 +135,7 @@ public static class UpdateSource
 
 	/// <summary>
 	/// A release asset of this repository: https, host github.com, no credentials or port, a path under
-	/// <c>/mbustos27/fluentfin-mpv/releases/download/</c> with no dot segments, encoded dots, encoded or backslash separators.
+	/// <c>/mbustos27/nixie/releases/download/</c> with no dot segments, encoded dots, encoded or backslash separators.
 	/// </summary>
 	public static bool IsDownload(string? url) => IsDownload(url, Repository);
 
@@ -227,6 +231,8 @@ public sealed record ReleaseInfo(string Version, string PageUrl, string Notes, s
 	public ReleaseInfo Validated()
 	{
 		var repository = Repository is { } other && UpdateSource.IsRepositoryName(other) && UpdateSource.RepositoryOf(PageUrl) == other ? other : null;
+		// 1.7.3: a release a copy up to 1.7.2 took after GitHub's redirect names mbustos27/nixie, this copy's own now
+		repository = repository == UpdateSource.Repository ? null : repository;
 		var source = repository ?? UpdateSource.Repository;
 		var page = UpdateSource.IsReleasePage(PageUrl, source) ? PageUrl : $"{UpdateSource.ReleasesPage}/tag/v{Version}";
 		var ok = HasInstaller && UpdateSource.IsDownload(MsiUrl, source) && UpdateSource.IsDownload(Sha256Url, source)
@@ -247,7 +253,14 @@ public sealed record ReleaseInfo(string Version, string PageUrl, string Notes, s
 	/// repository its page names, when its API address names the same one. Without a redirect, only
 	/// <see cref="UpdateSource.Repository"/>'s assets are taken, as before.
 	/// </summary>
-	public static ReleaseInfo? Parse(string? json, bool followRename)
+	public static ReleaseInfo? Parse(string? json, bool followRename) => Parse(json, followRename, UpdateSource.Repository);
+
+	/// <summary>
+	/// 1.7.3: <see cref="Parse(string?, bool)"/> as a copy whose repository is <paramref name="own"/> reads the answer: the tests
+	/// read it as copies up to 1.7.2 do (<see cref="UpdateSource.OldRepository"/>), which must still take the release from
+	/// <see cref="UpdateSource.Repository"/> through GitHub's redirect.
+	/// </summary>
+	internal static ReleaseInfo? Parse(string? json, bool followRename, string own)
 	{
 		if (string.IsNullOrWhiteSpace(json))
 		{
@@ -272,16 +285,16 @@ public sealed record ReleaseInfo(string Version, string PageUrl, string Notes, s
 			var versionText = version.ToString();
 			var page = Text(root, "html_url");
 			string? renamed = null;
-			if (followRename && UpdateSource.RepositoryOf(page) is { } named && named != UpdateSource.Repository
+			if (followRename && UpdateSource.RepositoryOf(page) is { } named && named != own
 				&& (Text(root, "url") is not { } api || UpdateSource.RepositoryOfApi(api) == named))
 			{
 				renamed = named;
 			}
 
-			var source = renamed ?? UpdateSource.Repository;
+			var source = renamed ?? own;
 			if (!UpdateSource.IsReleasePage(page, source))
 			{
-				page = $"{UpdateSource.ReleasesPage}/tag/v{versionText}";
+				page = $"https://github.com/{own}/releases/tag/v{versionText}";
 			}
 
 			// only the installer this version's release builds: Nixie-<version>-win-x64.msi and its .sha256, from this repository

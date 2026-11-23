@@ -50,6 +50,11 @@ public sealed partial class EditorialHomePage : Page
 		_noticeTimer.IsRepeating = false;
 		_noticeTimer.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			if (ViewModel.Notice is not { } notice)
 			{
 				return;
@@ -552,6 +557,11 @@ public sealed partial class EditorialHomePage : Page
 		timer.Interval = TimeSpan.FromMilliseconds(50);
 		timer.Tick += (t, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			if (XamlRoot is null)
 			{
 				t.Stop();

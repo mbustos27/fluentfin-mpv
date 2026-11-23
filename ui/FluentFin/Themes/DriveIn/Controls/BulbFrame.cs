@@ -65,6 +65,11 @@ public sealed partial class BulbFrame : Grid
 		SizeChanged += (_, _) => Rebuild();
 		_chase.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			_chaseSteps--;
 			var dim = _chaseSteps > 0 && _chaseSteps % 2 == 1;
 			foreach (var odd in _odd)

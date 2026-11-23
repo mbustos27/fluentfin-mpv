@@ -19,7 +19,7 @@ import outside  # noqa: E402
 import outside_tmdb_trending as tmdb_trending  # noqa: E402
 import outside_trakt as trakt  # noqa: E402
 
-UA = "Nixie/1.7.0 (https://github.com/mbustos27/fluentfin-mpv)"
+UA = "Nixie/1.7.0 (https://github.com/mbustos27/nixie)"
 
 
 class Handler:

@@ -59,6 +59,17 @@ def _id(*parts):
     return hashlib.md5(("ffh:" + ":".join(str(p) for p in parts)).encode("utf-8")).hexdigest()
 
 
+def _critic(item_id, drawn):
+    """1.7.3 fix round (BH-173-m3): the critics' rating a film keeps. The servers Nixie meets keep few or none (the one the
+    owner uses, the QA throwaway), and every film having one hid Acclaimed's backing check from every harness run: two films
+    in five have none (by their id, so the seed's draws, and every other name and number, stay as they were), and with
+    FAKESERVER_PLAIN=1 none has one (the throwaway's shape: Acclaimed by the rating alone). Tags are 0 to 3 a title already."""
+    import os
+    if os.environ.get("FAKESERVER_PLAIN") or int(hashlib.sha1(item_id.encode()).hexdigest(), 16) % 5 < 2:
+        return None
+    return drawn
+
+
 def _tag(item_id, kind):
     # Nixie 1.4.0: an image's tag (its kind is capitalised: Primary, Backdrop, Chapter3) changes with the flat art
     # (imagegen.ART), so a client asks for the new picture; "etag" and "src" never do
@@ -150,7 +161,7 @@ class Library:
         return {"Id": item_id, "kind": kind, "Name": name, "parent": parent, "view": view, "created": created,
                 "year": year, "premiere": datetime.datetime(year, rng.randint(1, 12), rng.randint(1, 28)),
                 "genres": genres, "tags": rng.sample(TAGS, rng.randint(0, 3)), "rating": rating,
-                "community": round(rng.uniform(4.8, 9.1), 1), "critic": rng.randint(28, 99),
+                "community": round(rng.uniform(4.8, 9.1), 1), "critic": _critic(item_id, rng.randint(28, 99)),
                 "people": cast, "studios": rng.sample(STUDIOS, rng.randint(1, 2)),
                 "overview": self._overview(name, kind), "tagline": rng.choice(
                     ["Some doors stay open.", "Nothing stays buried.", "Every road ends somewhere.",

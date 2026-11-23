@@ -280,6 +280,128 @@ public sealed class LibraryPresetsTests
 		Assert.False(await none.SaveFilterAs("Name"));
 	}
 
+	// --- 1.7.3: the strip keeps decades, genre mixes and countries, and drops people, studios and networks (the owner's answer 3)
+
+	private static readonly DateTimeOffset November = new(2026, 11, 22, 12, 0, 0, TimeSpan.Zero);
+
+	// a library of 24 films that makes every kind the strip ever had: three franchises, two decades, a genre mix, a keyword, a
+	// country besides the commonest, a studio, a director and an actor, and the acclaimed ones
+	private static List<SmartCollections.IndexEntry> EveryKind(Guid library) =>
+	[
+		.. Enumerable.Range(0, 24).Select(i => new SmartCollections.IndexEntry
+		{
+			Id = Guid.NewGuid(),
+			Name = $"Film {i:D2}",
+			Kind = SmartCollections.IndexKind.Movie,
+			LibraryId = library,
+			Year = 1990 + (i % 20),
+			TmdbCollection = $"{i / 8}",
+			Genres = (i % 3) switch { 0 => ["Comedy", "Horror"], 1 => ["Comedy"], _ => ["Horror"] },
+			Tags = i < 6 ? ["heist"] : [],
+			Countries = [i % 2 == 0 ? "France" : "Japan"],
+			Studios = ["North Line"],
+			Rating = 5 + (i % 5),
+			TagCount = 10, // 1.7.3 (M1's review): the acclaimed ones are backed by their tags
+			RunTimeTicks = TimeSpan.FromMinutes(120).Ticks,
+			People = [new("Ana Reyes", null, "Director"), new("Clara Quill", null, "Actor")],
+		}),
+	];
+
+	private static SmartCollections.IndexSnapshot Index(IReadOnlyList<SmartCollections.IndexEntry> entries, params Guid[] libraries) =>
+		new([.. libraries.Select(id => new SmartCollections.IndexLibrary(id, "Movies", SmartCollections.IndexKind.Movie))], entries,
+			new Dictionary<Guid, SmartCollections.SeriesPlays>(), true, November);
+
+	[Fact]
+	public void TheStrip_KeepsDecadesGenreMixesAndCountries_InItsOrder_AndHasNoPeopleStudiosOrNetworks()
+	{
+		var movies = Guid.NewGuid();
+
+		var presets = SmartCollections.NixiePresets.For(Index(EveryKind(movies), movies), movies, November, most: 50);
+
+		// one of each kind first, in the strip's order (1.7.2's, less the people, studios and networks), then the rest
+		Assert.Equal(
+			[SmartCollections.SmartCollectionKind.Franchise, SmartCollections.SmartCollectionKind.Decade, SmartCollections.SmartCollectionKind.GenreMix,
+			SmartCollections.SmartCollectionKind.Keyword, SmartCollections.SmartCollectionKind.Country, SmartCollections.SmartCollectionKind.HighlyRated],
+			presets.Select(p => p.Kind).Distinct());
+		Assert.Equal(["2000s", "Comedy · Horror", "Heists", "Japan", "Acclaimed"], presets.Skip(1).Take(5).Select(p => p.Label));
+		Assert.DoesNotContain(presets, p => SmartCollections.RetiredCollections.Gone.Contains(p.Kind));
+		Assert.All(presets, p => Assert.False(SmartCollections.RetiredCollections.IsGone(p.Id)));
+		// the strip's own kinds are found by their ids (a pin of one is made that way)
+		Assert.All(presets.Where(p => p.Kind is SmartCollections.SmartCollectionKind.Decade or SmartCollections.SmartCollectionKind.GenreMix or SmartCollections.SmartCollectionKind.Country),
+			p => Assert.True(SmartCollections.NixiePresets.IsStripOnly(p.Id)));
+		Assert.All(presets.Where(p => p.Kind is SmartCollections.SmartCollectionKind.Franchise or SmartCollections.SmartCollectionKind.Keyword or SmartCollections.SmartCollectionKind.HighlyRated),
+			p => Assert.False(SmartCollections.NixiePresets.IsStripOnly(p.Id)));
+	}
+
+	[Fact]
+	public void TheStripsOwnKinds_TurnedOffInSettings_StayOutOfTheStrip_BeforeAndAfterApply()
+	{
+		// 1.7.3 fix round (BH-173-m2): 1.7.2 left decades and countries off; the first 1.7.3 build took them out of
+		// "CollectionsKindsOff" at the start and ignored the setting in the strip, so both came back in every library
+		var movies = Guid.NewGuid();
+		var settings = new Mock<ILocalSettingsService>();
+		var stored = "Country,Decade,Director";
+		settings.Setup(x => x.ReadSetting(SmartCollections.CollectionSettingKeys.KindsOff.Name, It.IsAny<string>())).Returns(() => stored);
+		settings.Setup(x => x.SaveSetting(SmartCollections.CollectionSettingKeys.KindsOff.Name, It.IsAny<string>())).Callback((string _, string v) => stored = v);
+		SmartCollections.SmartCollectionKind[] stripOnly = [SmartCollections.SmartCollectionKind.Decade, SmartCollections.SmartCollectionKind.Country];
+		IReadOnlyList<SmartCollections.NixiePreset> Strip() =>
+			SmartCollections.NixiePresets.For(Index(EveryKind(movies), movies), movies, November, kindsOff: SmartCollections.CollectionSettings.KindsOff(settings.Object), most: 50);
+
+		var before = Strip();
+		SmartCollections.CollectionSettings.Apply(settings.Object); // the next start
+		var after = Strip();
+
+		Assert.Equal("Country,Decade,Director", stored);
+		foreach (var strip in new[] { before, after })
+		{
+			Assert.DoesNotContain(strip, p => stripOnly.Contains(p.Kind));
+			Assert.Contains(strip, p => p.Kind == SmartCollections.SmartCollectionKind.GenreMix); // still on
+		}
+
+		// its switch turns it on again
+		new SmartCollections.CollectionsSettingsViewModel(settings.Object).LibraryFilters.Single(x => x.Name == "Decades").IsOn = true;
+		Assert.Contains(Strip(), p => p.Kind == SmartCollections.SmartCollectionKind.Decade);
+	}
+
+	[Fact]
+	public void TheRetiredKindsIds_AreKnownByTheirBuildersOwnIds()
+	{
+		// RetiredCollections.IsGone reads an id's first part: each builder of the four kinds that went makes ids it knows
+		var movies = Guid.NewGuid();
+		var context = SmartCollections.Builders.BuildContext.For(Index(EveryKind(movies), movies), November);
+		SmartCollections.Builders.ISmartCollectionBuilder[] gone =
+			[new SmartCollections.Builders.DirectorBuilder(), new SmartCollections.Builders.ActorBuilder(), new SmartCollections.Builders.StudioBuilder(SmartCollections.IndexKind.Movie)];
+		var made = gone.SelectMany(b => b.Build(context)).ToList();
+
+		Assert.Equal(3, made.Count);
+		Assert.All(made, x => Assert.True(SmartCollections.RetiredCollections.IsGone(x.Id) && SmartCollections.RetiredCollections.IsGone("nixie:" + x.Id), x.Id));
+		Assert.True(SmartCollections.RetiredCollections.IsGone("network:hbo"));
+		Assert.False(SmartCollections.RetiredCollections.IsGone("decade:movie:1990"));
+		Assert.False(SmartCollections.RetiredCollections.IsGone("nixie:franchise:2344"));
+		Assert.False(SmartCollections.RetiredCollections.IsGone(null));
+	}
+
+	[Fact]
+	public void ATitleTheServerListsInTwoLibraries_IsInBothLibrariesPresets()
+	{
+		// 1.7.3 (P0-2a): each entry has every library it is in (stream I fills LibraryIds); the strip read LibraryId alone
+		var movies = Guid.NewGuid();
+		var classics = Guid.NewGuid();
+		var films = EveryKind(movies).Select((x, i) => i < 12 ? x with { LibraryIds = [movies, classics] } : x).ToList();
+
+		var index = Index(films, movies, classics);
+		var inClassics = SmartCollections.NixiePresets.For(index, classics, November, most: 50);
+		var inMovies = SmartCollections.NixiePresets.For(index, movies, November, most: 50);
+
+		var decade = Assert.Single(inClassics, p => p.Kind == SmartCollections.SmartCollectionKind.Decade);
+		Assert.Equal(10, decade.Items.Count); // films 00-09: the 1990s of the twelve it shares
+		// both libraries' strips have the shared titles: its first library's 1990s are all fourteen
+		var shared = films.Take(12).Select(x => x.Id).ToHashSet();
+		Assert.True(shared.IsSubsetOf(inMovies.SelectMany(p => p.Items)));
+		Assert.True(shared.IsSubsetOf(inClassics.SelectMany(p => p.Items)));
+		Assert.Equal(14, inMovies.Single(p => p.Id == "nixie:decade:movie:1990").Items.Count);
+	}
+
 	[Fact]
 	public void TheSuggestedName_ReadsWhatIsOn()
 	{

@@ -331,6 +331,13 @@ public sealed partial class TrailerTheater : Grid
 		}
 
 		_barPassthrough = null;
+		// 1.7.3 fix round (the close crash's class): the theater's Unloaded at the close closes it, after the window has gone
+		// (its AppWindow is null then): nothing to put back
+		if (App.IsClosing || App.MainWindow.AppWindow is null)
+		{
+			return;
+		}
+
 		try
 		{
 			Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(App.MainWindow.AppWindow.Id).SetRegionRects(Passthrough, saved);

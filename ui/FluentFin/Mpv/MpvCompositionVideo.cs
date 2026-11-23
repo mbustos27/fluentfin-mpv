@@ -505,7 +505,13 @@ public sealed partial class MpvCompositionVideo(ILogger<MpvCompositionVideo> log
 		}
 	}
 
-	private void OnSettleFrame(object? sender, object e) => Settle();
+	private void OnSettleFrame(object? sender, object e)
+	{
+		if (!App.IsClosing) // 1.7.3 fix round (the close crash): nothing in the window's teardown
+		{
+			Settle();
+		}
+	}
 
 	// -- what the video does while the window or the page changes (Debug log: per rendered frame, for 2 s after) ----------
 
@@ -562,7 +568,7 @@ public sealed partial class MpvCompositionVideo(ILogger<MpvCompositionVideo> log
 
 	private void OnTraceFrame(object? sender, object e)
 	{
-		if (_panel is not { } panel || DateTime.UtcNow > _traceUntil)
+		if (_panel is not { } panel || DateTime.UtcNow > _traceUntil || App.IsClosing) // 1.7.3 fix round: not in the teardown
 		{
 			StopTrace();
 			return;

@@ -44,6 +44,11 @@ public sealed partial class TitleBarControl : UserControl
 		// 1.2.0 (the top bar): narrow windows fold the tabs and search; a hero under the bar gets the scrim
 		SizeChanged += (_, e) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash)
+			}
+
 			// 1.6 topbar (seen with the favourites' short row, 1920 to 1440): the search box's centring offset kept from the wider
 			// window made the right header wider than its room, the account slid under Minimize, and the offset measured from there
 			// kept it there. A new width starts pinned (no offset: it always fits) and CheckGap centres it again from there
@@ -58,6 +63,11 @@ public sealed partial class TitleBarControl : UserControl
 		Tabs.TabsChanged += (_, _) => QueueRelayout();
 		ViewModel.PropertyChanged += (_, e) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash): the shell's Unloaded says "no page" in the window's teardown
+			}
+
 			if (e.PropertyName is nameof(TitleBarViewModel.IsSearchShown))
 			{
 				_searchOpen = false;
@@ -140,6 +150,11 @@ public sealed partial class TitleBarControl : UserControl
 	/// </summary>
 	private void ShowSections()
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash): not in the window's teardown, where XAML answers E_UNEXPECTED
+		}
+
 		AccountSections.Children.Clear();
 		foreach (var section in _top.Sections)
 		{
@@ -170,6 +185,11 @@ public sealed partial class TitleBarControl : UserControl
 	/// </summary>
 	private void ShowLit()
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash): not in the window's teardown, where XAML answers E_UNEXPECTED
+		}
+
 		SearchLit.Visibility = _top.IsSearchLit ? Visibility.Visible : Visibility.Collapsed;
 		AccountLit.Visibility = _top.IsAccountLit ? Visibility.Visible : Visibility.Collapsed; // 1.6 topbar: Settings, or the Diary
 		// Narrator hears it as it hears the marked tab's "selected"
@@ -186,6 +206,11 @@ public sealed partial class TitleBarControl : UserControl
 
 	private void RegisterAsWindowTitleBar()
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash): not in the window's teardown, where XAML answers E_UNEXPECTED
+		}
+
 		try
 		{
 			App.MainWindow.SetTitleBar(TitleBar);
@@ -205,6 +230,13 @@ public sealed partial class TitleBarControl : UserControl
 	/// </summary>
 	private void ApplyCaptionHeight()
 	{
+		// Nixie 1.7.3: not once the app is closing. The shell's Unloaded at the close says "no page" after the window has gone
+		// (its AppWindow is null then): a NullReferenceException, caught, at every close from the player page
+		if (App.IsClosing || App.MainWindow.AppWindow is null)
+		{
+			return;
+		}
+
 		try
 		{
 			App.MainWindow.AppWindow.TitleBar.PreferredHeightOption = CaptionHeightFor(ViewModel.IsPlayerPageShown);
@@ -276,6 +308,11 @@ public sealed partial class TitleBarControl : UserControl
 
 	private void SetPassthrough()
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash): not in the window's teardown, where XAML answers E_UNEXPECTED
+		}
+
 		try
 		{
 			if (XamlRoot is null || !ViewModel.IsVisible)
@@ -365,6 +402,11 @@ public sealed partial class TitleBarControl : UserControl
 	/// </summary>
 	private void Relayout()
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash): not in the window's teardown, where XAML answers E_UNEXPECTED
+		}
+
 		// Nixie 1.3.0: less the room the theme's chrome insets the bar by (TopBarChrome.Padding)
 		var width = ActualWidth - BarChrome.Padding.Left - BarChrome.Padding.Right;
 		if (width <= 0)
@@ -465,6 +507,11 @@ public sealed partial class TitleBarControl : UserControl
 
 	private void CheckGap()
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash): not in the window's teardown, where XAML answers E_UNEXPECTED
+		}
+
 		try
 		{
 			if (RightHeaderPanel.ActualWidth <= 0 || LeftHeaderPanel.ActualWidth <= 0)
@@ -510,6 +557,11 @@ public sealed partial class TitleBarControl : UserControl
 
 	private void ShowSearch()
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash): not in the window's teardown, where XAML answers E_UNEXPECTED
+		}
+
 		var shown = ViewModel.IsSearchShown;
 		SearchHost.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
 		SearchBox.Visibility = shown && (!_compact || _searchOpen) ? Visibility.Visible : Visibility.Collapsed;
@@ -567,6 +619,11 @@ public sealed partial class TitleBarControl : UserControl
 	/// </summary>
 	private void ShowBackground()
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash)
+		}
+
 		// Nixie 1.4.0 (the review's DI-B1): a theme whose bar keeps its daytime look over a hero (TopBarChrome.HeroInLight
 		// false: Drive-in) shows it there in the light theme, the bar's parts in the app's theme
 		var under = TopBarChrome.ShowsHero(ViewModel.IsContentUnderBar, BarChrome.HeroInLight, AppIsLight());
@@ -653,6 +710,11 @@ public sealed partial class TitleBarControl : UserControl
 
 	private void ApplyCaptionTheme()
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash): not in the window's teardown, where XAML answers E_UNEXPECTED
+		}
+
 		try
 		{
 			var highContrast = _themeSettings?.HighContrast ?? new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;

@@ -101,25 +101,38 @@ internal sealed class IndexPages
 	/// <summary>A page came in (any order, off the UI thread): what is read so far, of how many (null until every count is in).</summary>
 	public event Action<int, int?>? PageIn;
 
-	/// <summary>Every title read so far, each library's in the server's order, each title once.</summary>
-	public IReadOnlyList<(int Library, BaseItemDto Item)> Items()
+	/// <summary>
+	/// Every title read so far, each library's in the server's order, each title once, where it came first. 1.7.3 (P0-2):
+	/// with every library it came in (<c>Libraries[0]</c> the first): a title the server lists in two libraries (3,167 of
+	/// 34,006 on the server the owner uses) counted under the first one only, and the other library's presets missed it.
+	/// </summary>
+	public IReadOnlyList<(IReadOnlyList<int> Libraries, BaseItemDto Item)> Items()
 	{
 		lock (_lock)
 		{
-			var seen = new HashSet<Guid>();
-			var all = new List<(int, BaseItemDto)>();
+			var at = new Dictionary<Guid, int>();
+			var all = new List<(List<int> Libraries, BaseItemDto Item)>();
 			foreach (var ((library, _), items) in _pages)
 			{
 				foreach (var item in items)
 				{
-					if (item.Id is not { } id || seen.Add(id))
+					if (item.Id is not { } id || !at.TryGetValue(id, out var first))
 					{
-						all.Add((library, item));
+						if (item.Id is { } key)
+						{
+							at[key] = all.Count;
+						}
+
+						all.Add(([library], item));
+					}
+					else if (!all[first].Libraries.Contains(library))
+					{
+						all[first].Libraries.Add(library); // 1.7.3: merged, not dropped (one the order moved across two pages is the same library)
 					}
 				}
 			}
 
-			return all;
+			return [.. all.Select(x => ((IReadOnlyList<int>)x.Libraries, x.Item))];
 		}
 	}
 

@@ -537,6 +537,11 @@ public sealed partial class AmbientBackdropView : UserControl
 	/// <summary>The full scene's time is up: each moving part eases to its rest pose (no jump mid-cycle), then nothing moves.</summary>
 	private void OnSettle(DispatcherQueueTimer sender, object args)
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+		}
+
 		_settle?.Stop();
 		if (_motion.Settle() != SceneMotionStep.Ease)
 		{

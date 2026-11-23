@@ -45,7 +45,15 @@ public sealed partial class OutdoorScreen : UserControl
 	public OutdoorScreen()
 	{
 		InitializeComponent();
-		_timer.Tick += (_, _) => Show((_index + 1) % _slides.Count, animate: true);
+		_timer.Tick += (_, _) =>
+		{
+			// 1.7.3 fix round's re-review (the close crash's class): Drive-in Home's hero (the default theme's) never advances in
+			// the window's teardown, where XAML answers E_UNEXPECTED
+			if (!App.IsClosing && _slides.Count > 0)
+			{
+				Show((_index + 1) % _slides.Count, animate: true);
+			}
+		};
 		Loaded += (_, _) =>
 		{
 			SafeMotion.Subscribe(OnGlassModeChanged);

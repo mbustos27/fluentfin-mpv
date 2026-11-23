@@ -41,7 +41,8 @@ public sealed class OverlayWakeTests
 		Assert.Contains("Root.AddHandler(PointerMovedEvent, new PointerEventHandler(OnPointerMoved), handledEventsToo: true);", code);
 		Assert.DoesNotContain("PointerMoved=\"OnPointerMoved\"", xaml);
 		var tick = code[code.IndexOf("private void OnTick(", StringComparison.Ordinal)..];
-		Assert.Contains("WakeOnCursorMove();", tick[..tick.IndexOf('}')]);
+		// 1.7.3 fix round: after its guard for the close (nothing in the window's teardown), the method's own body
+		Assert.Contains("WakeOnCursorMove();", tick[..tick.IndexOf("\n\t}", StringComparison.Ordinal)]);
 	}
 
 	private static string FindUp(params string[] parts)

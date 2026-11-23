@@ -29,13 +29,19 @@ namespace FluentFin.Core.SmartCollections;
 /// change the check confirms reads only the titles (the people lent); and when a read last began is kept on this PC, so the
 /// once-an-hour limit holds across restarts. M3: the page sizes a slow server's timeouts left are kept with it.
 /// </para>
+/// <para>
+/// Nixie 1.7.3: no people pass, and no read for people (the owner's answer to the 1.7.3 plan: nothing published reads them);
+/// a title the server lists in two libraries is one entry with both (P0-2), in a read and in a saved index that had it twice;
+/// the saved index's revision 3, inside version 2 (an older one shows at once and is read again behind it); and played
+/// episodes that didn't come are asked again on their own, at most once an hour (<see cref="IndexSnapshot.PlaysDue"/>).
+/// </para>
 /// </summary>
 public sealed class LibraryIndex : IDisposable
 {
 	public static readonly TimeSpan FreshFor = TimeSpan.FromDays(1);
 
 	// 1.7.1 (the index on a big server)
-	/// <summary>A library change, an index without its people or of an older format: read again at most this often (R at once).</summary>
+	/// <summary>A library change, an index of an older format, played episodes that didn't come: read again at most this often (R at once).</summary>
 	public static readonly TimeSpan ChangesReadAfter = TimeSpan.FromHours(1);
 
 	/// <summary>The server's check, at most this often.</summary>
@@ -51,6 +57,11 @@ public sealed class LibraryIndex : IDisposable
 	private const int FormatVersion = 2; // 1.7 keyless: 2 adds the Tmdb, Imdb and Tvdb ids (an older saved index is read again)
 	private const int OldestFormat = 1; // 1.7.1: a 1.6 index shows at once (without the outside ids) and is read again behind it
 
+	// 1.7.3: a revision inside version 2, so that 1.7.2 (which skips what it doesn't know) still reads the file after a
+	// downgrade. 3 adds every library of a title (LibraryIds), the critics' rating and the tag count; a file of an older
+	// revision shows at once and is read again behind it, at most once an hour
+	private const int FormatRevision = 3;
+
 	private readonly IJellyfinClient _client;
 	private readonly HomeCache _homeCache;
 	private readonly UserFiles _files;
@@ -62,8 +73,8 @@ public sealed class LibraryIndex : IDisposable
 	private IndexSnapshot? _memory;
 	private bool _stale;
 	private string? _readingKey;
-	private Task? _reading; // 1.7.1: the whole read (its people too)
-	private Task<IndexSnapshot?>? _firstIn; // 1.7.1: the read's first whole index (before its people on a first read)
+	private Task? _reading; // 1.7.1: the whole read
+	private Task<IndexSnapshot?>? _firstIn; // 1.7.1: the read's first whole index (1.7.3: its only one, with no people pass after it)
 	private CancellationTokenSource? _readingCancel;
 	// 1.7.1: why the saved index is read again, and how often
 	private bool _checkDue = true; // the server's check, once at the start and after each library change
@@ -86,14 +97,18 @@ public sealed class LibraryIndex : IDisposable
 	// BH-171-m7: the user signed out (their key): nothing is read for them until the next sign-in
 	private string? _signedOut;
 
-	private sealed record Reads(DateTimeOffset LastRead, int TitlesPage, int PeoplePage);
+	// fix round (BH-173-M1): Revision, the index revision of the last read that finished (0: before 1.7.3, or none finished)
+	private sealed record Reads(DateTimeOffset LastRead, int TitlesPage, int Revision = 0);
 
-	/// <summary>What a read reads: every title and their people; the titles only (their people lent); the people only.</summary>
+	/// <summary>
+	/// What a read reads: every title, dated anew; the titles of a library change (the index keeps the day's date); 1.7.3, the
+	/// played episodes only (the people-only read went with the people pass).
+	/// </summary>
 	private enum ReadKind
 	{
 		Whole,
 		Titles,
-		People,
+		Plays,
 	}
 
 	public LibraryIndex(IJellyfinClient client, HomeCache homeCache, KnownFolders folders, IObservable<IOutboundWebSocketMessage> serverMessages, ILogger<LibraryIndex> logger)
@@ -174,7 +189,7 @@ public sealed class LibraryIndex : IDisposable
 		}
 	}
 
-	/// <summary>Nixie 1.7.1: the read running now, its people pass too (tests wait for it); done when there is none.</summary>
+	/// <summary>Nixie 1.7.1: the read running now (tests wait for it); done when there is none.</summary>
 	internal Task Settled
 	{
 		get
@@ -221,8 +236,8 @@ public sealed class LibraryIndex : IDisposable
 		lock (_lock)
 		{
 			// review (Minor): R during a whole read of this user is answered by that read; it was kept and read it all again
-			// at the next visit
-			if (_reading is { IsCompleted: false } && _readingKey == CurrentKey && _readingKind == ReadKind.Whole)
+			// at the next visit. 1.7.3: a library change's read too (with no people pass it reads all a whole read does)
+			if (_reading is { IsCompleted: false } && _readingKey == CurrentKey && _readingKind is ReadKind.Whole or ReadKind.Titles)
 			{
 				return;
 			}
@@ -330,9 +345,10 @@ public sealed class LibraryIndex : IDisposable
 	}
 
 	/// <summary>
-	/// Nixie 1.7.1: the index read again in the background when it is stale: R; a day old; without its people or of an
-	/// older format (at most once an hour); or a library change the server's check confirms (the check at most every five
-	/// minutes, the read at most once an hour). Nothing when a read is running.
+	/// Nixie 1.7.1: the index read again in the background when it is stale: R; a day old; of an older format or revision,
+	/// or (1.7.3) without the played episodes its read asked for (at most once an hour); or a library change the server's
+	/// check confirms (the check at most every five minutes, the read at most once an hour). Nothing when a read is running.
+	/// 1.7.3: an index without its people is no longer a reason (the people pass stopped).
 	/// </summary>
 	private void ReadAgainIfDue(string key, IndexSnapshot known)
 	{
@@ -346,11 +362,15 @@ public sealed class LibraryIndex : IDisposable
 				return;
 			}
 
-			// review M2: the people alone when only they are missing (a read closed, or failed, before its people pass)
+			// 1.7.3: the played episodes alone when only they are missing (BH-171-M1's other half). Fix round (BH-173-M1): an
+			// index of an older format is read again at once on the first start after the update, whatever the older version's
+			// note of its last read says (it held 1.7.2's index, and its Acclaimed, for up to an hour); a read this version began
+			// within the hour, and finished, still holds it
 			due = _stale ? ReadKind.Whole
+				: _oldFormat && !ReadLately(key, now, thisVersion: true) ? ReadKind.Whole
 				: ReadLately(key, now) ? null
 				: now - known.ReadAt > FreshFor || _oldFormat ? ReadKind.Whole
-				: !known.HasPeople || known.PeopleDue ? ReadKind.People
+				: known.PlaysDue ? ReadKind.Plays
 				: null;
 			if (due is null && _checkDue && now - _lastCheck >= CheckEvery)
 			{
@@ -370,8 +390,10 @@ public sealed class LibraryIndex : IDisposable
 
 	// whether a read of this user began within the hour (review M2: also before a restart). Re-review (Minor): a note dated
 	// after now (the clock moved back) is not "lately": it held every automatic read until the clock passed it
-	private bool ReadLately(string key, DateTimeOffset now) =>
-		_reads.TryGetValue(key, out var reads) && now - reads.LastRead is var age && age >= TimeSpan.Zero && age < ChangesReadAfter;
+	// fix round (BH-173-M1): thisVersion, only when the last read that finished was of this version (or a later one)
+	private bool ReadLately(string key, DateTimeOffset now, bool thisVersion = false) =>
+		_reads.TryGetValue(key, out var reads) && (!thisVersion || reads.Revision >= FormatRevision)
+		&& now - reads.LastRead is var age && age >= TimeSpan.Zero && age < ChangesReadAfter;
 
 	// the server's check against the one the index was read with: a change reads it again, at most once an hour
 	private Task CheckAsync(string key, IndexSnapshot known)
@@ -443,7 +465,7 @@ public sealed class LibraryIndex : IDisposable
 			_adoptedCheck = (key, now);
 		}
 
-		_ = Read(key, ReadKind.Titles); // review (Minor): the titles; their people lent, read with the day's whole read
+		_ = Read(key, ReadKind.Titles); // review (Minor): the titles, the index keeping the day's date
 	}
 
 	// one read at a time per user; a read for another user cancels the one running
@@ -476,7 +498,7 @@ public sealed class LibraryIndex : IDisposable
 			var previous = _memoryKey == key ? _memory : null;
 			if (previous is null)
 			{
-				kind = ReadKind.Whole; // nothing to lend people to, or to read the people of
+				kind = ReadKind.Whole; // nothing to keep the date of, or to read the played episodes of
 			}
 
 			_readingCancel?.Cancel();
@@ -489,16 +511,18 @@ public sealed class LibraryIndex : IDisposable
 				_oldFormat = false;
 			}
 
-			if (kind != ReadKind.People)
+			if (kind != ReadKind.Plays)
 			{
-				_checkDue = false; // its titles answer the check (the people alone don't)
+				_checkDue = false; // its titles answer the check (the played episodes alone don't)
 			}
 
 			var cancellation = _readingCancel.Token;
 			url = _client.BaseUrl;
 			user = _client.UserId;
 			since = _files.Generation; // 1.6.1: a sign-out after this refuses the read's write-back
-			reads = (_reads.GetValueOrDefault(key) ?? new Reads(DateTimeOffset.MinValue, IndexPages.PageSize, IndexPages.PageSize)) with { LastRead = _time.GetUtcNow() };
+			// the re-review of the fix round: the note keeps the revision of the read that last finished (Revision is stamped when
+			// this one is in, ThisVersionsReadIsIn): an upgrade read that fails or is closed part way doesn't hold the next start
+			reads = (_reads.GetValueOrDefault(key) ?? new Reads(DateTimeOffset.MinValue, IndexPages.PageSize)) with { LastRead = _time.GetUtcNow() };
 			_reads[key] = reads;
 			var firstIn = new TaskCompletionSource<IndexSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
 			_firstIn = first = firstIn.Task;
@@ -509,13 +533,31 @@ public sealed class LibraryIndex : IDisposable
 		return first;
 	}
 
+	// fix round's re-review (BH-173-M1): a read of this version is in (its index is of this revision): the note says so, and
+	// from now on it holds an index of an older format for the hour (a 1.7.2 note, or one of a read that never finished, doesn't)
+	private Task ThisVersionsReadIsIn(string key, string url, Guid user, long since)
+	{
+		Reads stamped;
+		lock (_lock)
+		{
+			if (!_reads.TryGetValue(key, out var reads) || reads.Revision >= FormatRevision)
+			{
+				return Task.CompletedTask;
+			}
+
+			_reads[key] = stamped = reads with { Revision = FormatRevision };
+		}
+
+		return KeepReads(key, stamped, url, user, since);
+	}
+
 	// review M2, M3: when a read last began and the page sizes it left, on this PC (forgotten with the index on sign-out)
 	private Task KeepReads(string key, Reads reads, string url, Guid user, long since) =>
 		_readsFiles.Write(key, new JsonObject
 		{
 			["LastRead"] = reads.LastRead.ToString("O"),
-			["TitlesPage"] = reads.TitlesPage,
-			["PeoplePage"] = reads.PeoplePage,
+			["TitlesPage"] = reads.TitlesPage, // 1.7.3: no PeoplePage (1.7.2 reads its default if it comes back)
+			["Revision"] = reads.Revision, // fix round (BH-173-M1): which version began it
 		}, _homeCache.LoginKey(url, user), since);
 
 	// re-review (Minor): one load per user; a second start-up ask waits for it (it went on without the note, and read)
@@ -547,7 +589,7 @@ public sealed class LibraryIndex : IDisposable
 		try
 		{
 			var kept = new Reads(DateTimeOffset.Parse((string)saved["LastRead"]!, System.Globalization.CultureInfo.InvariantCulture),
-				(int?)saved["TitlesPage"] ?? IndexPages.PageSize, (int?)saved["PeoplePage"] ?? IndexPages.PageSize);
+				(int?)saved["TitlesPage"] ?? IndexPages.PageSize, (int?)saved["Revision"] ?? 0);
 			lock (_lock)
 			{
 				if (!_reads.TryGetValue(key, out var now) || now.LastRead < kept.LastRead)
@@ -567,21 +609,34 @@ public sealed class LibraryIndex : IDisposable
 	{
 		var watch = Stopwatch.StartNew();
 		bool Current() => !cancellationToken.IsCancellationRequested && key == CurrentKey;
-		var read = new IndexRead(_client, _time, _logger) { TitlesPageSize = reads.TitlesPage, PeoplePageSize = reads.PeoplePage, CheckTimeout = CheckTimeout };
+		var read = new IndexRead(_client, _time, _logger) { TitlesPageSize = reads.TitlesPage, CheckTimeout = CheckTimeout };
 		try
 		{
 			await KeepReads(key, reads, url, user, since).ConfigureAwait(false); // review M2: a restart within the hour begins no other
 
-			if (kind == ReadKind.People && previous is not null)
+			if (kind == ReadKind.Plays && previous is not null)
 			{
-				// review M2: only the people are missing (a read closed, or failed, before its people pass): the titles stay
-				if (!await read.LibrariesOfAsync(previous).ConfigureAwait(false) || !Current())
+				// 1.7.3 (BH-171-M1's other half): only the played episodes are missing (they didn't come with the read): the
+				// titles stay, and the index keeps its date
+				var plays = await read.PlaysAsync(previous, cancellationToken).ConfigureAwait(false);
+				if (!Current())
 				{
 					firstIn.TrySetResult(null);
 					return;
 				}
 
-				await People(previous).ConfigureAwait(false);
+				if (plays is null)
+				{
+					_logger.LogInformation("Library index: the played episodes didn't come again after {Seconds:0.0} s: asked again within the hour", watch.Elapsed.TotalSeconds);
+					firstIn.TrySetResult(previous);
+					return;
+				}
+
+				var played = previous with { SeriesPlays = plays, PlaysDue = false };
+				LastReadTook = watch.Elapsed;
+				_logger.LogInformation("Library index: the played episodes are in: {Shows} shows, {Seconds:0.0} s", plays.Count, watch.Elapsed.TotalSeconds);
+				await Publish(key, played, url, user, since).ConfigureAwait(false);
+				firstIn.TrySetResult(played);
 				return;
 			}
 
@@ -614,35 +669,28 @@ public sealed class LibraryIndex : IDisposable
 			titles = titles with { Key = key }; // BH-171-m6: whose it is
 			if (previous is not null)
 			{
-				// review M2: a read again lends the people it had to its titles: saved so, a closed app keeps the titles, and
-				// reads only the people at a later start. A library change's read (Titles) reads no people: the day's does
-				titles = IndexRead.Lend(titles, previous) with { PeopleDue = kind == ReadKind.Whole || previous.PeopleDue };
+				// 1.7.3: the people it had are not lent any more (the people pass stopped): the new index has none
 				if (read.PlaysFailed)
 				{
-					// BH-171-M1: the played episodes didn't come: the plays it had stay (Unfinished series went until the next read)
+					// BH-171-M1: the played episodes didn't come: the plays it had stay (Unfinished series went until the next read),
+					// and (1.7.3) they are asked again within the hour (PlaysDue)
 					titles = titles with { SeriesPlays = previous.SeriesPlays };
 				}
 
 				if (kind == ReadKind.Titles)
 				{
 					// re-review (Major B): a library change's read is not the day's: the index keeps the day's date, so the day's
-					// whole read (its people too) still comes on a server whose library changes every day
+					// whole read still comes on a server whose library changes every day
 					titles = titles with { ReadAt = previous.ReadAt };
 				}
 			}
 
-			// in, and saved, before the people pass (which costs about twice the titles): a closed app keeps it
-			_logger.LogInformation("Library index: the titles' read is in: {Titles} titles in {Libraries} libraries, people {People}, {Seconds:0.0} s",
-				titles.Entries.Count, titles.Libraries.Count, titles.HasPeople ? titles.PeopleDue ? "lent" : "kept" : "to come", watch.Elapsed.TotalSeconds);
+			LastReadTook = watch.Elapsed;
+			_logger.LogInformation("Library index: {Titles} titles in {Libraries} libraries, played episodes {Plays}, {Seconds:0.0} s",
+				titles.Entries.Count, titles.Libraries.Count, titles.PlaysDue ? "to ask again" : "in", watch.Elapsed.TotalSeconds);
 			await Publish(key, titles, url, user, since).ConfigureAwait(false); // shown at once (Changed), then saved
+			await ThisVersionsReadIsIn(key, url, user, since).ConfigureAwait(false);
 			firstIn.TrySetResult(titles);
-			if (kind == ReadKind.Titles)
-			{
-				LastReadTook = watch.Elapsed;
-				return;
-			}
-
-			await People(titles).ConfigureAwait(false);
 		}
 		catch (OperationCanceledException)
 		{
@@ -655,43 +703,18 @@ public sealed class LibraryIndex : IDisposable
 		}
 		finally
 		{
-			// review M3: the page sizes this read left (smaller after a page ran out of time), for the next one
-			if (read.TitlesPageSize != reads.TitlesPage || read.PeoplePageSize != reads.PeoplePage)
+			// review M3: the page size this read left (smaller after a page ran out of time), for the next one
+			if (read.TitlesPageSize != reads.TitlesPage)
 			{
 				Reads kept;
 				lock (_lock)
 				{
-					kept = (_reads.GetValueOrDefault(key) ?? reads) with { TitlesPage = read.TitlesPageSize, PeoplePage = read.PeoplePageSize };
+					kept = (_reads.GetValueOrDefault(key) ?? reads) with { TitlesPage = read.TitlesPageSize };
 					_reads[key] = kept;
 				}
 
 				await KeepReads(key, kept, url, user, since).ConfigureAwait(false);
 			}
-		}
-
-		// the people pass over these titles: the whole index; when it fails, the titles keep the people they have (none on a
-		// first read) and read them again later (review M2: an hour on, not at once)
-		async Task People(IndexSnapshot titles)
-		{
-			var whole = await read.PeopleAsync(titles, cancellationToken).ConfigureAwait(false);
-			if (!Current())
-			{
-				firstIn.TrySetResult(null);
-				return;
-			}
-
-			if (whole is null)
-			{
-				_logger.LogInformation("Library index: the people pass stopped after {Seconds:0.0} s: the people the index has are kept, and read again later", watch.Elapsed.TotalSeconds);
-				firstIn.TrySetResult(titles);
-				return;
-			}
-
-			LastReadTook = watch.Elapsed;
-			_logger.LogInformation("Library index: {Titles} titles in {Libraries} libraries, people {People}, {Seconds:0.0} s",
-				whole.Entries.Count, whole.Libraries.Count, whole.HasPeople, watch.Elapsed.TotalSeconds);
-			await Publish(key, whole, url, user, since).ConfigureAwait(false);
-			firstIn.TrySetResult(whole);
 		}
 	}
 
@@ -710,17 +733,11 @@ public sealed class LibraryIndex : IDisposable
 	}
 
 	/// <summary>
-	/// The whole read: the media libraries, their index pages, the played episodes and the people pass. Null when the
-	/// libraries or an index page could not be read (the index in memory stays); a failed people or played pass leaves those
-	/// kinds out.
+	/// The whole read: the media libraries, their index pages and the played episodes (1.7.3: no people pass). Null when the
+	/// libraries or an index page could not be read; a failed played pass leaves Unfinished series out.
 	/// </summary>
-	internal static async Task<IndexSnapshot?> ReadIndex(IJellyfinClient client, TimeProvider time, CancellationToken cancellationToken, ILogger? log = null)
-	{
-		var read = new IndexRead(client, time, log);
-		return await read.TitlesAsync(cancellationToken).ConfigureAwait(false) is { } titles
-			? await read.PeopleAsync(titles, cancellationToken).ConfigureAwait(false) ?? titles
-			: null;
-	}
+	internal static Task<IndexSnapshot?> ReadIndex(IJellyfinClient client, TimeProvider time, CancellationToken cancellationToken, ILogger? log = null) =>
+		new IndexRead(client, time, log).TitlesAsync(cancellationToken);
 
 	private void Drop()
 	{
@@ -756,11 +773,13 @@ public sealed class LibraryIndex : IDisposable
 		["SeriesPlays"] = JsonSerializer.SerializeToNode(snapshot.SeriesPlays, Json),
 		["Check"] = snapshot.Check, // 1.7.1
 		["PeopleDue"] = snapshot.PeopleDue, // 1.7.1 review M2
+		["Revision"] = snapshot.BackingKnown ? FormatRevision : 0, // 1.7.3; fix round: an older index's data stays of its revision
+		["PlaysDue"] = snapshot.PlaysDue, // 1.7.3 (BH-171-M1's other half)
 	};
 
 	// 1.7.1: the saved index read straight into its records (a 1.6.1 index of 34,001 titles is a 40 MB file)
 	private sealed record Saved(int Version, string ReadAt, bool HasPeople, List<IndexLibrary>? Libraries, List<IndexEntry>? Entries, Dictionary<Guid, SeriesPlays>? SeriesPlays, string? Check,
-		bool PeopleDue = false);
+		bool PeopleDue = false, int Revision = 0, bool PlaysDue = false);
 
 	private async Task<IndexSnapshot?> Load(string key)
 	{
@@ -777,17 +796,20 @@ public sealed class LibraryIndex : IDisposable
 				return null;
 			}
 
-			if (saved.Version < FormatVersion)
+			if (saved.Version < FormatVersion || saved.Revision < FormatRevision)
 			{
 				lock (_lock)
 				{
-					_oldFormat = true; // 1.7.1: shown, and read again behind it
+					_oldFormat = true; // 1.7.1: shown, and read again behind it (1.7.3: an older revision too)
 				}
 			}
 
 			return new IndexSnapshot(saved.Libraries ?? [], Once(saved.Entries ?? []), saved.SeriesPlays ?? [], saved.HasPeople,
 				DateTimeOffset.Parse(saved.ReadAt, System.Globalization.CultureInfo.InvariantCulture))
-			{ Check = saved.Check, PeopleDue = saved.PeopleDue, Key = key };
+			{
+				Check = saved.Check, PeopleDue = saved.PeopleDue, PlaysDue = saved.PlaysDue, Key = key,
+				BackingKnown = saved.Version == FormatVersion && saved.Revision >= FormatRevision, // fix round (BH-173-M1)
+			};
 		}
 		catch (Exception ex)
 		{
@@ -797,11 +819,30 @@ public sealed class LibraryIndex : IDisposable
 	}
 
 	// 1.7.2: a saved index keeps each title once (the first). 1.7.0 saved an index with a title twice (its read kept repeats),
-	// and a builder keyed on the id threw on it, which took the Collections page down; every read since keeps each title once
+	// and a builder keyed on the id threw on it, which took the Collections page down; every read since keeps each title once.
+	// 1.7.3 (P0-2): a repeat's library is merged into the first's (1.7.0 kept one entry per library: dropping the repeat left
+	// the title out of its other library's presets)
 	private List<IndexEntry> Once(List<IndexEntry> entries)
 	{
-		var seen = new HashSet<Guid>(entries.Count);
-		var once = entries.Where(x => seen.Add(x.Id)).ToList();
+		var at = new Dictionary<Guid, int>(entries.Count);
+		var once = new List<IndexEntry>(entries.Count);
+		foreach (var entry in entries)
+		{
+			if (!at.TryGetValue(entry.Id, out var first))
+			{
+				at[entry.Id] = once.Count;
+				once.Add(entry);
+				continue;
+			}
+
+			var kept = once[first];
+			Guid[] libraries = [.. LibrariesOf(kept).Concat(LibrariesOf(entry)).Distinct()];
+			if (libraries.Length != kept.LibraryIds.Length)
+			{
+				once[first] = kept with { LibraryIds = libraries };
+			}
+		}
+
 		var repeated = entries.Count - once.Count;
 		if (repeated == 0)
 		{
@@ -819,6 +860,9 @@ public sealed class LibraryIndex : IDisposable
 
 		return once;
 	}
+
+	// 1.7.3: the libraries an entry is in, its first first (an index saved before 1.7.3 has LibraryId alone)
+	private static IEnumerable<Guid> LibrariesOf(IndexEntry entry) => entry.LibraryIds.Prepend(entry.LibraryId);
 	// end 1.7.2
 
 	public void Dispose()

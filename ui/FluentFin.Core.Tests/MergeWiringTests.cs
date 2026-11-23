@@ -59,6 +59,18 @@ public sealed class MergeWiringTests
 		Assert.Equal("True", (string?)Load($"FluentFin/Views/{page}.xaml").Root!.Attributes().SingleOrDefault(a => a.Name.LocalName == "TopBar.ExtendsUnder")?.Value);
 
 	[Fact]
+	public void Settings_HasTheLibraryFiltersSwitches_EachNamedForNarrator()
+	{
+		// 1.7.3 fix round (BH-173-m2): decades, genre mixes and countries turned off in 1.7.2 had no switch to come back by
+		var expander = Assert.Single(Load("FluentFin/Views/SettingsPage.xaml").Descendants(), e => (string?)e.Attribute("ItemsSource") == "{x:Bind CollectionsSettings.LibraryFilters}");
+		Assert.Equal("NixieLibraryFiltersExpander", (string?)expander.Attributes().Single(a => a.Name.LocalName == "Name").Value);
+		var toggle = Assert.Single(expander.Descendants(), e => e.Name.LocalName == "ToggleSwitch");
+		Assert.Equal("{x:Bind Name}", toggle.Attributes().Single(a => a.Name.LocalName == "AutomationProperties.Name").Value);
+		Assert.Equal("{x:Bind IsOn, Mode=TwoWay}", (string?)toggle.Attribute("IsOn"));
+		Assert.DoesNotContain("your server", (string?)expander.Attribute("Description"), StringComparison.OrdinalIgnoreCase); // rule 11
+	}
+
+	[Fact]
 	public void Settings_HasTheContinueWatchingCleanup()
 	{
 		var combo = Assert.Single(Load("FluentFin/Views/SettingsPage.xaml").Descendants(), e => e.Name.LocalName == "ComboBox" && (string?)e.Attribute("ItemsSource") == "{x:Bind ContinueWatching.Choices}");

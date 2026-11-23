@@ -95,6 +95,17 @@
                     Spacing="0"
                     TabFocusNavigation="Once"
                     XYFocusKeyboardNavigation="Enabled" />
+                <!--  1.7.3: Next Up in and empty: said, not a blank board (ComingUpSign.BoardText)  -->
+                <TextBlock
+                    x:Name="EmptyText"
+                    Grid.Row="2"
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    FontSize="15"
+                    Foreground="{ThemeResource DriveInBoardTextSecondaryBrush}"
+                    TextWrapping="WrapWholeWords"
+                    Visibility="Collapsed" />
                 <HyperlinkButton
                     x:Name="AllLink"
                     Grid.Row="3"

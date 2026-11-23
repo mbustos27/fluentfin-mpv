@@ -29,6 +29,11 @@ public sealed partial class HomePage : Page
 		_noticeTimer.IsRepeating = false;
 		_noticeTimer.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			if (ViewModel.Notice is not { } notice)
 			{
 				return;
@@ -134,6 +139,11 @@ public sealed partial class HomePage : Page
 		timer.Interval = TimeSpan.FromMilliseconds(50);
 		timer.Tick += (t, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			var waited = System.Diagnostics.Stopwatch.GetElapsedTime(started);
 			if (XamlRoot is null)
 			{

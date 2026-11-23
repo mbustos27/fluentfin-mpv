@@ -44,7 +44,13 @@ public sealed partial class CinematicHero : UserControl
 		CinematicResources.Ensure();
 		InitializeComponent();
 		Visibility = Visibility.Collapsed;
-		_timer.Tick += (_, _) => Advance();
+		_timer.Tick += (_, _) =>
+		{
+			if (!App.IsClosing) // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			{
+				Advance();
+			}
+		};
 		Loaded += (_, _) =>
 		{
 			SafeMotion.Subscribe(OnGlassModeChanged);

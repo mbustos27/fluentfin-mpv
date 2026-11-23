@@ -112,12 +112,12 @@ public sealed partial class OutsideSourcesSettingsViewModel : ObservableObject
 		TmdbExports = new OutsideSourceSwitch(hub, OutsideSourceId.TmdbExports,
 			"Franchise and keyword names from TMDb",
 			"Names your films' franchises (“The Mummy Collection”) and keywords. A public file, fetched once a week. Off by default.",
-			"Sent: a request for TMDb's public file of the day (the same file for everyone), and Nixie's name and version. Not sent: your server, account, libraries or anything you watch. Nixie matches the names on this PC. " + OutsideKeep.Describe(OutsideSourceId.TmdbExports),
+			"Sent: a request for TMDb's public file of the day (the same file for everyone), and Nixie's name and version. Not sent: the server you use, your account, libraries or anything you watch. Nixie matches the names on this PC. " + OutsideKeep.Describe(OutsideSourceId.TmdbExports),
 			[new OutsideLink("TMDb", new Uri("https://www.themoviedb.org/"))]);
 		Wikidata = new OutsideSourceSwitch(hub, OutsideSourceId.Wikidata,
 			"Awards and genres from Wikidata",
 			"Best Picture, Palme d'Or and other award lists, and genres like heist and slasher films. Fetched once a week. Off by default.",
-			"Sent: fixed questions for each public list (“every Best Picture winner”, the same for everyone), and Nixie's name and version. Not sent: your server, account, libraries or anything you watch. Nixie matches the lists on this PC. " + OutsideKeep.Describe(OutsideSourceId.Wikidata),
+			"Sent: fixed questions for each public list (“every Best Picture winner”, the same for everyone), and Nixie's name and version. Not sent: the server you use, your account, libraries or anything you watch. Nixie matches the lists on this PC. " + OutsideKeep.Describe(OutsideSourceId.Wikidata),
 			[new OutsideLink("Wikidata", new Uri("https://www.wikidata.org/"))]);
 		Switches = [TmdbExports, Wikidata];
 		Attach();

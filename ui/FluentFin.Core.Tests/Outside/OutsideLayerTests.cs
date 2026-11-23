@@ -21,10 +21,10 @@ public sealed class OutsideLayerTests
 	[Fact]
 	public void The_user_agent_names_Nixie_its_version_and_the_repository_from_the_updaters_one_constant()
 	{
-		Assert.Equal("Nixie/1.7.0 (https://github.com/mbustos27/fluentfin-mpv)", OutsideSources.UserAgent("1.7.0"));
+		Assert.Equal("Nixie/1.7.0 (https://github.com/mbustos27/nixie)", OutsideSources.UserAgent("1.7.0"));
 		Assert.Equal(UpdateSource.RepositoryUrl, OutsideSources.ContactUrl);
 		Assert.Contains(UpdateSource.RepositoryUrl, OutsideSources.UserAgent("1.7.0"), StringComparison.Ordinal);
-		Assert.Equal("Nixie/0.0.0 (https://github.com/mbustos27/fluentfin-mpv)", OutsideSources.UserAgent(" "));
+		Assert.Equal("Nixie/0.0.0 (https://github.com/mbustos27/nixie)", OutsideSources.UserAgent(" "));
 	}
 
 	[Fact]
@@ -50,7 +50,7 @@ public sealed class OutsideLayerTests
 
 		Assert.True(result.Ok);
 		Assert.Equal("""{"head":{}}""", result.Text);
-		Assert.Equal("Nixie/1.7.0 (https://github.com/mbustos27/fluentfin-mpv)", string.Join(" ", seen!.Headers.GetValues("User-Agent")));
+		Assert.Equal("Nixie/1.7.0 (https://github.com/mbustos27/nixie)", string.Join(" ", seen!.Headers.GetValues("User-Agent")));
 		Assert.Contains(seen.Headers.AcceptEncoding, x => x.Value == "gzip");
 	}
 

@@ -66,7 +66,8 @@
                 </ctk:SettingsCard>
             </ctk:SettingsExpander.Items>
         </ctk:SettingsExpander>
-        <ctk:SettingsCard Description="An optional per-stream bitrate limit for all out of network devices. This is useful to prevent devices from requesting a higher bitrate than your internet connection can handle. This may result in increased CPU load on your server in order to transcode videos on the fly to a lower bitrate. Override the default global value set in server settings, see Dashboard &gt; Playback &gt; Streaming." Header="Internet streaming bitrate limit (Mbps)">
+        <!-- 1.7.3 (rule 11): names this app's own section (Server administration), not the server's web dashboard -->
+        <ctk:SettingsCard Description="An optional per-stream bitrate limit for all out of network devices. This is useful to prevent devices from requesting a higher bitrate than your internet connection can handle. This may result in increased CPU load on the server in order to transcode videos on the fly to a lower bitrate. Override the default global value set in server settings, see Playback &gt; Resume and streaming." Header="Internet streaming bitrate limit (Mbps)">
             <NumberBox lc:NumberBoxTargets.MinTargetSize="32" AutomationProperties.Name="Internet streaming bitrate limit, in megabits per second" Value="{x:Bind ViewModel.InternetStreamingBitrateLimit, Mode=TwoWay}" />
         </ctk:SettingsCard>
         <ctk:SettingsCard Description="The SyncPlay feature enables to sync playback with other devices. Select the level of access this user has to the SyncPlay." Header="SyncPlay access">

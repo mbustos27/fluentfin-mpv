@@ -75,13 +75,16 @@ public sealed record SmartCollection(string Id, SmartCollectionKind Kind, string
 /// <summary>The words for each kind.</summary>
 public static class SmartCollectionKinds
 {
-	/// <summary>The kinds in the order the Collections page lists them.</summary>
+	/// <summary>
+	/// The kinds in the order the Collections page lists them (each a row of its own), and the kinds Home's collection a day
+	/// and Settings' switches draw from.
+	/// </summary>
+	/// 1.7.3 (P0-3, the owner: "too many, too generic"): franchises, keywords and awards only. The seven single-fact kinds
+	/// (<see cref="SmartCollectionCatalog.OnDemandOnly"/>) are no longer published.
 	public static IReadOnlyList<SmartCollectionKind> PageOrder { get; } =
 	[
-		SmartCollectionKind.Franchise, SmartCollectionKind.Decade, SmartCollectionKind.Director, SmartCollectionKind.Actor,
-		SmartCollectionKind.Studio, SmartCollectionKind.Network, SmartCollectionKind.GenreMix, SmartCollectionKind.Keyword,
-		SmartCollectionKind.Country,
-		SmartCollectionKind.Award, // 1.7 keyless: after Countries, as the plan's 4.1 orders them
+		SmartCollectionKind.Franchise, SmartCollectionKind.Keyword,
+		SmartCollectionKind.Award, // 1.7 keyless: the last of the page's kinds, as the plan's 4.1 orders them
 	];
 
 	/// <summary>The kinds that make one collection each, together in the page's "Picks" row.</summary>
@@ -101,8 +104,8 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.Network => "Studio or network",
 		SmartCollectionKind.GenreMix => "Genre mix",
 		SmartCollectionKind.Keyword => "Keyword",
-		SmartCollectionKind.HighlyRated => "Highly rated",
-		SmartCollectionKind.ShortFilms => "Short films",
+		SmartCollectionKind.HighlyRated => "Acclaimed", // 1.7.3 (P0-4): was "Highly rated"
+		SmartCollectionKind.ShortFilms => "Under 90 minutes", // 1.7.3 (P0-4): was "Short films"
 		SmartCollectionKind.UnfinishedSeries => "Unfinished series",
 		SmartCollectionKind.Country => "Country",
 		SmartCollectionKind.Seasonal => "In season",
@@ -128,8 +131,8 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.Network => "Studios and networks",
 		SmartCollectionKind.GenreMix => "Genre mixes",
 		SmartCollectionKind.Keyword => "Keywords",
-		SmartCollectionKind.HighlyRated => "Highly rated, not watched",
-		SmartCollectionKind.ShortFilms => "Short films",
+		SmartCollectionKind.HighlyRated => "Acclaimed, not seen yet", // 1.7.3 (P0-4): was "Highly rated, not watched"
+		SmartCollectionKind.ShortFilms => "Under 90 minutes", // 1.7.3 (P0-4): was "Short films"
 		SmartCollectionKind.UnfinishedSeries => "Unfinished series",
 		SmartCollectionKind.Country => "Countries",
 		SmartCollectionKind.Seasonal => "In season",
@@ -166,8 +169,34 @@ public sealed record SavedFilter(
 	IReadOnlyList<string>? OfficialRatings = null,
 	IReadOnlyList<string>? Years = null,
 	string? PresetId = null,
-	string? PresetLabel = null)
+	string? PresetLabel = null,
+	int Revision = 0)
 {
+	/// <summary>
+	/// 1.7.3 fix round (BH-173-M2): <see cref="Revision"/> of a filter saved now (the store sets it). 0, a filter saved before
+	/// 1.7.3: its "Highly rated" or "Short films" preset keeps 1.7.2's meaning (<see cref="SavedFilterPresets"/>).
+	/// </summary>
+	public const int CurrentRevision = 3;
+
+	/// <summary>
+	/// The fix round's re-review: a new saved filter's id, its revision in it ("saved:r3-…"). 1.7.2 keeps a filter's id when it
+	/// rewrites the file (and drops <see cref="Revision"/>, which it doesn't know), so the revision survives a return to 1.7.2.
+	/// </summary>
+	public static string NewId() => $"saved:r{CurrentRevision}-{Guid.NewGuid():N}";
+
+	/// <summary>The revision a saved filter's id says (<see cref="NewId"/>); 0 for an id of 1.7.2's ("saved:" and 32 hex digits).</summary>
+	public static int RevisionOfId(string? id)
+	{
+		const string Prefix = "saved:r";
+		if (id is null || !id.StartsWith(Prefix, StringComparison.Ordinal))
+		{
+			return 0;
+		}
+
+		var dash = id.IndexOf('-', Prefix.Length);
+		return dash > Prefix.Length && int.TryParse(id.AsSpan(Prefix.Length, dash - Prefix.Length), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var revision) ? revision : 0;
+	}
+
 	/// <summary>"Comedy, Horror · Unwatched": what the filter keeps, for its why line.</summary>
 	public string Describe()
 	{
@@ -196,5 +225,49 @@ public sealed record SavedFilter(
 		}
 
 		return parts.Count == 0 ? "Everything" : string.Join(" · ", parts);
+	}
+}
+
+/// <summary>
+/// Nixie 1.7.3 fix round (BH-173-M2): the titles a saved filter's Nixie preset keeps, of one library's titles. Every title of
+/// the preset's rule, never a published collection's display cap (<see cref="Builders.BuildContext.Whole"/>). A filter saved
+/// before 1.7.3 (<see cref="SavedFilter.Revision"/> 0) on "Highly rated" or "Short films" keeps 1.7.2's meaning: those two
+/// rules, kept here for saved filters only, behind their old ids (1.7.3 renamed the picks and changed their rules: "Comedy +
+/// Short films" went from 100 titles to 0). Pure: tests, and CollectionSources' saved filter.
+/// </summary>
+public static class SavedFilterPresets
+{
+	/// <param name="own">The library's titles (a title the server lists in two libraries is in both).</param>
+	/// <param name="presetId">"nixie:pick:short-films", or the collection's own id.</param>
+	public static IReadOnlySet<Guid> Titles(IndexSnapshot own, string presetId, int revision, DateTimeOffset now)
+	{
+		var id = presetId.StartsWith(NixiePreset.IdPrefix, StringComparison.Ordinal) ? presetId[NixiePreset.IdPrefix.Length..] : presetId;
+		if (revision < SavedFilter.CurrentRevision && Before173(own, id) is { } kept)
+		{
+			return kept;
+		}
+
+		return SmartCollectionCatalog.Find(own, id, now, whole: true)?.ItemIds.ToHashSet() ?? [];
+	}
+
+	// 1.7.2's two picks, as its builders made them: "Highly rated, not watched" (every title rated 7.5 or more and not
+	// watched) and "Short films" (every film with a runtime under 90 minutes); null for any other id. 1.7.2 made neither with
+	// fewer than three titles: then the filter kept nothing
+	private static HashSet<Guid>? Before173(IndexSnapshot own, string id)
+	{
+		const int Fewest = 3;
+		IEnumerable<IndexEntry>? titles = id switch
+		{
+			"pick:highly-rated" => own.Entries.Where(x => x.Rating >= Builders.HighlyRatedBuilder.Least && !x.Played),
+			"pick:short-films" => own.Entries.Where(x => x.Kind == IndexKind.Movie && x.RunTimeTicks is > 0 && x.RunTimeTicks < Builders.ShortFilmsBuilder.Under),
+			_ => null,
+		};
+		if (titles is null)
+		{
+			return null;
+		}
+
+		var ids = titles.Select(x => x.Id).ToHashSet();
+		return ids.Count >= Fewest ? ids : [];
 	}
 }

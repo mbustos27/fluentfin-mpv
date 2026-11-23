@@ -175,6 +175,11 @@ public sealed partial class ShelfRow : UserControl
 		timer.Interval = TimeSpan.FromMilliseconds(60);
 		timer.Tick += (t, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			if (XamlRoot is not { Content: { } now } xamlRoot || Count == 0)
 			{
 				t.Stop();

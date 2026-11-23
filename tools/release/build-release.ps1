@@ -41,7 +41,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '1.7.2',
+    [string]$Version = '1.7.3',
     [string]$SourceUrl,
     [switch]$Reuse,
     [switch]$SkipTests,  # only to try the packaging itself; a release runs them
@@ -74,7 +74,7 @@ $dist = Join-Path $repo 'dist'
 $work = Join-Path $dist '.work'
 $package = Join-Path $dist $name
 $zip = Join-Path $dist "$name.zip"
-if (-not $SourceUrl) { $SourceUrl = "https://github.com/mbustos27/fluentfin-mpv/tree/v$Version" }
+if (-not $SourceUrl) { $SourceUrl = "https://github.com/mbustos27/nixie/tree/v$Version" }
 
 function Step([string]$text) { Write-Host "`n== $text" }
 

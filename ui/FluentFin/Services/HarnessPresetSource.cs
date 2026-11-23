@@ -14,10 +14,12 @@ public sealed class HarnessPresetSource(int count) : ILibraryPresetSource
 {
 	public const string CountVariable = "PRESETS";
 
+	// 1.7.3 fix round (BH-173-m4): the strip's chips as 1.7.3 makes them (no directors, the picks renamed); the last one long,
+	// as a strip's end is measured with it (then-160-colpage.ps1's presets12)
 	private static readonly string[] Names =
 	[
-		"Heist", "The 1990s", "Franchises", "Highly rated, not watched", "Short films", "The 1980s", "Space", "Road trips",
-		"Westerns", "Unfinished series", "Courtroom", "Directed by Kestrel",
+		"Heists", "1990s", "Kestrel Bay", "Acclaimed", "Under 90 minutes", "1980s", "Space", "Road trips",
+		"Westerns", "Unfinished", "Courtroom", "Based on a true story",
 	];
 
 	public event EventHandler? Changed

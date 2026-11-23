@@ -53,7 +53,7 @@ public static class OutsideSources
 	/// </summary>
 	public const string ContactUrl = UpdateSource.RepositoryUrl;
 
-	/// <summary>"Nixie/1.7.0 (https://github.com/mbustos27/fluentfin-mpv)": the User-Agent of every outside request.</summary>
+	/// <summary>"Nixie/1.7.0 (https://github.com/mbustos27/nixie)": the User-Agent of every outside request.</summary>
 	public static string UserAgent(string version) => $"{AppIdentity.Name}/{(string.IsNullOrWhiteSpace(version) ? "0.0.0" : version.Trim())} ({ContactUrl})";
 
 	/// <summary>How long a source pauses after a 429 that gives no Retry-After (Trakt's security systems send a bare 429).</summary>

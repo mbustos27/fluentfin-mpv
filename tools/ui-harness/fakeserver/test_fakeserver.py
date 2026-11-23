@@ -236,7 +236,7 @@ class ServerTests(unittest.TestCase):
         latest = self.get("/__harness/release/latest")
         self.assertEqual("v1.3.2", latest["tag_name"])
         self.assertEqual(["Nixie-1.3.2-win-x64.msi", "Nixie-1.3.2-win-x64.msi.sha256"], [a["name"] for a in latest["assets"]])
-        self.assertTrue(all(a["browser_download_url"].startswith("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.3.2/")
+        self.assertTrue(all(a["browser_download_url"].startswith("https://github.com/mbustos27/nixie/releases/download/v1.3.2/")
                             for a in latest["assets"]))
         self.request("/__harness/release", "POST", {"version": "not a version"})
         self.assertEqual("v1.3.2", self.get("/__harness/release/latest")["tag_name"])
@@ -307,17 +307,17 @@ class ServerTests(unittest.TestCase):
 
     def test_a_renamed_repository_answers_through_githubs_redirect_with_the_new_name(self):
         try:
-            self._release(version="1.5.1", repository="mbustos27/nixie", reset_limit=True)
+            self._release(version="1.5.1", repository="mbustos27/nixie-next", reset_limit=True)
             status, body, r = self._bare("/__harness/release/latest", {"User-Agent": "Nixie/1.5.0"})
             self.assertEqual(301, status)
             self.assertEqual("/__harness/release/repositories/4242/latest", r.getheader("Location"))
             latest = self.get("/__harness/release/latest")          # urllib follows it, as HttpClient does
-            self.assertEqual("https://github.com/mbustos27/nixie/releases/tag/v1.5.1", latest["html_url"])
-            self.assertEqual("https://api.github.com/repos/mbustos27/nixie/releases/1", latest["url"])
-            self.assertTrue(all(a["browser_download_url"].startswith("https://github.com/mbustos27/nixie/releases/download/v1.5.1/")
+            self.assertEqual("https://github.com/mbustos27/nixie-next/releases/tag/v1.5.1", latest["html_url"])
+            self.assertEqual("https://api.github.com/repos/mbustos27/nixie-next/releases/1", latest["url"])
+            self.assertTrue(all(a["browser_download_url"].startswith("https://github.com/mbustos27/nixie-next/releases/download/v1.5.1/")
                                 for a in latest["assets"]))
         finally:
-            self._release(version="0.0.1", repository="mbustos27/fluentfin-mpv")
+            self._release(version="0.0.1", repository="mbustos27/nixie")
 
     def test_the_installer_downloads_with_ranges_its_checksum_and_githubs_digest_agree(self):
         import hashlib
@@ -1169,6 +1169,34 @@ class ImageTests(unittest.TestCase):
     def test_blurhash_is_valid_length(self):
         h = imagegen.blurhash("x")
         self.assertEqual(6 + 2 * 2, len(h))     # 1x3 components: flag, max, DC (4), 2 AC (2 each)
+
+
+
+class CriticRatingTests(unittest.TestCase):
+    """1.7.3 fix round (BH-173-m3): every film had a critics' rating, so every harness run passed Acclaimed's backing check
+    on a signal the servers Nixie meets lack. Two films in five have none now; FAKESERVER_PLAIN=1, none."""
+
+    def _films(self):
+        lib = library.Library("server", "user", 600)
+        return [i for i in lib.items.values() if i.get("kind") == "movie"]
+
+    def test_some_films_have_no_critics_rating_and_the_names_stay(self):
+        films = self._films()
+        none = [f for f in films if f["critic"] is None]
+        self.assertTrue(0.25 < len(none) / len(films) < 0.55, "%d of %d" % (len(none), len(films)))
+        self.assertTrue(any(f["critic"] is not None for f in films))
+        self.assertTrue(all(len(f["tags"]) <= 3 for f in films))   # few tags: none backs a title on its own
+        old = os.environ.pop("FAKESERVER_PLAIN", None)
+        try:
+            os.environ["FAKESERVER_PLAIN"] = "1"
+            plain = self._films()
+        finally:
+            os.environ.pop("FAKESERVER_PLAIN", None)
+            if old is not None:
+                os.environ["FAKESERVER_PLAIN"] = old
+        self.assertTrue(all(f["critic"] is None for f in plain))
+        # the seed's draws are the same: every other name and number stays
+        self.assertEqual([(f["Name"], f["community"]) for f in films], [(f["Name"], f["community"]) for f in plain])
 
 
 if __name__ == "__main__":

@@ -151,7 +151,7 @@ public sealed class TrendingSettingsTests
 		Assert.All(vm.Switches, s =>
 		{
 			Assert.StartsWith("Sent: ", s.WhatIsSent, StringComparison.Ordinal);
-			Assert.Contains("Not sent: your server, account, libraries or anything you watch.", s.WhatIsSent, StringComparison.Ordinal);
+			Assert.Contains("Not sent: the server you use, your account, libraries or anything you watch.", s.WhatIsSent, StringComparison.Ordinal);
 			Assert.EndsWith("Off by default.", s.Description, StringComparison.Ordinal);
 			Assert.Equal(Uri.UriSchemeHttps, s.Link.Uri.Scheme);
 			Assert.False(s.IsOn);

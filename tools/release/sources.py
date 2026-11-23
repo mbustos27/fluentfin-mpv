@@ -348,7 +348,7 @@ def main():
     lines += ["1. Nixie (Nixie.exe and its libraries, the backend, the mpv bar, the libmpv build recipe), GPL-3.0",
               "-" * 100,
               f"{own}  sha256 {sha256(os.path.join(args.out, own))}",
-              f"  git archive of commit {head} (https://github.com/mbustos27/fluentfin-mpv/tree/v{args.version})", ""]
+              f"  git archive of commit {head} (https://github.com/mbustos27/nixie/tree/v{args.version})", ""]
 
     # 2. libmpv and its sources
     repo_files = set(subprocess.run(["git", "-C", args.repo, "ls-tree", "-r", "--name-only", "HEAD"],

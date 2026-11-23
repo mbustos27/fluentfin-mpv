@@ -163,6 +163,11 @@ internal sealed class LibraryProbe
 		var timer = new DispatcherTimer { Interval = Settle };
 		timer.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			timer.Stop();
 			Compare();
 		};

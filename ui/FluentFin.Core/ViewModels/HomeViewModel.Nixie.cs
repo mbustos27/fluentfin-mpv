@@ -12,11 +12,14 @@ public sealed partial class NixieHomeRowViewModel(SmartCollection collection) : 
 	public SmartCollection Collection { get; } = collection;
 
 	/// <summary>The row's title: the collection's, with what it is when the name alone wouldn't say ("With Clara Quill").</summary>
+	/// 1.7.3 (P0-4): the two picks renamed say their new names from Home's saved page too, which keeps 1.7.2's titles
+	/// ("Highly rated, not watched") until the index's rows replace it.
 	public string Title => Collection.Kind switch
 	{
 		SmartCollectionKind.Actor => $"With {Collection.Title}",
 		SmartCollectionKind.Director => $"Directed by {Collection.Title}",
 		SmartCollectionKind.Studio or SmartCollectionKind.Network => $"From {Collection.Title}",
+		SmartCollectionKind.HighlyRated or SmartCollectionKind.ShortFilms => SmartCollectionKinds.Plural(Collection.Kind), // 1.7.3
 		_ => Collection.Title,
 	};
 
@@ -31,10 +34,11 @@ public sealed partial class NixieHomeRowViewModel(SmartCollection collection) : 
 }
 
 /// <summary>
-/// Nixie 1.6 (the owner's decision, plan 4.2): Home's Made by Nixie rows, after "New in …": "Highly rated, not watched" and
-/// "Unfinished series" on by default, a seasonal row in season, and one of the other kinds a day; each can be turned off in
-/// Settings → Collections. They are in Home's snapshot (<see cref="HomeCache"/>), so Home paints them at once; the library
-/// index, read in the background on a first visit, fills them in when it is in.
+/// Nixie 1.6 (the owner's decision, plan 4.2): Home's Made by Nixie rows, after "New in …": "Acclaimed, not seen yet" (1.7.3;
+/// was "Highly rated, not watched") and "Unfinished series" on by default, a seasonal row in season, and a franchise, keyword
+/// or award collection a day (1.7.3); each can be turned off in Settings → Collections. They are in Home's snapshot
+/// (<see cref="HomeCache"/>), so Home paints them at once; the library index, read in the background on a first visit, fills
+/// them in when it is in.
 /// </summary>
 public partial class HomeViewModel
 {
@@ -45,10 +49,13 @@ public partial class HomeViewModel
 
 	/// <summary>
 	/// Nixie 1.6.1: whether a saved row of Nixie's is shown under the Settings switches now: its kind on, and its Home row on
-	/// (Highly rated, Unfinished series and the seasonal row are rows of their own; any other kind is the collection a day).
+	/// (Acclaimed, Unfinished series and the seasonal row are rows of their own; any other kind is the collection a day).
 	/// </summary>
+	/// 1.7.3 (P0-3): and its kind still published (or a trending list's): a page saved by 1.7.2 with a director as the
+	/// collection of the day painted it until the index's rows came.
 	internal static bool NixieRowShown(SmartCollection collection, IReadOnlySet<NixieHomeRow> rowsOff, IReadOnlySet<SmartCollectionKind> kindsOff) =>
-		!kindsOff.Contains(collection.Kind) && !rowsOff.Contains(collection.Kind switch
+		(SmartCollectionCatalog.Published.Contains(collection.Kind) || Outside.TrendingBuilder.PageOrder.Contains(collection.Kind))
+		&& !kindsOff.Contains(collection.Kind) && !rowsOff.Contains(collection.Kind switch
 		{
 			SmartCollectionKind.HighlyRated => NixieHomeRow.HighlyRated,
 			SmartCollectionKind.UnfinishedSeries => NixieHomeRow.UnfinishedSeries,
@@ -97,6 +104,9 @@ public partial class HomeViewModel
 	{
 		try
 		{
+			// 1.7.3 (the owner's answer 2): at start (Home is the first page), the pins and saved filters of the kinds that went are
+			// removed, in the background; the Collections page waits for it before it lists them
+			_ = RetiredCollections.ForgetAsync(SmartCollectionServices.Store, SmartCollectionCatalog.Log);
 			if (SmartCollectionServices.Index is not { } index)
 			{
 				return;
@@ -144,7 +154,9 @@ public partial class HomeViewModel
 		if (Outside.TrendingServices.Collections is { } trending)
 		{
 			WatchTrending(trending);
-			if (await Task.Run(() => trending.HomeRowFor(snapshot)) is { } trendingRow) // matched off the UI thread (a big index)
+			// matched off the UI thread (a big index); 1.7.3: in a catch of its own, as each kind's builder is (a throw there left
+			// Home without any Made by Nixie row)
+			if (await TrendingMatch.Safely(() => trending.HomeRowFor(snapshot), null, SmartCollectionCatalog.Log) is { } trendingRow)
 			{
 				picked = [.. picked, trendingRow];
 			}

@@ -106,10 +106,16 @@ public partial class CollectionViewModel
 
 		OffersSaveAsPlaylist = _serverOrder.Any(IsPlaylistItem); // 1.6.1 (BH-160-m2): never on shows only
 		CanSaveAsPlaylist = OffersSaveAsPlaylist && SavedPlaylist is null;
-		return _serverOrder.Count == 0
-			? LoadOutcome.Empty("Nothing here now", $"None of the titles in this collection are on {LoadMessages.ServerName()} any more.")
-			: LoadOutcome.Loaded;
+		return _serverOrder.Count == 0 ? EmptyOutcome(nixie.Collection) : LoadOutcome.Loaded;
 	}
+
+	/// <summary>
+	/// What an empty Nixie collection says. 1.7.3 fix round (BH-173-M2, rule 11): a saved filter is Nixie's own filter over a
+	/// library, so it says the filter matches nothing now, not that the titles left the server (which answered).
+	/// </summary>
+	public static LoadOutcome EmptyOutcome(SmartCollection collection) => collection.Filter is { } filter
+		? LoadOutcome.Empty("Nothing matches now", $"No titles in {(string.IsNullOrWhiteSpace(filter.LibraryName) ? "this library" : filter.LibraryName)} match this filter now.")
+		: LoadOutcome.Empty("Nothing here now", $"None of the titles in this collection are on {LoadMessages.ServerName()} any more.");
 
 	/// <summary>After a server's box set is in: "Also in your library", from the library index (none without a TMDb id).</summary>
 	private async Task AfterServerLoad()
@@ -217,7 +223,7 @@ public partial class CollectionViewModel
 	public static string PlaylistRefusal(int status) => status switch
 	{
 		401 => "Your sign-in has ended. Sign in again, then save the playlist.",
-		403 => $"{LoadMessages.ServerName()} doesn't let your account make playlists. Ask its administrator.",
+		403 => $"{LoadMessages.ServerName()} doesn't let your account make playlists. Only the server's owner can change that.",
 		// 1.6.1 (BH-160-m2): an answer that names no playlist: it may have been made (Save again finds it by its name)
 		200 => $"{LoadMessages.ServerName()} answered without saying which playlist it made. Look in your playlists before saving again.",
 		0 => $"Couldn't reach {LoadMessages.ServerName()}. Check the connection, then try again.",

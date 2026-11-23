@@ -1,6 +1,8 @@
 # Nixie 1.6, the collections stream: what the user sees of Nixie's collections in the current NIXIE_LAYOUT theme, with
 # FAKESERVER_COLLECTIONS=1 (the admin's box sets, one with its franchise's TMDb id leaving an owned film out). Run with:
-#   $env:FAKESERVER_COLLECTIONS='1'; $env:NIXIE_LAYOUT='<Classic|DriveIn|Cinematic|Editorial>'
+#   $env:FAKESERVER_COLLECTIONS='1'; $env:FAKESERVER_COLLIDE='1'; $env:NIXIE_LAYOUT='<Classic|DriveIn|Cinematic|Editorial>'
+# (1.7.3: FAKESERVER_COLLIDE adds a 13th box set, so the server's own row ends in See all: since 1.7.3 no Made by Nixie row on
+# the fake server has more than 12 tiles, Directors and Actors being retired, and R1 below needs a See all)
 #   run-offscreen.ps1 ... -Script home -NoA11y -Then offscreen\then-160-collections.ps1
 # Covers: Home's Made by Nixie rows (after New in ..., filled once the library index is in); the Libraries page's "Collections &
 # playlists" group with "Made by Nixie - N"; its tile opening the Collections page at Made by Nixie (the keyboard on its first
@@ -26,8 +28,11 @@ function Co-Shots([string]$Name, [scriptblock]$Before) {
 function Co-Focus { $coF = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); if ($coF) { $coF | ConvertFrom-Json } else { $null } }
 
 # --- Home: the Made by Nixie rows, after New in ... (the index is read in the background on a first visit) -----------
-$coRow = Wait-Until { Find-Ui -Name 'Highly rated, not watched' -Contains -OffscreenToo } -Seconds 60 -PollMs 300
-Check "collections ($coTag): Home shows a Made by Nixie row" ([bool]$coRow) 'Highly rated, not watched'
+# 1.7.3: the acclaimed pick's row, found by its role: "Highly rated, not watched" until 1.7.2, "Acclaimed, not seen yet" from
+# 1.7.3 (stream M2 renamed it), so the check holds on either side of that change
+$coPickNames = @('Acclaimed, not seen yet', 'Highly rated, not watched')
+$coRow = Wait-Until { $coPickNames | ForEach-Object { Find-Ui -Name $_ -Contains -OffscreenToo } | Select-Object -First 1 } -Seconds 60 -PollMs 300
+Check "collections ($coTag): Home shows a Made by Nixie row" ([bool]$coRow) $(if ($coRow) { $coRow.Current.Name } else { "none of: $($coPickNames -join ' | ')" })
 $coKicker = Find-Ui -Name 'Made by Nixie' -Contains -OffscreenToo
 if (-not $coKicker) { $coKicker = Find-Ui -Name 'MADE BY NIXIE' -OffscreenToo }
 Check "collections ($coTag): the row says it is Nixie's" ([bool]$coKicker) ''
@@ -147,9 +152,11 @@ Open-Nav $coS
 Check "collections ($coTag): R1 the $coS tab after Back opens $coS" ([bool](Wait-Until { Find-MediaCard $fixture.series.name } -Seconds 15 -PollMs 200)) ''
 Open-Nav 'Collections'
 Check "collections ($coTag): R1 the Collections tab opens the Collections page" ([bool](Wait-Ui -Id 'TitleText' -Name 'Collections' -Seconds 20)) (Co-Title)
+# 1.7.3: any row's See all, found by its role (a row of more than 12 tiles, or Awards): with FAKESERVER_COLLIDE the server's own
+# row (13 box sets) has one in every version; until 1.7.2 Directors and Actors had one too
 $coSee = Wait-Until { Find-Ui -Name 'See all' -Contains -Type 'Hyperlink' -OffscreenToo } -Seconds 60 -PollMs 400
 if (-not $coSee) { $coSee = Find-Ui -Name 'See all' -Contains -Type 'Button' -OffscreenToo }
-Check "collections ($coTag): R1 the Collections page has a See all" ([bool]$coSee) ''
+Check "collections ($coTag): R1 the Collections page has a See all" ([bool]$coSee) $(if ($coSee) { $coSee.Current.Name } elseif (-not $env:FAKESERVER_COLLIDE) { 'none: run with FAKESERVER_COLLIDE=1 (13 box sets: the server''s row ends in See all)' } else { 'none' })
 if ($coSee) {
     $coSeeName = $coSee.Current.Name
     Say "R1: '$coSeeName' ($(Invoke-Element $coSee))"
@@ -194,4 +201,16 @@ if ($env:CO_SETTINGS) {
     Check "collections ($coTag): Settings has Tidy collection names" ([bool]$coTidy) ''
     if ($coTidy) { [void][OffscreenUi]::SetFocus($coTidy); Co-Settle 800 }
     Shot "$coTag-settings-collections-1920"
+    # 1.7.3 fix round (BH-173-m2): the library filters' switches are back, each named for Narrator
+    $coFilters = Wait-Until { Find-Ui -Id 'NixieLibraryFiltersExpander' -OffscreenToo } -Seconds 10 -PollMs 250
+    Check "collections ($coTag): Settings has the library filters' switches" ([bool]$coFilters) ''
+    if ($coFilters) {
+        [void][OffscreenUi]::SetFocus($coFilters); Co-Settle 600
+        $coCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::IsExpandCollapsePatternAvailableProperty, $true)
+        $coToggle = if ($coFilters.GetSupportedPatterns() -contains [System.Windows.Automation.ExpandCollapsePattern]::Pattern) { $coFilters } else { $coFilters.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $coCond) }
+        try { $coToggle.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand(); Co-Settle 900 } catch { Say "collections: could not expand the library filters: $($_.Exception.Message)" }
+        $coSwitches = @('Decades', 'Genre mixes', 'Countries' | Where-Object { Find-Ui -Name $_ -Type 'Button' -OffscreenToo })
+        Check "collections ($coTag): the library filters' three switches show (Decades, Genre mixes, Countries)" ($coSwitches.Count -eq 3) ($coSwitches -join ', ')
+        Shot "$coTag-settings-library-filters-1920"
+    }
 }

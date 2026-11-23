@@ -132,6 +132,11 @@ public sealed partial class ShellPage : Page
 
 	private void OnLibrariesRetry(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+		}
+
 		if (!_gone)
 		{
 			_ = LoadLibrariesAsync();

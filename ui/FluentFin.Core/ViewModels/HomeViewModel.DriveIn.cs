@@ -10,11 +10,15 @@ public partial class HomeViewModel
 	/// <summary>Drive-in: the outdoor screen's features (<see cref="DriveInHome.Features"/>), from what the page shows now.</summary>
 	public IReadOnlyList<HeroSlide> DriveInFeatures() => DriveInHome.Features(ContinueItems.Select(x => x.Dto), Hero);
 
-	/// <summary>Drive-in: how many items "All of Up next" opens (Continue Watching and Next Up).</summary>
-	public int DriveInUpNextCount => ContinueItems.Count + NextUpItems.Count;
+	/// <summary>
+	/// Drive-in: how many items "All of Up next" opens: Next Up, the sign's own list (its entries are its first three or four).
+	/// Nixie 1.7.3: it counted Continue Watching too, so with Next Up empty or short the link read "All of Up next (3)" over fewer
+	/// entries, and opened what the Continue watching row already shows.
+	/// </summary>
+	public int DriveInUpNextCount => DriveInUpNext().Count;
 
-	/// <summary>Drive-in: Continue Watching and Next Up as one list, for "All of Up next (N)".</summary>
-	public IReadOnlyList<BaseItemViewModel> DriveInUpNext() => [.. ContinueItems, .. NextUpItems];
+	/// <summary>Drive-in: what "All of Up next (N)" opens: Next Up, the list the sign's entries come from.</summary>
+	public IReadOnlyList<BaseItemViewModel> DriveInUpNext() => [.. NextUpItems];
 }
 
 /// <summary>

@@ -32,8 +32,9 @@ public partial class QuickConnectViewModel(IJellyfinClient jellyfinClient) : Obs
 	public const string FailedStatus = "That code didn't work. Check it on the other device and try again: a code lasts a few minutes.";
 
 	/// <summary>Seaglass 1.1.4 (review): the server answered 403: Quick Connect is off there (it read as a wrong code).</summary>
+	/// 1.7.3 (rule 11): what the user can do, with no step on the server's dashboard (it is off on the server: its owner's call)
 	public static string DisabledStatus() =>
-		$"Quick Connect is off on {Core.ViewModels.LoadMessages.ServerName()}. An administrator can turn it on in the server's dashboard, under General.";
+		$"Quick Connect is off on {Core.ViewModels.LoadMessages.ServerName()}. Sign in on the other device with a username and password, or ask the server's owner to turn Quick Connect on.";
 
 	public static string NoAnswerStatus() =>
 		$"Couldn't reach {Core.ViewModels.LoadMessages.ServerName()}. Check the connection, then try again.";

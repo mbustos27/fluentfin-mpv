@@ -69,7 +69,7 @@
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{ThemeResource CaptionTextBlockStyle}"
-                                        Text="Not checked with your server yet: it may not keep them. Watched state goes to Jellyfin either way."
+                                        Text="Not checked with the server yet: it may not keep them. Watched state goes to Jellyfin either way."
                                         TextWrapping="Wrap" />
                                 </StackPanel>
                             </StackPanel>

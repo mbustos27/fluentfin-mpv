@@ -24,27 +24,73 @@ public sealed record NixiePreset(string Id, string Label, string AutomationName,
 }
 
 /// <summary>
-/// Nixie 1.6: a library's Nixie presets, made of its own titles only: its franchises, decades, keywords, genre mixes,
-/// directors, studios and countries, then its picks; at most <see cref="Most"/>, the kinds turned off in Settings left out.
+/// Nixie 1.6: a library's Nixie presets, made of its own titles only, kind by kind in <see cref="Order"/>: its franchises,
+/// decades, genre mixes, keywords, countries and awards, then its picks; at most <see cref="Most"/>, the kinds turned off in
+/// Settings left out.
 /// </summary>
+/// 1.7.3 (the owner's answer 3): no directors, actors, studios or networks; decades, genre mixes and countries stay here as
+/// filters, though Nixie no longer publishes them as collections (<see cref="StripOnly"/>).
 public static class NixiePresets
 {
 	public const int Most = 12;
+
+	/// <summary>
+	/// 1.7.3: the strip's kinds, in its order (1.7.2's, less the people, studios and networks). A kind not listed goes last
+	/// (it went first: <c>IndexOf</c>'s -1).
+	/// </summary>
+	public static IReadOnlyList<SmartCollectionKind> Order { get; } =
+	[
+		SmartCollectionKind.Franchise, SmartCollectionKind.Decade, SmartCollectionKind.GenreMix, SmartCollectionKind.Keyword,
+		SmartCollectionKind.Country, SmartCollectionKind.Award,
+		SmartCollectionKind.HighlyRated, SmartCollectionKind.UnfinishedSeries, SmartCollectionKind.Seasonal, SmartCollectionKind.ShortFilms,
+	];
+
+	/// <summary>
+	/// 1.7.3: the kinds only the strip makes (they are not published: the catalog's <c>BuildAll</c> leaves them out). Fix round
+	/// (BH-173-m2): each has its Settings switch again (<see cref="CollectionsSettingsViewModel.LibraryFilters"/>), and one turned
+	/// off is left out (1.7.2's switches governed the strip too; the first 1.7.3 build brought them all back).
+	/// </summary>
+	internal static IReadOnlyList<Builders.ISmartCollectionBuilder> StripOnly { get; } = [new Builders.DecadeBuilder(), new Builders.GenreMixBuilder(), new Builders.CountryBuilder()];
+
+	/// <summary>Fix round (BH-173-m2): the kinds of <see cref="StripOnly"/>, in the strip's order (their Settings switches).</summary>
+	public static IReadOnlyList<SmartCollectionKind> StripOnlyKinds { get; } = [.. StripOnly.Select(x => x.Kind)];
+
+	// their ids' first part, as their builders make them ("decade:movie:1980", "genres:movie:comedy+horror", "country:france")
+	private static readonly string[] StripOnlyPrefixes = ["decade:", "genres:", "country:"];
+
+	/// <summary>
+	/// 1.7.3: whether a collection's id (or a preset's, "nixie:decade:…") is of a kind only the strip makes: a pin of one is
+	/// made by its id (<see cref="SmartCollectionCatalog"/>'s <c>Find</c>), since the catalog no longer publishes it.
+	/// </summary>
+	public static bool IsStripOnly(string? id)
+	{
+		if (string.IsNullOrEmpty(id))
+		{
+			return false;
+		}
+
+		var own = id.StartsWith(NixiePreset.IdPrefix, StringComparison.Ordinal) ? id[NixiePreset.IdPrefix.Length..] : id;
+		return StripOnlyPrefixes.Any(p => own.StartsWith(p, StringComparison.Ordinal));
+	}
 
 	/// <summary>The presets from an index (pure: tests, and <see cref="NixieLibraryPresets"/> once the index is in).</summary>
 	public static IReadOnlyList<NixiePreset> For(IndexSnapshot index, Guid libraryId, DateTimeOffset now, IReadOnlySet<string>? boxedFranchises = null,
 		IReadOnlySet<SmartCollectionKind>? kindsOff = null, int most = Most)
 	{
-		var own = index with { Entries = [.. index.Entries.Where(x => x.LibraryId == libraryId)] };
+		var own = index with { Entries = [.. index.Entries.Where(x => x.InLibrary(libraryId))] }; // 1.7.3 (P0-2a): a title in two libraries is in both
 		if (own.Entries.Count == 0)
 		{
 			return [];
 		}
 
-		var all = SmartCollectionCatalog.BuildAll(own, now, boxedFranchises, kindsOff);
-		var order = SmartCollectionKinds.PageOrder.Concat(SmartCollectionKinds.Picks).ToList();
+		// 1.7.3: the published kinds the strip shows, then the strip's own (decades, genre mixes, countries). Fix round's
+		// re-review (BH-173-M2's other half): every title of each rule, never a collection's display cap, as a saved filter of
+		// the chip keeps (Under 90 minutes + Comedy showed 0 titles in the library, and 80 once saved)
+		var all = SmartCollectionCatalog.BuildAll(SmartCollectionCatalog.PublishedBuilders, own, now, boxedFranchises, kindsOff, Outside.OutsideListsSnapshot.Shared,
+				SmartCollectionCatalog.Log, census: false, whole: true)
+			.Where(x => SmartCollectionCatalog.Published.Contains(x.Kind)).Concat(StripOnlyFor(own, now, kindsOff));
 		// one of each kind first (the strip shows a mix, not twelve franchises), then the rest in the same order
-		var byKind = all.GroupBy(x => x.Kind).OrderBy(g => order.IndexOf(g.Key)).Select(g => g.ToList()).ToList();
+		var byKind = all.GroupBy(x => x.Kind).OrderBy(g => Place(g.Key)).Select(g => g.ToList()).ToList();
 		var picked = new List<SmartCollection>();
 		for (var round = 0; picked.Count < most && byKind.Any(g => g.Count > round); round++)
 		{
@@ -54,12 +100,57 @@ public static class NixiePresets
 		return [.. picked.Select(x => new NixiePreset(NixiePreset.IdPrefix + x.Id, ShortLabel(x), x.AutomationName, x.Kind, x, x.ItemIds.ToHashSet()))];
 	}
 
+	// 1.7.3: a kind's place in the strip; one not in Order after all of them
+	private static int Place(SmartCollectionKind kind)
+	{
+		for (var i = 0; i < Order.Count; i++)
+		{
+			if (Order[i] == kind)
+			{
+				return i;
+			}
+		}
+
+		return int.MaxValue;
+	}
+
+	// 1.7.3: the strip's own kinds of these titles; a builder that throws leaves out its kind only, said once in the app's log
+	// (its kind and the exception's type: no titles), as the catalog does for the published ones
+	private static List<SmartCollection> StripOnlyFor(IndexSnapshot own, DateTimeOffset now, IReadOnlySet<SmartCollectionKind>? kindsOff)
+	{
+		var context = new Builders.BuildContext(own, now, new HashSet<string>()) { Outside = Outside.OutsideListsSnapshot.Shared, Whole = true }; // as a saved filter
+		var made = new List<SmartCollection>();
+		foreach (var builder in StripOnly)
+		{
+			if (kindsOff?.Contains(builder.Kind) == true)
+			{
+				continue; // fix round (BH-173-m2): turned off in Settings
+			}
+
+			try
+			{
+				made.AddRange(builder.Build(context).Where(x => x.ItemIds.Count > 0).ToList()); // all of it here: a throw is part way through
+			}
+			catch (Exception ex)
+			{
+				if (SmartCollectionCatalog.Log is { } log && StripSaid.GetOrCreateValue(log).TryAdd(builder.Kind, 0))
+				{
+					log.LogWarning("Made by Nixie: the library presets' {Kind} couldn't be made ({Error}); the other kinds still are", builder.Kind, ex.GetType().Name);
+				}
+			}
+		}
+
+		return made;
+	}
+
+	private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ILogger, System.Collections.Concurrent.ConcurrentDictionary<SmartCollectionKind, byte>> StripSaid = new();
+
 	/// <summary>The longest label a strip chip takes (the strip scrolls with up to twelve of them).</summary>
 	public const int LabelMost = 24;
 
 	/// <summary>
 	/// A preset's chip text, short (the library is said by the page around it): "1980s" not "1980s films", "France" not "Films
-	/// from France", "Highly rated"; a name longer than <see cref="LabelMost"/> ends in "…". Narrator hears the whole name.
+	/// from France", "Acclaimed"; a name longer than <see cref="LabelMost"/> ends in "…". Narrator hears the whole name.
 	/// </summary>
 	public static string ShortLabel(SmartCollection collection)
 	{
@@ -73,7 +164,8 @@ public static class NixiePresets
 				var country when country.StartsWith("the ", StringComparison.Ordinal) => country[4..],
 				var country => country,
 			},
-			SmartCollectionKind.HighlyRated => "Highly rated",
+			SmartCollectionKind.HighlyRated => "Acclaimed", // 1.7.3 (P0-4): "Acclaimed, not seen yet" (was "Highly rated")
+			SmartCollectionKind.ShortFilms => "Under 90 minutes", // 1.7.3 (P0-4): was the title, "Short films"
 			SmartCollectionKind.UnfinishedSeries => "Unfinished",
 			_ => collection.Title,
 		};
@@ -185,13 +277,21 @@ public sealed class NixieLibraryPresets
 		}
 
 		IReadOnlyList<NixiePreset>? made = null;
+		var off = CollectionSettings.KindsOff(_settings);
+		var stale = false;
 		lock (_lock)
 		{
 			// only the signed-in user's own: another user's (made before a sign-out) are never theirs
 			if (_madeForKey == CurrentKey)
 			{
 				_presets.TryGetValue(id, out made);
+				stale = _madeOff != OffKey(off); // fix round (BH-173-m2): a switch changed since they were made
 			}
+		}
+
+		if (made is not null && stale && _index.Current is { } changed)
+		{
+			Make(changed); // made again with the switches as they are now; Changed says when (a kind turned on comes then)
 		}
 
 		if (made is null)
@@ -209,8 +309,13 @@ public sealed class NixieLibraryPresets
 		}
 
 		var shown = titles.Select(x => x.Id).OfType<Guid>().ToHashSet();
-		return [.. made.Select(p => p with { Items = p.Items.Where(shown.Contains).ToHashSet() }).Where(p => p.Items.Count > 0)];
+		return [.. made.Where(p => !off.Contains(p.Kind)).Select(p => p with { Items = p.Items.Where(shown.Contains).ToHashSet() }).Where(p => p.Items.Count > 0)];
 	}
+
+	// fix round (BH-173-m2): the switches the presets were made with, as one string
+	private string _madeOff = "";
+
+	private static string OffKey(IReadOnlySet<SmartCollectionKind> off) => string.Join(",", off.Order());
 
 	/// <summary>
 	/// colpage's asking shape (its ILibraryPresetSource.PresetsForAsync, e6d55cd): the presets once they are made, waiting
@@ -245,28 +350,30 @@ public sealed class NixieLibraryPresets
 	// every library's presets for this index, off the UI thread (one at a time; a newer index's wins)
 	private void Make(IndexSnapshot snapshot)
 	{
+		var off = CollectionSettings.KindsOff(_settings);
+		var offKey = OffKey(off);
 		lock (_lock)
 		{
 			var key = snapshot.Key ?? CurrentKey; // 1.7.1 (BH-171-m6): the index's own user, not whoever is signed in by now
-			if (ReferenceEquals(_madeFor, snapshot) && _madeForKey == key)
+			if (ReferenceEquals(_madeFor, snapshot) && _madeForKey == key && _madeOff == offKey)
 			{
 				return;
 			}
 
 			_madeFor = snapshot;
 			_madeForKey = key;
+			_madeOff = offKey; // fix round (BH-173-m2)
 			_making = Task.Run(async () =>
 			{
 				try
 				{
 					var boxed = (await _client.GetBoxSets())?.Items?.Select(x => IndexEntry.ProviderId(x, "Tmdb")).OfType<string>().ToHashSet() ?? [];
-					var off = CollectionSettings.KindsOff(_settings);
 					var now = SmartCollectionCatalog.Now();
 					var presets = snapshot.Libraries.DistinctBy(l => l.Id).ToDictionary(l => l.Id, l => NixiePresets.For(snapshot, l.Id, now, boxed, off)); // 1.7.2: a library listed twice is one
 					bool current;
 					lock (_lock)
 					{
-						current = ReferenceEquals(_madeFor, snapshot) && _madeForKey == key && key == CurrentKey;
+						current = ReferenceEquals(_madeFor, snapshot) && _madeForKey == key && key == CurrentKey && _madeOff == offKey;
 						if (current)
 						{
 							_presets = presets;

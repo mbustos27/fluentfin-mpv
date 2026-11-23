@@ -97,14 +97,14 @@ public sealed partial class TrendingSourcesSettingsViewModel : ObservableObject
 			sources.TraktAvailable
 				? "Trending, popular and most anticipated films and shows, and the US box office. No Trakt account, no sign-in. Off by default."
 				: TraktClientId.NotAvailable + ": this copy of Nixie was built without a Trakt app registration.",
-			"Sent: requests for Trakt's public lists (the same for everyone), Nixie's name and version, and Nixie's app ID, which names the app, not you. Not sent: your server, account, libraries or anything you watch. Nixie never signs you in to Trakt; it matches the lists on this PC. " + OutsideKeep.Describe(OutsideSourceId.Trakt),
+			"Sent: requests for Trakt's public lists (the same for everyone), Nixie's name and version, and Nixie's app ID, which names the app, not you. Not sent: the server you use, your account, libraries or anything you watch. Nixie never signs you in to Trakt; it matches the lists on this PC. " + OutsideKeep.Describe(OutsideSourceId.Trakt),
 			new OutsideLink("Trakt", new Uri("https://trakt.tv/")));
 		TmdbTrending = new TrendingSourceSwitch(sources, OutsideSourceId.TmdbTrending,
 			"Trending from TMDb",
 			sources.HasAppTmdbToken
 				? "Films and shows trending this week. Uses Nixie's own TMDb key. You can enter your own instead. Off by default."
 				: "Films and shows trending this week, with your own TMDb token: this copy of Nixie has no TMDb key of its own. Off by default.",
-			"Sent: requests for TMDb's public trending lists (the same for everyone), Nixie's name and version, and Nixie's TMDb key (or yours, if you enter one), only in the request's Authorization header. Not sent: your server, account, libraries or anything you watch. No pictures are fetched from TMDb; Nixie matches the lists on this PC. " + OutsideKeep.Describe(OutsideSourceId.TmdbTrending),
+			"Sent: requests for TMDb's public trending lists (the same for everyone), Nixie's name and version, and Nixie's TMDb key (or yours, if you enter one), only in the request's Authorization header. Not sent: the server you use, your account, libraries or anything you watch. No pictures are fetched from TMDb; Nixie matches the lists on this PC. " + OutsideKeep.Describe(OutsideSourceId.TmdbTrending),
 			new OutsideLink("TMDb", new Uri("https://www.themoviedb.org/settings/api")));
 		Switches = [Trakt, TmdbTrending];
 		Attach();

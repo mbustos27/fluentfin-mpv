@@ -6,10 +6,58 @@ below is low severity, an accepted cost of the contract, or not verified yet. Ea
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Fix queue (next fix release)
-For 1.7.3 now: 1.7.1 was the library index alone (the owner, 2026-11-22: "release 1.7.1 quick fix bc thats the whole
-thing"), and 1.7.2 the Collections page's hotfix alone (in its section), so 1.7.0's queue below waits for 1.7.3, with
-1.7.1's own (in its section) and the rename's code constants.
+For 1.7.4 now: 1.7.3 took Made by Nixie's four P0s, 1.7.1's queue, the rule 11 sweep and the rename's code constants
+(its section), so 1.7.0's queue below waits for 1.7.4, with what 1.7.3 left (just below).
 1.6.1 took what it could of the queue it was given, and what is left of it stays below, after 1.7.0's own.
+
+From 1.7.3 (its streams, their reviews and the integration, 2026-11-22; no Blocker, and M1's one Major was fixed before
+the build):
+- **BH-171-m5** (1.7.1's queue; not taken in 1.7.3): a library that changes every day (most big servers) still means a
+  titles read about once a start. Read only what was added since the saved newest (`MinDateCreated`) instead.
+- Stream I's review (Minors):
+  - Played episodes that keep failing hold back a library change's read. `LibraryIndex.cs:365-373` picks the plays-only
+    read before the check, and `CheckOnce` (`:450`) counts it as "read lately", so a change the check confirmed waits for
+    the day's read, up to 24 h; 1.7.2 read it within the hour. The reviewer reproduced it. Fix: take the plays read only
+    when no check is due.
+  - The reading line's "about" total can be well off. The check counts each title once across all libraries, but the
+    per-library total counts a shared title in each (`IndexPages.cs:303`, `IndexRead.cs:63`), so the line reads "of about
+    34,006", then "of 37,173". A skipped mixed library inflates it too. Fix: say "titles" while the total is only "about".
+  - A failed upgrade read isn't retried until a restart: `LibraryIndex.cs:502-505` clears the old-format flag when the
+    whole read starts, not when it finishes, so 1.7.2's entries (no `LibraryIds`) stay until a restart past the hour or
+    the day's read. (Since the 1.7.3 fix round the first start after the update reads at once whatever 1.7.2's note
+    says, and Acclaimed comes from the old index meanwhile; a restart within the hour of a failed 1.7.3 read still waits.)
+  - Later, not a fault: `LibraryIds` costs about 1.8 MB on 34,000 titles; writing it only for titles in two or more
+    libraries would save that.
+- Stream B's review (Minors):
+  - `LoadState.cs:258` counts a `JsonException` (a captive portal or proxy page answering 200 with HTML) and Kiota's
+    `InvalidOperationException` for a text/html content type as Nixie's own fault: the user sees "Nixie couldn't show this
+    page… restart Nixie", though it's the connection. The reach is small, since `JellyfinClient` swallows most of these.
+    Fix: classify them as the connection.
+  - The 5xx copy rarely shows: `JellyfinClient` returns null on a 5xx and most pages swallow the error, so a 5xx there
+    still gets the connection wording. Only a throw that reaches `LoadState.RunAsync` gets the server's or Nixie's words.
+  - `tools\release\live-release-check.ps1:41` accepts 200 for an unknown API version silently. Print a warning when it
+    happens.
+- Stream M1's review (its Major and two Minors were fixed before the build: the 1.7.3 section):
+  - `Find` collapses the whole index on every call (`SmartCollectionCatalog.cs:99`): about 170 ms cold per pin on 36,000
+    entries, since `PinnedOnDemand` calls it once per pin. Build the collapsed titles once per batch.
+- Stream M2's review (Minors):
+  - `CollectionSettings.cs:207-210`: the "N removed" count can be logged twice, and the file written once per pin. Home's
+    background call (`HomeViewModel.Nixie.cs:109`) and the Collections page's (`CollectionsViewModel.cs:468`) can run
+    together on a first visit, and `gone++` counts a pin already gone. Nothing is lost. Fix: `SetFavorite` returns a
+    bool, or one locked store call removes them all.
+  - `NixiePresets.cs:214, 275-297`: the presets strip builds its decade, genre-mix and country collections itself,
+    skipping M1's gate counter and copying `BuildAll`'s catch. Use `SmartCollectionCatalog.BuildKinds(own, now,
+    {Decade, GenreMix, Country})`.
+- Found at the integration:
+  - `IndexOnABigServerTests.AFirstReadThatStopped_SaysSo_UnderTheRowsItMade` failed run alone at 1.7.2's `2406079b` too:
+    a read's end doesn't wait for the pending show of its pages' rows, so "Nixie couldn't finish reading…" can show for a
+    moment with no rows over it. The test now waits for the rows; awaiting the pending show before `IsReadStopped` in
+    `CollectionsViewModel.ReadIndex` would close it in the page.
+  - The README's Collections screenshot (`docs\screenshots\collections.webp`, its alt text "such as Short films") shows
+    1.7.2's collections: retake it.
+  - `ui\FluentFin.Core\ViewModels\CollectionViewModel.Nixie.cs:220` (Save as playlist refused with 403) says "Ask its
+    administrator.": right to name the server's side, but the app says "the server's owner" elsewhere.
+  - `tools\release\upgrade-test.ps1:105` downloads Seaglass 1.1.3 through the old repository name (GitHub redirects it).
 
 From the 1.7.0 bug hunt (`docs\reports\Bug hunt 2026-11-22 (1.7.0).md`; no Blocker; its Major BH-170-M1 and q1, q4 were
 fixed before the build):
@@ -30,6 +78,7 @@ From the repository polish (2026-11-22, seen while taking 1.7.0's screenshots):
 - Drive-in: Home's Up next board counts what it doesn't show. With Next Up empty or short but Continue Watching
   not, the board's link reads "All of Up next (3)" over fewer cards (`docs\screenshots\home-drive-in.webp` shows one).
   The count and the cards must come from the same list. Add a test with Next Up empty and Continue Watching full.
+  (1.7.3's stream C takes it; it merges after this integration.)
 
 From the 1.7 streams and their reviews (2026-11-21; each fixed what its review sent back before the merge):
 - Drive-in: `ui\FluentFin\Themes\DriveIn\Controls\ItemStage.cs:104`: under 1400 px wide the item board's 20 px top margin
@@ -149,6 +198,127 @@ runs post keys and cannot move the real cursor or hear sound).
   - Sign in again mid-playback on the owner's server: never tested by us (the server isn't ours, and ending a sign-in
     there is the owner's to do); not run, for the owner.
 
+## Nixie 1.7.3: Made by Nixie, fewer and better
+- **Merged** (2026-11-22, `wip/rel-1.7.3` from main's `fb5e2daf`): streams I (index), B (copy and rename), M1 (builders)
+  and M2 (surfaces), with no textual conflicts; stream C (UI) merged after them (`eda146e5`): the close crash from the player page (since 1.6.1, `0xc000027b` after a NullReferenceException in `TitleBarControl.ApplyCaptionHeight`; Windows Error Reporting made the close 3 to 20 s), the Collections arrival focus, the reading line's space, Drive-in's Up next, the library art's crop. At the integration M2's stand-in for M1's API
+  went, there is one list of the seven kinds no longer published (`SmartCollectionCatalog.OnDemandOnly`; M2's
+  `SmartCollectionKinds.Retired` went), and the tests that crossed streams were brought up to date (below).
+- **"Acclaimed, not seen yet" on a server with few critics' ratings and tags** (M1's review: a title needs a critics'
+  rating, five or more tags, or an outside list to be acclaimed). Since the fix round, an index with none of these
+  anywhere ranks by the rating alone; one title with them makes the rule apply, so Acclaimed can be short there. The
+  census line says which way it was made, with the counts; the owner's server is the first real check.
+- **Fixed before the release build, from the 1.7.3 bug hunt** (`docs\reports\Bug hunt 2026-11-23 (1.7.3).md`; two Majors in
+  new code, and the owner asked for every Minor and nit too), each with a test that fails with its fix reverted:
+  - BH-173-M1: after the update "Acclaimed, not seen yet" went from Home and Collections, possibly for an hour. 1.7.2's
+    index keeps no critics' ratings or tag counts, so nothing was backed; and its read again waited out 1.7.2's hourly
+    limit. An index saved before 1.7.3 (`IndexSnapshot.BackingKnown`), or one with nothing that can back a rating
+    (`RatingBacking`, BH-173-m1), ranks Acclaimed by the rating alone, with the copies and outside lists as confidence;
+    the old format wins over a note of a read an older version began (`Reads.Revision`), so the first start after the
+    update reads again at once.
+  - BH-173-M2: saved filters on "Highly rated" or "Short films" kept at most 20 titles and changed meaning ("Comedy +
+    Short films": 100 titles, then 0), and the empty page said the titles had left the server. A saved filter's preset
+    has every title of its rule (`BuildContext.Whole`, `SavedFilterPresets`); one saved before 1.7.3 (`SavedFilter.Revision`
+    0) keeps 1.7.2's two rules; an empty saved filter says "No titles in <library> match this filter now".
+  - BH-173-m1: on a server with no tags or critics' ratings Acclaimed never came (above), the census line now says the
+    mode and the backing counts, and a Collections page with no Made by Nixie collection says so in its line, with what
+    Nixie looks for (or that every kind is turned off).
+  - BH-173-m2, q4: `CollectionsKindsOff` is no longer rewritten at start. Decades, genre mixes and countries turned off
+    stay off in the library strip, with their switches back (Settings > Collections > Made by Nixie filters in
+    libraries); directors, actors, studios and networks turned off stay off after a return to 1.7.2. The pins and saved
+    filters 1.7.3 removed don't come back there (a CHANGELOG line says so).
+  - BH-173-m3: two films in five of the fake server have no critics' rating (by id, so the fixture's names stay);
+    `FAKESERVER_PLAIN=1` gives none, the throwaway's shape.
+  - BH-173-m4: `HarnessPresetSource` lists 1.7.3's kinds of chip, and `then-160-colpage.ps1` ends on its last one.
+  - BH-173-q1: Acclaimed's switch says "Titles with more behind their rating come first", not that few raters count less.
+  - BH-173-q2: a 403 says the server doesn't let the account open it (its owner can change that), a 404 or 410 is the
+    server's (an address it doesn't have: never "removed", the re-review), a 400 is Nixie's own; none says "Check this
+    PC's connection".
+  - BH-173-q3: an index entry's lists read `null` from a damaged file are empty (`InLibrary` and the load's `Once` threw).
+- **The close crash, its second trigger** (the coordinator, from verify-package's NoMpv run of the first build: APPCRASH
+  `0xc000027b` in `CoreMessagingXP.dll`, a stowed `E_UNEXPECTED` from `combase.dll`, 5.7 s to exit; stream C's review saw
+  it on any close from the player page on a busy PC, 4 of 4): what ran in the window's teardown read XAML there, which
+  answers `E_UNEXPECTED`, and the exception out of a dispatcher callback ended the app. Found with the first-chance trail
+  kept alive through the close (it asked `Application.Current` for its logger, which the teardown no longer answers): the
+  Drive-in player's dressing retry (`DriveInPlayer.DressBar`, a 250 ms timer for 10 s while mpv's own controls, or no
+  mpv, leave its controls null), then the title bar's queued relayout once the player page gave the chrome back
+  (`TitleBarControl.Relayout`). Fixed: `UiDispatch.Tick` (a tick that does nothing once `App.IsClosing` and never throws),
+  the player page's `OnUnloaded` and property handlers, the video host's resync, the controls' heartbeat, the title bar's
+  layout methods, `TrailerTheater.CaptionBack`, and every other timer tick of the app (a no-op once closing; the
+  re-review found Drive-in Home's hero, `OutdoorScreen`, missed, and `Ui173Tests` now scans all 28 `Tick` handlers). Checked off-screen: no mpv 0.2 s exit 0 (3.2 to 4.1 s, `0xC000027B` before), and three closes at once
+  (no mpv, mpv's controls playing, Nixie's controls playing) 0.2 to 0.5 s, exit 0. `drive.ps1`'s Step-Close and the
+  self-test now check exit code 0, so verify-package's runs fail on a crash that ends within the wait.
+- **The fix round's re-review** (one Major, five Minors; each fixed with a test that fails with its fix reverted):
+  - BH-173-M2's other half: a library's Nixie filters (the strip) kept the 20-title cap while a saved filter didn't
+    ("Under 90 minutes" + Comedy: 0 titles in the library, 80 once saved). The strip builds with `whole: true`.
+  - Drive-in Home's hero timer had no closing check (above); `then-173-close-home.ps1` closes from Drive-in's Home just
+    before the hero's next advance.
+  - The note of the last read was stamped with 1.7.3's revision when a read began, so an upgrade read that failed or was
+    closed part way held 1.7.2's index for the hour, across restarts: it is stamped when the read is in.
+  - 1.7.2 rewrites the saved filters' file with the fields it knows, so a 1.7.3 filter's `Revision` went at a 1.7.2 save:
+    a new filter's id says its revision too ("saved:r3-…"), which 1.7.2 keeps.
+  - A 404 said "This isn't on the server any more" for any address the server lacks: the server's words now.
+  - Privacy: the host's default Event Log provider sent Warning and Error lines to the Windows Application log, past the
+    token masking (none was found there): the default providers are cleared (`NixieLogging`).
+- **Left (seen in the fix round, not taken):**
+  - `CompositionTarget.Rendering` handlers outside the player page (Home's heroes) aren't guarded at the close; none was
+    seen to fire there.
+  - The Collections page's arrival focus missed once under load (Drive-in, `then-160-collections`, 1 of 2 runs with three
+    runs at once; the rerun passed): opened from the Libraries page's Collections tile, the first try logged "could not
+    take the keyboard" and no retry was logged after it, so the keyboard stayed on Back. Stream C's retry
+    (`CollectionsPage.TakeArrivalFocus`) gives up without a line when `NextArrivalTry` says None or the user is taken to
+    have acted; say which in the log first.
+- **Fixed in 1.7.3** (the owner on 1.7.2's Made by Nixie: "too many, too generic"; the four P0s of the local report
+  `docs\reports\Useful Made by Nixie collections.md`):
+  - P0-1: one census line per whole index, each kind's candidates, then past its floor, then past its cap (counts only).
+  - P0-2: a title in two libraries counts in both (`IndexEntry.LibraryIds`, `InLibrary`: a library's presets and a saved
+    filter's preset items). Copies count once (`CanonicalTitles`: TMDb, IMDb, TheTVDB, then name and year for titles
+    with no ids), so two files of one film no longer make a franchise.
+  - P0-3: Nixie publishes franchises, keywords, awards and the picks only. Decades, directors, actors, studios, networks,
+    genre mixes and countries are made on demand (`Find`, `BuildKinds`). The presets strip keeps decades, genre mixes and
+    countries; pins and saved filters of the other four are removed once at start (the owner's answer 2); Home's saved
+    rows of the seven are never painted; their Settings switches went (the strip's three came back in the fix round, and
+    `CollectionsKindsOff` keeps every name).
+  - P0-4: "Acclaimed, not seen yet" (a score shrunk toward the mean by how much backs each rating; the best 20
+    unwatched) and "Under 90 minutes" (unwatched films of 60 to 90 minutes, best first, 20). The ids stay, so settings,
+    pins and Home's saved page carry over.
+  - 1.7.2's review Minors: a trending failure no longer takes Made by Nixie with it (the page and Home), and the page's
+    load failure is logged with its own cause.
+- **Fixed in 1.7.3, from 1.7.1's queue** (that section): m3 (no people pass at all, the owner's answer 1, so a read asks
+  the server for about half as much), q1 (the reading line's "about" total from the first page), M1's other half
+  (`PlaysDue`: played episodes that didn't come are asked again, at most hourly), and a title in two libraries (P0-2).
+  The saved index has `"Revision": 3`: an older one shows at once and is read again once, behind it.
+- **The rule 11 sweep** (stream B and the integration): "the server", never "your server", in the app, the README,
+  FEATURES.md, PRIVACY.md, the package README, the installer and the issue forms. Nothing says "Check that the server is
+  running" or sends the user to the server's dashboard (the sign-in page's and Settings' Quick Connect messages, the bug
+  form's server version); `ServerWordsTests` scans all of them. `LoadState.RunAsync` words a failure by whose it is:
+  this PC's connection (HTTP errors, timeouts), the server (5xx, naming its owner) or Nixie.
+- **The rename's constants:** `mbustos27/nixie` in the update check, Settings > About, the installer's links and the
+  User-Agent. 1.7.2 and older update through GitHub's redirect (the live release check passed against it).
+- **Fixed before the build, from the streams' reviews** (no Blocker; one Major), each with a test that fails with its fix
+  reverted:
+  - M1's Major: low-confidence titles led "Acclaimed, not seen yet". Artwork counted a whole point of confidence and
+    nearly every rated title has a poster, so with no critics' ratings an obscure 9.8 with two tags outranked an 8.6 with
+    24 (the reviewer's probe: all 20 places obscure). Artwork no longer counts, and Acclaimed takes only a title a
+    critics' rating, five or more tags or an outside list backs.
+  - M1's Minors: placeholder ids (TMDb or TheTVDB 0, an IMDb id that isn't "tt" and digits) merged different films; a
+    show in two libraries, watched in one and half-watched in the other, was played with no episodes left (a regression
+    from 1.7.2): a show is played only when every copy is, with the most episodes left of its copies.
+  - M2's review: a test for a saved filter's preset in a title's second library (`CollectionSources`' `InLibrary`).
+  - B's review: the bug form (where Report a problem leads) said "your server's address" and "Jellyfin's Dashboard shows
+    it"; `ServerWordsTests` scans the issue forms and PRIVACY.md now.
+- **Tests brought up to date at the integration** (each an expectation 1.7.3 made out of date; none hides a failure):
+  - `IndexOnABigServerTests.AfterAFirstRead_EveryTileHoldsTheWholeIndexsCollection_InTheRowsThatStayed`: Picks' first
+    tile is now Acclaimed, 20 titles early and after, so the tile that grows is the Keywords row's "Heists".
+  - `AFirstReadThatStopped_SaysSo_UnderTheRowsItMade`: waits for the rows (a race since 1.7.1; queued above).
+  - `SmartCollectionsTests.PresetLabels_AreShort`: the HighlyRated label is "Acclaimed" (and ShortFilms' is checked).
+  - `ServerWordsTests`: M2's `CollectionSettings.cs` is no longer skipped.
+  - With M1's backing rule: fixtures whose rated titles had no backing get ten tags or a critics' rating (their
+    expectation, a Picks row or an Acclaimed collection, is unchanged), and the census test's HighlyRated counts are
+    5/0/0 (five rated, none backed).
+- **Left for 1.7.4:** the fix queue above (BH-171-m5, the reviews' Minors, the 5xx wording on most pages).
+- **Stream C** (the Collections page's arrival focus, m4, Drive-in's Up next count and logo art, the slow exit) merges
+  after this integration; its lines go here then.
+
 ## Nixie 1.7.2: the Collections page hotfix
 - **Fixed** (`wip/172-fix`): on the owner's server 1.7.1's Collections page showed "Couldn't load your collections" at
   once, and Try again kept failing. The saved index, written by 1.7.0 (whose read kept repeats), listed one title twice;
@@ -162,14 +332,15 @@ runs post keys and cannot move the real cursor or hear sound).
   Try again." (it said "Check that the server is running": the user may not be the server's admin), and the page's first
   section is "The server's collections". The app's other "your server" strings, Settings' "Your change didn't reach …
   Check that the server is running" and the sign-in page's "Can't reach …" are left for the 1.7.3 sweep, as is the
-  README's "Your server's collections and playlists".
+  README's "Your server's collections and playlists". Fixed in 1.7.3 (the sweep).
 - **Verified:** `RepeatedTitleTests` (a format 2 and a format 1 saved index with a title twice: the page with the server's
   sets, playlists and Made by Nixie, Home's rows, the title once), each failing with its fix reverted (all three reverted:
   the page's error card, as on the owner's server); the Collections harness off-screen in Classic, 33 checks.
 - **The saved file keeps its repeat until the next read writes it** (a day, R, or a change the check confirms); every
   read since 1.7.1 keeps each title once.
 - **Other builders still count a title listed twice** where they don't throw (decades, countries, highly rated, short
-  films, franchises' "two or more"), on an index built by hand; the app's own indexes no longer have repeats.
+  films, franchises' "two or more"), on an index built by hand; the app's own indexes no longer have repeats. Fixed in
+  1.7.3: every builder counts a title once (`CanonicalTitles`).
 
 ## Nixie 1.7.1: the library index on a big server
 - **Fixed** (stream I, `wip/171-index`): "Nixie is reading your libraries" took minutes. On the owner's server (this
@@ -185,10 +356,11 @@ runs post keys and cannot move the real cursor or hear sound).
   change between two refreshes is read only when the server's check (how many films and shows, and the newest one
   added) differs: an edited tag, a new poster or a title watched on another device waits for the daily refresh or R.
   A change the check confirms reads the titles only (review M2): a film added then has no actors or directors until the
-  daily refresh or R.
+  daily refresh or R. (1.7.3: no read asks for people any more, so the daily refresh is titles and plays.)
 - **A people pass closed midway starts again from its first page** (review M2 saved the titles before it, not its own
   pages): on the owner's server (682 s of people in 1.6.1's log) a Nixie never left open that long never finishes it.
-  It is tried at most once an hour, counted across restarts; the people the index had are kept meanwhile.
+  It is tried at most once an hour, counted across restarts; the people the index had are kept meanwhile. (Gone in
+  1.7.3: there is no people pass.)
 - **A page Nixie gave up on may still run on the server** (review M3): after 45 s the request is cancelled on this PC,
   but Jellyfin may finish it anyway. A page that ran out of time halves the pages after it (never below 250, kept on this
   PC for the next read), and three quick full pages in a row double them again, up to 1,000.
@@ -199,29 +371,37 @@ runs post keys and cannot move the real cursor or hear sound).
   a repeat is dropped (by id); a title skipped that way comes at the next read.
 - **The people pass still asks each title's whole cast** (Jellyfin's `People` field has no limit); Nixie keeps the
   directors and the first five actors. It now runs after the titles are in and saved, with no images or user data.
+  (Gone in 1.7.3: there is no people pass.)
 - **A first read that stops part way starts again from its first page** at the next ask, at once (BH-171-m1): the
   page now says "Nixie couldn't finish reading your libraries. It will try again next time." under the rows it made,
   but the pages read so far are not kept and there is no back-off between tries.
 - **The server's check counts every film and show of the user**, in libraries the index skips too (BH-171-m5): Jellyfin's
   `/Items` takes one `ParentId`, so asking per indexed library would be one request per library (23 on the owner's
   server) instead of one. A change in a skipped library reads the titles of the indexed ones.
-- **For 1.7.3** (the 1.7.1 bug hunt, `BH-171-*`; 1.7.2 was a hotfix alone):
-  - m3: the people pass runs with the Actors and Directors kinds off, and nothing turns the index off.
+- **Fixed in 1.7.3** (the 1.7.1 bug hunt, `BH-171-*`; 1.7.2 was a hotfix alone), but m5, and stream C's three, which
+  merge after the integration:
+  - m3: the people pass runs with the Actors and Directors kinds off, and nothing turns the index off. **Fixed in 1.7.3:**
+    there is no people pass (the owner's answer 1).
   - m4: when the reading line goes, every row moves up 40 px under the keyboard focus and the pointer (four themes).
+    **Stream C of 1.7.3** (not merged yet).
   - m5: a library that changes every day (most big servers) still means a titles read about once a start; read only
-    what was added since the saved newest (`MinDateCreated`) instead.
+    what was added since the saved newest (`MinDateCreated`) instead. **Not fixed: queued for 1.7.4.**
   - q1: the reading line has no total until every library's first page is in (84 s at 3-10 s a request, 23 libraries).
-  - M1's other half: a first read whose played-episodes request fails keeps no plays until the next read.
+    **Fixed in 1.7.3:** "200 of about 2,600 films" from the first page (its "about" can be off: queued for 1.7.4).
+  - M1's other half: a first read whose played-episodes request fails keeps no plays until the next read. **Fixed in
+    1.7.3:** they are asked again, at most hourly (`PlaysDue`).
   - The Collections page's arrival focus can stay on Back (1 of 7 Drive-in runs under load, from the server's
     collections tile; eed7bc12's code): `TakeArrivalFocus` tried 1 ms after the rows, before Loaded, and returned
     through its `!IsLoaded` branch with neither the Loaded retry nor the timer running after it. The log says "the
     section's first tile could not take the keyboard on arrival (it was on Button PART_BackButton)" with no retry.
+    **Stream C of 1.7.3** (not merged yet).
   - A title the server lists in two libraries counts under the first one only (1.7.1's read keeps each id once; 1.7.0
     kept one entry per library). On the server the owner uses, 3,167 of 34,006 titles sit in more than one library, so
     a library's own presets can miss titles it shares with another. An entry with all its libraries fixes it; whole-index
-    builders then count each title once.
+    builders then count each title once. **Fixed in 1.7.3** (P0-2).
   - Drive-in's Libraries page: a library tile whose server artwork is a logo on a dark card shows only the card's top
     strip (the crop is anchored to the top). Seen on the owner's 1.7.1 test copy; 1.7.1 didn't change that page.
+    **Stream C of 1.7.3** (not merged yet).
 - **Fixed before the build (1.7.1 blocker, review and bug hunt, 2026-11-22):** the Collections page's first read was over
   before its Made by Nixie rows were in (a race a cold start lost; the rows came a moment later); rows that stayed kept
   their first page's collections through the whole read (M1); a read again was saved only after its people, so closing

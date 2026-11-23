@@ -14,7 +14,7 @@
     src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-BC1E47?style=flat-square&labelColor=1A0710"></a>
 </p>
 
-**Nixie is a Windows app for your Jellyfin server: browse in four glassy themes, and play in mpv in its own window.**
+**Nixie is a Windows app for the Jellyfin server you use: browse in four glassy themes, and play in mpv in its own window.**
 
 ## Download
 
@@ -73,8 +73,9 @@ What's new: [CHANGELOG.md](CHANGELOG.md).
   trickplay, and reports to the server as one session.
 - **Skips that learn.** Skip intro and credits, "Skip this every episode?" when a show repeats a part, and online intro
   lookups if you turn them on.
-- **Collections made for you.** Your server's collections and playlists, and franchises, decades, directors and more
-  that Nixie builds from your libraries, on your PC.
+- **Collections made for you.** The server's collections and playlists, and Nixie's own, made from your libraries on
+  your PC: franchises, keywords and awards, "Acclaimed, not seen yet" and "Under 90 minutes". A library's filters add
+  its decades, genre mixes and countries.
 - **A TV diary.** Episodes are logged when you finish them, with half-star ratings and reviews, kept on your PC.
 - **Keyboard, mouse and Narrator.** Shortcuts everywhere (press **?** for the list), back and forward on mouse buttons
   4 and 5, and every card and button read by name.

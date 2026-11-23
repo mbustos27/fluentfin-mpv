@@ -71,7 +71,7 @@ body:
     attributes:
       label: Jellyfin server version
       description: |
-        The server's version number only, not its address. Jellyfin's Dashboard shows it; leave this blank if you don't know it.
+        The server's version number only, not its address, if you know it. Leave this blank if you don't.
       placeholder: "10.11.3"
     validations:
       required: false
@@ -132,7 +132,7 @@ body:
     attributes:
       label: Log lines
       description: |
-        Paste `%LOCALAPPDATA%\Nixie\Logs` into File Explorer's address bar. `log<date>.txt` is the app's log and `mpv-backend.log` is playback's. For a problem with an update, copy the lines that start with `[update]` from the newest `log<date>.txt`. Paste only the lines around the problem. Tokens are already removed, but a log can still show your server's address: read the lines first, and never paste a server address, username or token.
+        Paste `%LOCALAPPDATA%\Nixie\Logs` into File Explorer's address bar. `log<date>.txt` is the app's log and `mpv-backend.log` is playback's. For a problem with an update, copy the lines that start with `[update]` from the newest `log<date>.txt`. Paste only the lines around the problem. Tokens are already removed, but a log can still show the server's address: read the lines first, and never paste a server address, username or token.
       render: text
     validations:
       required: false

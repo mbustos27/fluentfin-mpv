@@ -15,7 +15,7 @@ namespace FluentFin.Core.Tests;
 /// </summary>
 public sealed class UpdaterTests : IDisposable
 {
-	private const string Repo = "https://github.com/mbustos27/fluentfin-mpv";
+	private const string Repo = "https://github.com/mbustos27/nixie";
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "nixie-updater-tests-" + Guid.NewGuid().ToString("N"));
 
 	public void Dispose()
@@ -1298,7 +1298,7 @@ public sealed class UpdaterTests : IDisposable
 	[Fact]
 	public async Task ARenamedRepository_ItsReleaseIsTaken_WhenGitHubsRedirectSaysSo()
 	{
-		const string renamed = "https://github.com/mbustos27/nixie";
+		const string renamed = "https://github.com/mbustos27/nixie-next";   // 1.7.3: a later rename (mbustos27/nixie is this copy's own now)
 		var json = Release(repo: renamed);
 		var redirect = new Uri("https://api.github.com/repositories/123456/releases/latest");
 
@@ -1307,7 +1307,7 @@ public sealed class UpdaterTests : IDisposable
 		Assert.Equal(UpdateCheckStatus.Available, followed.Status);
 		var release = followed.Release!;
 		Assert.True(release.HasInstaller);
-		Assert.Equal("mbustos27/nixie", release.Repository);
+		Assert.Equal("mbustos27/nixie-next", release.Repository);
 		Assert.Equal($"{renamed}/releases/download/v1.5.1/Nixie-1.5.1-win-x64.msi", release.MsiUrl);
 		Assert.Equal($"{renamed}/releases/tag/v1.5.1", release.PageUrl);
 		Assert.Equal(release, release.Validated());                     // stored and checked again: still whole
@@ -1322,13 +1322,58 @@ public sealed class UpdaterTests : IDisposable
 
 	[Theory]
 	[InlineData("https://github.com/insomniachi/FluentFin", null)]                                       // upstream: never
-	[InlineData("https://github.com/mbustos27/nixie", "https://api.github.com/repos/someone/else/releases/1")]   // page and API disagree
+	[InlineData("https://github.com/mbustos27/nixie-next", "https://api.github.com/repos/someone/else/releases/1")]   // page and API disagree
 	public void ARename_IsRefused_ForUpstream_OrWhenTheAnswerDisagreesWithItself(string repo, string? api)
 	{
 		var release = ReleaseInfo.Parse(Release(repo: repo, api: api), followRename: true)!;
 
 		Assert.False(release.HasInstaller);
 		Assert.Null(release.Repository);
+	}
+
+	/// <summary>1.7.3: the repository is mbustos27/nixie, its name on GitHub since 2026-11-22; the old name is kept for the test below.</summary>
+	[Fact]
+	public void TheRepository_IsMbustos27Nixie()
+	{
+		Assert.Equal("mbustos27/nixie", UpdateSource.Repository);
+		Assert.Equal("https://github.com/mbustos27/nixie", UpdateSource.RepositoryUrl);
+		Assert.Equal("https://api.github.com/repos/mbustos27/nixie/releases/latest", UpdateSource.LatestReleaseApi);
+		Assert.Equal("https://github.com/mbustos27/nixie/releases", UpdateSource.ReleasesPage);
+		Assert.Equal(new Uri("https://api.github.com/repos/mbustos27/nixie/releases/latest"), new UpdateChecker(new HttpClient(), "1.7.3").Api);
+		Assert.Equal("mbustos27/fluentfin-mpv", UpdateSource.OldRepository);
+	}
+
+	/// <summary>
+	/// 1.7.3: copies up to 1.7.2 still ask api.github.com/repos/mbustos27/fluentfin-mpv; GitHub answers through its redirect with
+	/// the release as mbustos27/nixie's (its page, API address and assets), and those copies take it as a renamed repository's.
+	/// This copy asks the new name: no redirect, its own repository. A release a 1.7.2 copy stored after the redirect stays whole.
+	/// </summary>
+	[Fact]
+	public void ACopyUpTo172_TakesTheReleaseThroughGitHubsRedirect_AndThisCopyAsksTheNewName()
+	{
+		var answer = Release();   // what GitHub answers the old name after its redirect: everything names mbustos27/nixie
+
+		var asOld = ReleaseInfo.Parse(answer, followRename: true, UpdateSource.OldRepository)!;
+		Assert.True(asOld.HasInstaller);
+		Assert.Equal("mbustos27/nixie", asOld.Repository);
+		Assert.Equal($"{Repo}/releases/download/v1.5.1/Nixie-1.5.1-win-x64.msi", asOld.MsiUrl);
+		Assert.Equal($"{Repo}/releases/tag/v1.5.1", asOld.PageUrl);
+		// without GitHub's redirect an old copy would not take another repository's assets (as before 1.5)
+		Assert.False(ReleaseInfo.Parse(answer, followRename: false, UpdateSource.OldRepository)!.HasInstaller);
+
+		var asThis = ReleaseInfo.Parse(answer)!;
+		Assert.True(asThis.HasInstaller);
+		Assert.Null(asThis.Repository);
+		Assert.True(UpdateSource.IsDownload(asThis.MsiUrl));
+
+		var stored = asOld.Validated();   // stored by 1.7.2, read again by this copy
+		Assert.True(stored.HasInstaller);
+		Assert.Null(stored.Repository);
+		Assert.Equal(asOld.MsiUrl, stored.MsiUrl);
+		Assert.Equal(asThis, stored);
+
+		// the old name's assets are another repository's now: never taken without the redirect
+		Assert.False(UpdateSource.IsDownload("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.5.1/Nixie-1.5.1-win-x64.msi"));
 	}
 
 	[Theory]
@@ -1377,6 +1422,23 @@ public sealed class UpdaterTests : IDisposable
 		Assert.Contains("$oldNameMsi = Join-Path $dist \"Seaglass-$Version-win-x64.msi\"", build);
 		var installer = File.ReadAllText(Path.Combine(tools, "installer", "Nixie.wxs"));
 		Assert.Contains($"Value=\"{UpdateSource.ReleasesPage}\"", installer);
+
+		// 1.7.3: every link the release tools write names the repository as it is now (Settings > Apps' links, the
+		// installer's welcome, the package README, SOURCES.txt, the live check): never the old name
+		Assert.Contains($"<Property Id=\"ARPURLINFOABOUT\" Value=\"{UpdateSource.RepositoryUrl}\" />", installer);
+		Assert.Contains($"<Property Id=\"ARPHELPLINK\" Value=\"{UpdateSource.RepositoryUrl}/issues\" />", installer);
+		Assert.Contains($"<Property Id=\"ARPURLUPDATEINFO\" Value=\"{UpdateSource.ReleasesPage}\" />", installer);
+		Assert.Contains("the licence and the source are at github.com/" + UpdateSource.Repository + ".",
+			File.ReadAllText(Path.Combine(tools, "installer", "Nixie.en-us.wxl")));
+		Assert.Contains(UpdateSource.RepositoryUrl + "/issues", File.ReadAllText(Path.Combine(tools, "README.txt")));
+		Assert.Contains("(" + UpdateSource.RepositoryUrl + "/tree/v{args.version})", File.ReadAllText(Path.Combine(tools, "sources.py")));
+		Assert.Contains($"[Net.HttpWebRequest]::Create('{UpdateSource.LatestReleaseApi}')", File.ReadAllText(Path.Combine(tools, "live-release-check.ps1")));
+		foreach (var file in new[] { "build-release.ps1", "README.txt", "sources.py", "live-release-check.ps1", @"installer\Nixie.wxs", @"installer\Nixie.en-us.wxl" })
+		{
+			var text = File.ReadAllText(Path.Combine(tools, file));
+			Assert.False(text.Contains("github.com/" + UpdateSource.OldRepository, StringComparison.OrdinalIgnoreCase)
+				|| text.Contains("repos/" + UpdateSource.OldRepository, StringComparison.OrdinalIgnoreCase), $"{file} still links to {UpdateSource.OldRepository}");
+		}
 	}
 
 	[Fact]
@@ -1411,8 +1473,26 @@ public sealed class UpdaterTests : IDisposable
 		Assert.True(UpdateSource.IsReleasePage(release.PageUrl, release.Source), release.PageUrl);
 		Assert.Null(release.Repository);   // no rename: the repository is the one the app names
 		Assert.Equal(UpdateSource.ApiVersion, checker.ApiVersionSelected);   // BH-150-m8: GitHub used the version pinned
+
+		// 1.7.3: copies up to 1.7.2 ask the old name. GitHub must still redirect it, and they must take the same release, as
+		// they read it (a renamed repository's, followed because of the redirect)
+		var oldApi = new Uri($"https://api.github.com/repos/{UpdateSource.OldRepository}/releases/latest");
+		using var http = new HttpClient();
+		using var request = new HttpRequestMessage(HttpMethod.Get, oldApi);
+		request.Headers.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue(AppIdentity.Name, "0.0.1"));
+		request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+		request.Headers.Add(UpdateSource.ApiVersionHeader, UpdateSource.ApiVersion);
+		using var response = await http.SendAsync(request);
+		var answeredFrom = response.RequestMessage?.RequestUri;
+		Assert.True(response.IsSuccessStatusCode, $"the old name: {(int)response.StatusCode}");
+		Assert.True(UpdateChecker.Redirected(oldApi, answeredFrom), $"the old name was not redirected: {answeredFrom}");
+		var asOld = ReleaseInfo.Parse(await response.Content.ReadAsStringAsync(), followRename: true, UpdateSource.OldRepository)!;
+		Assert.True(asOld.HasInstaller, $"{asOld.Version}: a copy up to 1.7.2 finds no installer");
+		Assert.Equal((release.Version, release.MsiUrl, UpdateSource.Repository), (asOld.Version, asOld.MsiUrl, asOld.Repository));
+
 		File.WriteAllText(Path.Combine(Path.GetTempPath(), "nixie-live-release-check.txt"),
-			$"{release.Version} {release.MsiName} size {release.MsiSize} digest {release.MsiDigest ?? "none"} api {checker.ApiVersionSelected}\n{release.MsiUrl}\n{release.Sha256Url}\n{release.PageUrl}\n");
+			$"{release.Version} {release.MsiName} size {release.MsiSize} digest {release.MsiDigest ?? "none"} api {checker.ApiVersionSelected}\n{release.MsiUrl}\n{release.Sha256Url}\n{release.PageUrl}\n" +
+			$"old name: redirected to {answeredFrom?.AbsolutePath}, taken as {asOld.Repository} {asOld.Version}\n");
 	}
 
 	// ---------- 7. the release notes
@@ -1424,10 +1504,10 @@ public sealed class UpdaterTests : IDisposable
 			## 1.5.0
 			What's new in **Nixie**:
 
-			- Search finds the best match first ([#12](https://github.com/mbustos27/fluentfin-mpv/issues/12))
+			- Search finds the best match first ([#12](https://github.com/mbustos27/nixie/issues/12))
 			  and groups by it
 			  - nested `detail`
-			* Updates: see https://github.com/mbustos27/fluentfin-mpv/releases.
+			* Updates: see https://github.com/mbustos27/nixie/releases.
 			1. [bad](javascript:alert(1)) <b>bold?</b>
 			""";
 
@@ -1439,10 +1519,10 @@ public sealed class UpdaterTests : IDisposable
 		Assert.Contains(blocks[1].Inlines, i => i.Bold && i.Text == "Nixie");
 		Assert.Equal(NotesBlockKind.Bullet, blocks[2].Kind);
 		Assert.Equal("Search finds the best match first (#12) and groups by it", blocks[2].PlainText);
-		Assert.Equal("https://github.com/mbustos27/fluentfin-mpv/issues/12", blocks[2].Inlines.Single(i => i.Link is not null).Link);
+		Assert.Equal("https://github.com/mbustos27/nixie/issues/12", blocks[2].Inlines.Single(i => i.Link is not null).Link);
 		Assert.Equal(1, blocks[3].Level);
 		Assert.Contains(blocks[3].Inlines, i => i.Code && i.Text == "detail");
-		Assert.Equal("https://github.com/mbustos27/fluentfin-mpv/releases", blocks[4].Inlines.Single(i => i.Link is not null).Link);
+		Assert.Equal("https://github.com/mbustos27/nixie/releases", blocks[4].Inlines.Single(i => i.Link is not null).Link);
 		Assert.Null(blocks[5].Inlines.Single(i => i.Text == "bad").Link);   // javascript: never opens
 		Assert.Equal("bad bold?", blocks[5].PlainText);
 		Assert.Empty(ReleaseNotes.Parse(null));

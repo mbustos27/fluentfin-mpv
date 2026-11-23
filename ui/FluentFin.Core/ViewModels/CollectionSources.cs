@@ -106,21 +106,23 @@ public sealed record NixieCollection(SmartCollection Collection) : ICollectionSo
 		}
 
 		// a Nixie preset was on too ("Heists" in Movies): its titles only, as the collection is now
-		var preset = saved.PresetId is { } id ? await PresetItems(id, saved.LibraryId) : null;
+		var preset = saved.PresetId is { } id ? await PresetItems(id, saved.LibraryId, saved.Revision) : null;
 		return [.. all.Where(x => filter.IsVisible(BaseItemViewModel.FromDto(x)) && (preset is null || x.Id is { } item && preset.Contains(item)))];
 	}
 
 	// the titles of the Nixie collection a saved filter's preset was ("nixie:franchise:2344"), from the library index; an empty
 	// set when that collection is no longer made (the saved filter then keeps nothing, rather than everything)
-	private static async Task<HashSet<Guid>> PresetItems(string presetId, Guid libraryId)
+	// 1.7.3 (P0-3): found by id, of any kind (Find): a decade, genre mix or country preset is no longer a published collection,
+	// so BuildAll doesn't make it. 1.7.3 (P0-2a): a title the server lists in two libraries is in both. Fix round (BH-173-M2):
+	// every title of its rule (no display cap), and a filter saved before 1.7.3 keeps its "Highly rated" or "Short films"
+	private static async Task<IReadOnlySet<Guid>> PresetItems(string presetId, Guid libraryId, int revision)
 	{
 		if (SmartCollectionServices.Index is not { } library || await library.GetAsync() is not { } index)
 		{
-			return [];
+			return new HashSet<Guid>();
 		}
 
-		var id = presetId.StartsWith(NixiePreset.IdPrefix, StringComparison.Ordinal) ? presetId[NixiePreset.IdPrefix.Length..] : presetId;
-		var own = index with { Entries = [.. index.Entries.Where(x => x.LibraryId == libraryId)] };
-		return (await SmartCollectionCatalog.BuildAllAsync(own, SmartCollectionCatalog.Now())).FirstOrDefault(x => x.Id == id)?.ItemIds.ToHashSet() ?? [];
+		var own = index with { Entries = [.. index.Entries.Where(x => x.InLibrary(libraryId))] };
+		return await Task.Run(() => SavedFilterPresets.Titles(own, presetId, revision, SmartCollectionCatalog.Now()));
 	}
 }

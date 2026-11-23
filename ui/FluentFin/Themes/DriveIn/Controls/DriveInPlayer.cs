@@ -2,6 +2,7 @@ using System.ComponentModel;
 using FluentFin.Controls;
 using FluentFin.Core.Mpv;
 using FluentFin.Core.ViewModels;
+using FluentFin.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -106,13 +107,16 @@ public static class DriveInPlayer
 				var timer = bar.DispatcherQueue.CreateTimer();
 				timer.Interval = TimeSpan.FromMilliseconds(250);
 				timer.IsRepeating = false;
-				timer.Tick += (_, _) =>
+				// 1.7.3 fix round (the close crash): this retry ran on through the close (mpv's own controls, or no mpv: no
+				// controls ever come), and a tick in the window's teardown read the bar's property: E_UNEXPECTED, out of a
+				// dispatcher callback, ended the app with 0xc000027b. Nothing once the app is closing, and never a throw
+				timer.Tick += UiDispatch.Tick("the Drive-in player's dressing", () =>
 				{
 					if (console ? GetConsole(bar) : GetClock(bar))
 					{
 						DressBar(bar, console, tries + 1);
 					}
-				};
+				});
 				timer.Start();
 			}
 

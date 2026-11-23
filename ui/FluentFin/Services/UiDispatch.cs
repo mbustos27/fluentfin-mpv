@@ -29,6 +29,35 @@ public static class UiDispatch
 		}
 	}
 
+	/// <summary>
+	/// Nixie 1.7.3 fix round (the close crash, 0xc000027b with a stowed E_UNEXPECTED): a <see cref="DispatcherQueueTimer"/>'s
+	/// Tick that does nothing once the app is closing (it stops its timer) and never throws (<see cref="Run"/>). A tick that
+	/// fired in the window's teardown read a XAML property, which threw out of the dispatcher's callback and ended the app,
+	/// 3 to 9 s after a close from the player page.
+	/// </summary>
+	public static Windows.Foundation.TypedEventHandler<DispatcherQueueTimer, object> Tick(string what, Action tick) => (timer, _) =>
+	{
+		if (App.IsClosing)
+		{
+			Stop(timer);
+			return;
+		}
+
+		Run(what, tick);
+	};
+
+	private static void Stop(DispatcherQueueTimer timer)
+	{
+		try
+		{
+			timer.Stop();
+		}
+		catch (Exception)
+		{
+			// the queue is shutting down
+		}
+	}
+
 	/// <summary>Runs <paramref name="action"/> now; an exception is logged with its stack, and the app goes on.</summary>
 	public static void Run(string what, Action action)
 	{
@@ -75,6 +104,15 @@ public static class FirstChanceTrail
 	private static int _written;
 	private static readonly HashSet<string> s_seen = [];
 
+	// 1.7.3 fix round (the NoMpv close crash): the logger, taken at the start. App.GetService goes through Application.Current,
+	// which the close's teardown no longer answers: what threw then (the crash's cause) was never logged
+	private static ILogger? s_log;
+
+	/// <summary>The most lines written once the app is closing (its own budget: the session's may be spent).</summary>
+	public const int MostAtTheClose = 20;
+
+	private static int _writtenAtTheClose;
+
 	[ThreadStatic]
 	private static bool t_inside;
 
@@ -87,6 +125,15 @@ public static class FirstChanceTrail
 		}
 
 		_uiThread = Environment.CurrentManagedThreadId;
+		try
+		{
+			s_log = App.GetService<ILogger<App>>();
+		}
+		catch (Exception)
+		{
+			// no logger yet: each line asks for it (as before)
+		}
+
 		AppDomain.CurrentDomain.FirstChanceException += (_, e) => OnThrown(e.Exception);
 	}
 
@@ -99,7 +146,9 @@ public static class FirstChanceTrail
 
 	private static void OnThrown(Exception exception)
 	{
-		if (t_inside || Environment.CurrentManagedThreadId != _uiThread || _written >= Most)
+		// 1.7.3 fix round: once the app is closing, every one (a crash there ends the log), within a budget of its own
+		var closing = App.IsClosing;
+		if (t_inside || Environment.CurrentManagedThreadId != _uiThread || (closing ? _writtenAtTheClose >= MostAtTheClose : _written >= Most))
 		{
 			return;
 		}
@@ -108,19 +157,21 @@ public static class FirstChanceTrail
 		try
 		{
 			var stack = new StackTrace(2, false).ToString();
-			if (!Worth(exception, onUiThread: true, stack))
+			// at the close, the framework's own too: the teardown runs few frames of the app's
+			if (closing ? exception is OperationCanceledException : !Worth(exception, onUiThread: true, stack))
 			{
 				return;
 			}
 
 			var at = stack.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Contains("FluentFin.", StringComparison.Ordinal)) ?? "";
-			if (!s_seen.Add($"{exception.GetType().FullName}|{exception.HResult}|{at}"))
+			if (!s_seen.Add($"{exception.GetType().FullName}|{exception.HResult}|{at}") && !closing)
 			{
 				return;
 			}
 
-			_written++;
-			App.GetService<ILogger<App>>().LogWarning("[first-chance] {Type} (0x{HResult:X8}): {Message}\n{Stack}", exception.GetType().FullName, exception.HResult, exception.Message, stack);
+			_ = closing ? _writtenAtTheClose++ : _written++;
+			(s_log ?? App.GetService<ILogger<App>>()).LogWarning("[first-chance]{Closing} {Type} (0x{HResult:X8}): {Message}\n{Stack}", closing ? " (closing)" : "",
+				exception.GetType().FullName, exception.HResult, exception.Message, stack);
 		}
 		catch (Exception)
 		{

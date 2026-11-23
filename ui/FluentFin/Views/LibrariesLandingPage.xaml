@@ -45,7 +45,13 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid Background="{ThemeResource GlassInsetFillBrush}" CornerRadius="{StaticResource GlassCardCornerRadius}">
+                        <!--
+                            1.7.3: art of another shape than the tile's 16:9 (a logo on a dark card) is cropped round its middle, not
+                            to its top strip: the image inside takes this alignment, and Stretch kept only its top. Vertical only, so
+                            the loading and failed plate still fills the tile (Ui173Tests)
+                        -->
                         <controls:LoadingImage
+                            VerticalAlignment="Center"
                             Glyph="&#xEA8C;"
                             Source="{x:Bind c:BaseItemDtoConverters.GetImage(Library, jm:ImageType.Primary, 270)}"
                             Stretch="UniformToFill" />
@@ -129,7 +135,9 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid Background="{ThemeResource GlassInsetFillBrush}" CornerRadius="{StaticResource GlassCardCornerRadius}">
+                        <!--  1.7.3: cropped round its middle, as the tile above (Ui173Tests)  -->
                         <controls:LoadingImage
+                            VerticalAlignment="Center"
                             Glyph="&#xEA8C;"
                             Source="{x:Bind c:BaseItemDtoConverters.GetImage(Library, jm:ImageType.Primary, 270)}"
                             Stretch="UniformToFill" />

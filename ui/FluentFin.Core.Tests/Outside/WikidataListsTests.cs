@@ -348,10 +348,11 @@ public sealed partial class WikidataListsTests
 	}
 
 	[Fact]
-	public void The_Awards_row_comes_after_Countries_and_isnt_a_kind_switch_of_its_own()
+	public void The_Awards_row_comes_last_of_the_kinds_and_isnt_a_kind_switch_of_its_own()
 	{
+		// 1.7.3 (P0-3): after Keywords, the page's last kind; Countries, which it followed, are no longer published
 		var order = SmartCollectionKinds.PageOrder.ToList();
-		Assert.Equal(order.IndexOf(SmartCollectionKind.Country) + 1, order.IndexOf(SmartCollectionKind.Award));
+		Assert.Equal([SmartCollectionKind.Keyword, SmartCollectionKind.Award], order.TakeLast(2));
 		Assert.Equal("Awards", SmartCollectionKinds.Plural(SmartCollectionKind.Award));
 		Assert.DoesNotContain(new CollectionsSettingsViewModel(new MemoryStore()).Kinds, x => x.Name == "Awards");
 	}

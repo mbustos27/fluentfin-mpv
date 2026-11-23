@@ -22,14 +22,38 @@ public sealed partial class ComingUpSign : UserControl
 	public static readonly DependencyProperty ItemsProperty =
 		DependencyProperty.Register(nameof(Items), typeof(IReadOnlyList<BaseItemViewModel>), typeof(ComingUpSign), new PropertyMetadata(null, (d, _) => ((ComingUpSign)d).BuildEntries()));
 
-	public static readonly DependencyProperty UpNextCountProperty =
-		DependencyProperty.Register(nameof(UpNextCount), typeof(int), typeof(ComingUpSign), new PropertyMetadata(0, (d, _) => ((ComingUpSign)d).UpdateLink()));
+	public static readonly DependencyProperty IsNextUpKnownProperty =
+		DependencyProperty.Register(nameof(IsNextUpKnown), typeof(bool), typeof(ComingUpSign), new PropertyMetadata(false, (d, _) => ((ComingUpSign)d).UpdateLink()));
 
-	/// <summary>Next Up, in the server's order (the sign shows the first three or four).</summary>
+	/// <summary>
+	/// Next Up, in the server's order: the sign shows the first three or four, and "All of Up next (N)" counts and opens all of
+	/// them (Nixie 1.7.3: the link's count comes from this list, so it never counts what the sign doesn't list).
+	/// </summary>
 	public IReadOnlyList<BaseItemViewModel>? Items { get => (IReadOnlyList<BaseItemViewModel>?)GetValue(ItemsProperty); set => SetValue(ItemsProperty, value); }
 
-	/// <summary>How many items "All of Up next" opens.</summary>
-	public int UpNextCount { get => (int)GetValue(UpNextCountProperty); set => SetValue(UpNextCountProperty, value); }
+	/// <summary>
+	/// Next Up is known: it has answered, and Home loaded with no problem (<see cref="KnowsNextUp"/>). Only then does an empty
+	/// board say "Nothing up next"; until then it says nothing.
+	/// </summary>
+	public bool IsNextUpKnown { get => (bool)GetValue(IsNextUpKnownProperty); set => SetValue(IsNextUpKnownProperty, value); }
+
+	/// <summary>
+	/// Nixie 1.7.3: the board's link and its empty line for <paramref name="count"/> items of Next Up: "All of Up next (N)" when
+	/// there are any, "Nothing up next" when Next Up is known to be empty, neither while it isn't known.
+	/// </summary>
+	public static (string? Link, string? Empty) BoardText(int count, bool known) =>
+		count > 0 ? (DriveInHome.AllUpNextText(count), null) : (null, known ? NothingUpNext : null);
+
+	/// <summary>
+	/// Whether an empty Next Up is known to be empty: it has answered, and Home's load is done with no problem (Loaded with
+	/// nothing said, or Empty). A Next Up request that failed leaves the list empty too: then Home says "Some of Home couldn't
+	/// be loaded", and the board doesn't claim there is nothing up next.
+	/// </summary>
+	public static bool KnowsNextUp(bool nextUpLoading, LoadStatus home, bool homeHasProblem) =>
+		!nextUpLoading && (home == LoadStatus.Loaded && !homeHasProblem || home == LoadStatus.Empty);
+
+	/// <summary>The board's line when Next Up is in and empty.</summary>
+	public const string NothingUpNext = "Nothing up next";
 
 	/// <summary>"All of Up next" was clicked.</summary>
 	public event EventHandler? AllRequested;
@@ -106,8 +130,11 @@ public sealed partial class ComingUpSign : UserControl
 
 	private void UpdateLink()
 	{
-		AllLink.Content = DriveInHome.AllUpNextText(UpNextCount);
-		AllLink.Visibility = UpNextCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+		var (link, empty) = BoardText(Items?.Count ?? 0, IsNextUpKnown);
+		AllLink.Content = link ?? "";
+		AllLink.Visibility = link is null ? Visibility.Collapsed : Visibility.Visible;
+		EmptyText.Text = empty ?? "";
+		EmptyText.Visibility = empty is null ? Visibility.Collapsed : Visibility.Visible;
 	}
 
 	private void BuildEntries()

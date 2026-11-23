@@ -159,6 +159,11 @@ internal sealed class ItemPagePlace
 		_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
 		_timer.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			if (_page.XamlRoot is not { } root)
 			{
 				if (DateTime.UtcNow >= deadline)
@@ -265,6 +270,11 @@ internal sealed class ItemPagePlace
 		_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
 		_timer.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			var now = DateTime.UtcNow;
 			if (_loaded())
 			{

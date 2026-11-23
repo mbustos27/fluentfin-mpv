@@ -88,7 +88,11 @@ param(
     # sg-qa (1.5): run against a local QA Jellyfin server (tools\qa-servers, docs\QA-SERVERS.md) instead of the fake one:
     # 10.11 (127.0.0.1:8196) or 12 (127.0.0.1:8296), or NIXIE_QA_SERVER. Started hidden if it is not running and stopped
     # again after the run; requests go through tools\qa-servers\qaproxy.py, which logs them as the fake server does
-    [ValidateSet('', '10.11', '12')][string]$QaServer = $env:NIXIE_QA_SERVER
+    [ValidateSet('', '10.11', '12')][string]$QaServer = $env:NIXIE_QA_SERVER,
+    # 1.7.3 (the close crash with no mpv): mpv is left off the run's PATH (and the run's LOCALAPPDATA has no WinGet folder), so
+    # with mpv's controls (-Setting MpvPlayerControls=Mpv) the player page says "mpv isn't installed on this PC", as
+    # verify-package's NoMpv run does
+    [switch]$WithoutMpv
 )
 
 $ErrorActionPreference = 'Stop'
@@ -199,7 +203,7 @@ if ($Then) { $driveArgs += @('-Then', $Then) }
 if ($Before) { $driveArgs += @('-Before', $Before) }
 if ($qaUpstream) { $driveArgs += @('-QaUpstream', $qaUpstream) }
 if ($NoA11y) { $driveArgs += '-NoA11y' }
-Write-Host "running off-screen (desktop ffh-ui-$PID; log $Out\drive.log)"
+Write-Host "running off-screen (desktop ffh-ui-$PID; log $Out\drive.log)$(if ($WithoutMpv) { '; mpv is not on the run''s PATH' })"
 $glassEnv = if ($GlassFollowsActivity) { @() } else { @('--env', 'FLUENTFIN_MPV_GLASS_ALWAYS_ACTIVE=1') }
 # Nixie 1.3.1: the harness's mouse (posted clicks never reach WinUI off-screen): a dev build takes a registered window message
 # and clicks through its own code (ui\FluentFin\Services\HarnessPointer.cs; a release package never listens)
@@ -231,7 +235,7 @@ try {
     }
     & $Python -B -I $hidden --log (Join-Path $Out 'hidden_run.log') --timeout $TimeoutSeconds --desktop "ffh-ui-$PID" `
         --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" @glassEnv @pointerEnv `
-        --env "PATH=$mpvDir;$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0" `
+        --env "PATH=$(if (-not $WithoutMpv) { "$mpvDir;" })$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0" `
         -- $ps @driveArgs | Out-Host
     $code = $LASTEXITCODE
 }

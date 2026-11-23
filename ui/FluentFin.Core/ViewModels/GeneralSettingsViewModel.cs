@@ -34,7 +34,7 @@ public partial class GeneralSettingsViewModel(IJellyfinClient jellyfinClient) : 
 			new JellyfinConfigItemViewModel<bool>(() => config.QuickConnectAvailable ?? false, value => config.QuickConnectAvailable = value)
 			{
 				DisplayName = "Enable quick connect",
-				Description = "Enable quick connect to allow easy access to your server from anywhere."
+				Description = "Enable quick connect to allow easy access to the server from anywhere."
 			},
 			new JellyfinGroupedConfigItemViewModel()
 			{

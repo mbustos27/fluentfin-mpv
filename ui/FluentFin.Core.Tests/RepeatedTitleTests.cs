@@ -86,8 +86,10 @@ public sealed class RepeatedTitleTests : IDisposable
 		Type = BaseItemDto_Type.Movie,
 		ProductionYear = 1990 + (i % 20),
 		CommunityRating = 5 + (i % 5),
+		CriticRating = 80, // 1.7.3 (M1's review): Acclaimed takes only titles something backs
 		Genres = (i % 3) switch { 0 => ["Comedy", "Horror"], 1 => ["Comedy"], _ => ["Horror"] },
 		ProductionLocations = [i % 2 == 0 ? "France" : "Japan"],
+		Tags = i % 2 == 0 ? ["heist"] : [], // 1.7.3: twelve heists (a keyword collection)
 		ProviderIds = new BaseItemDto_ProviderIds { AdditionalData = new Dictionary<string, object> { ["Tmdb"] = $"{i}", ["TmdbCollection"] = $"{i / 3}" } },
 		ImageTags = new BaseItemDto_ImageTags { AdditionalData = new Dictionary<string, object> { ["Primary"] = $"p{i}" } },
 		UserData = new UserItemDataDto { Played = false },
@@ -144,9 +146,11 @@ public sealed class RepeatedTitleTests : IDisposable
 		Assert.True(vm.State.IsLoaded, $"{vm.State.Title}: {vm.State.Message}");
 		var titles = vm.Rows.Select(r => r.Title).ToList();
 		Assert.Equal(["The server's collections", "Playlists"], titles.Take(2));
-		Assert.Contains("Genre mixes", titles); // the builder that threw
 		Assert.Contains("Franchises", titles);
-		Assert.Equal(8, vm.Rows.Single(r => r.Kind == SmartCollectionKind.GenreMix).Tiles.Single().Nixie!.ItemIds.Count);
+		Assert.Contains("Keywords", titles);
+		// the builder that threw: 1.7.3 (P0-3) makes genre mixes on demand only, never a row
+		Assert.DoesNotContain("Genre mixes", titles);
+		Assert.Equal(8, SmartCollectionCatalog.Find(index.Current!, "genres:movie:comedy+horror", Noon)!.ItemIds.Count);
 
 		// the saved index keeps each title once, and says so with a count only
 		var ids = index.Current!.Entries.Select(x => x.Id).ToList();
@@ -209,8 +213,10 @@ public sealed class RepeatedTitleTests : IDisposable
 	[Fact]
 	public async Task ABuilderThatThrowsOnTheSavedIndex_ThePageStillLoads_WithTheOtherKinds()
 	{
-		// a saved title with no countries list (null, not empty): the countries' builder throws on it
-		await SaveIndex(2, entries => entries[1]!["Countries"] = null);
+		// a saved title with no tags list (null, not empty): the keywords' builder throws on it. 1.7.3: 1.7.2's test nulled the
+		// countries, whose kind is made on demand only now
+		// fix round (BH-173-q3): a null list loads as an empty one now; a null tag in it still throws in the keywords' builder
+		await SaveIndex(2, entries => entries[1]!["Tags"] = new System.Text.Json.Nodes.JsonArray((System.Text.Json.Nodes.JsonNode?)null));
 		using var index = Index();
 		var vm = Page(index);
 
@@ -220,8 +226,9 @@ public sealed class RepeatedTitleTests : IDisposable
 		var titles = vm.Rows.Select(r => r.Title).ToList();
 		Assert.Equal(["The server's collections", "Playlists"], titles.Take(2));
 		Assert.Contains("Franchises", titles);
-		Assert.Contains("Genre mixes", titles);
-		Assert.DoesNotContain(vm.Rows, r => r.Kind == SmartCollectionKind.Country);
+		Assert.Contains(vm.Rows, r => r.Title == "Picks");
+		Assert.DoesNotContain(vm.Rows, r => r.Kind == SmartCollectionKind.Keyword); // twelve heists, but its builder threw
+		Assert.Contains(MadeByNixieLog.Instance.Throws, x => x.StartsWith("Made by Nixie: the Keyword collections couldn't be made (", StringComparison.Ordinal)); // and it is seen
 	}
 
 	[Fact]

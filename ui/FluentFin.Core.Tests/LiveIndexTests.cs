@@ -31,7 +31,7 @@ public sealed class LiveIndexFactAttribute : FactAttribute
 
 /// <summary>
 /// Nixie 1.7.1 (the index on a big server): the library index's real requests, through the real client, timed on a real
-/// Jellyfin at scale (the throwaway 25,736-film instance): the first-ever read (its first rows, the titles in, its people),
+/// Jellyfin at scale (the throwaway 25,736-film instance): the first-ever read (its first rows, the titles in; 1.7.3: no people),
 /// then a restart with the saved index (shown without a read when the server's check says nothing changed), and the
 /// Collections page's first row with it. Writes durations and counts only (no title, no name, no token) to
 /// NIXIE_LIVE_INDEX_OUT. Signs out at the end.
@@ -56,7 +56,7 @@ public sealed class LiveIndexTests
 		{
 			await client.Initialize(server.TrimEnd('/'), auth);
 
-			// the first-ever read: its first rows, the titles in (the reading line gone), and the people behind them
+			// the first-ever read: its first rows, and the titles in (the reading line gone); 1.7.3: no people pass behind them
 			var firstLog = new CoreListLogger<LibraryIndex>();
 			var first = new LibraryIndex(client, homeCache, Path.Combine(folder, "LibraryIndex"), messages, firstLog, TimeProvider.System);
 			var watch = Stopwatch.StartNew();
@@ -73,15 +73,18 @@ public sealed class LiveIndexTests
 			await first.Settled;
 			var whole = watch.ElapsedMilliseconds;
 			Assert.NotNull(titles);
+			var peoplePages = firstLog.Entries.Count(e => e.Message.StartsWith("Library index: people page", StringComparison.Ordinal));
 			summary["firstRead"] = new JsonObject
 			{
 				["titles"] = titles!.Entries.Count,
 				["firstRowsMs"] = firstRows,
 				["titlesInMs"] = titlesIn,
-				["withPeopleMs"] = whole,
-				["hasPeople"] = first.Current?.HasPeople,
+				["settledMs"] = whole,
+				["peoplePages"] = peoplePages, // 1.7.3: none
+				["inMoreThanOneLibrary"] = titles.Entries.Count(x => x.LibraryIds.Length > 1), // 1.7.3 (P0-2)
 				["log"] = Lines(firstLog),
 			};
+			Assert.Equal(0, peoplePages);
 			first.Dispose();
 
 			// a restart: the saved index at once, and no read while the server's check says nothing changed

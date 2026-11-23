@@ -35,9 +35,9 @@
         <Property Id="ARPPRODUCTICON" Value="AppIcon" />
         <!--  Settings > Apps: the publisher is Manufacturer above ("Nixie", the name of the program; there is no
               company), the version and the icon are the package's; these are the links and the line under the name  -->
-        <Property Id="ARPURLINFOABOUT" Value="https://github.com/mbustos27/fluentfin-mpv" />
-        <Property Id="ARPHELPLINK" Value="https://github.com/mbustos27/fluentfin-mpv/issues" />
-        <Property Id="ARPURLUPDATEINFO" Value="https://github.com/mbustos27/fluentfin-mpv/releases" />
+        <Property Id="ARPURLINFOABOUT" Value="https://github.com/mbustos27/nixie" />
+        <Property Id="ARPHELPLINK" Value="https://github.com/mbustos27/nixie/issues" />
+        <Property Id="ARPURLUPDATEINFO" Value="https://github.com/mbustos27/nixie/releases" />
         <Property Id="ARPCOMMENTS" Value="A Jellyfin client for Windows with the mpv player (formerly Seaglass)" />
         <Property Id="ARPNOMODIFY" Value="1" />
         <Property Id="ARPNOREPAIR" Value="1" />

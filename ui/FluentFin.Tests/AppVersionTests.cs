@@ -10,7 +10,7 @@ namespace FluentFin.Tests;
 /// </summary>
 public sealed class AppVersionTests
 {
-	private const string Release = "1.7.2";
+	private const string Release = "1.7.3";
 
 	private static readonly Assembly App = typeof(FluentFin.App).Assembly;
 

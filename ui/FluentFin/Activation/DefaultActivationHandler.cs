@@ -57,7 +57,7 @@ public class DefaultActivationHandler : ActivationHandler<LaunchActivatedEventAr
 		{
 			// fluentfin-mpv (startup-perf, O4): the window is already shown (ActivationService); it says what it waits for
 			var server = _settings.Servers[0];
-			_mainWindow.StartupStatus = $"Signing in to {(string.IsNullOrWhiteSpace(server.DisplayName) ? "your server" : server.DisplayName)}…";
+			_mainWindow.StartupStatus = $"Signing in to {(string.IsNullOrWhiteSpace(server.DisplayName) ? "the server" : server.DisplayName)}…"; // 1.7.3 (rule 11): it said "your server"
 			bool result;
 			try
 			{

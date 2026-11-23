@@ -125,6 +125,11 @@ internal static class UndoToast
 		s_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
 		s_timer.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			var focusWithin = FocusManager.GetFocusedElement(root.XamlRoot) is DependencyObject focused && IsWithin(focused, card);
 			if (!StaysOpen(DateTime.UtcNow - opened, pointerOver, focusWithin))
 			{

@@ -104,8 +104,9 @@ public sealed partial class LoadState : ObservableObject
 	partial void OnStatusChanged(LoadStatus value) => RetryCommand.NotifyCanExecuteChanged();
 
 	/// <summary>
-	/// Runs <paramref name="load"/> and shows how it ended; Retry runs it again. A load that throws is a failure with the
-	/// default text. Only the newest run is shown: one that finishes after a newer run began changes nothing.
+	/// Runs <paramref name="load"/> and shows how it ended; Retry runs it again. A load that throws is a failure, in the words
+	/// of what threw (<see cref="LoadMessages.Failed"/>). Only the newest run is shown: one that finishes after a newer run
+	/// began changes nothing.
 	/// </summary>
 	public async Task RunAsync(Func<Task<LoadOutcome>> load)
 	{
@@ -118,9 +119,12 @@ public sealed partial class LoadState : ObservableObject
 		{
 			outcome = await load();
 		}
-		catch (Exception ex) when (ex is not OperationCanceledException)
+		// 1.7.3 (rule 11): the server's words only for the server's failures (an HTTP error, no answer in time: the HTTP client's
+		// own timeout is a cancellation too, so it is let in here); anything else is Nixie's own (it said "Check that the
+		// server is running" for every throw, 1.7.1's Collections page among them)
+		catch (Exception ex) when (ex is not OperationCanceledException || LoadMessages.IsTimeout(ex))
 		{
-			outcome = LoadOutcome.Failed($"Couldn't load {_what}", LoadMessages.CheckServer());
+			outcome = LoadMessages.Failed(_what, ex);
 		}
 		catch (OperationCanceledException)
 		{
@@ -201,6 +205,137 @@ public static class LoadMessages
 		$"{AppIdentity.Name} couldn't get it from {ServerName()} just now. Check this PC's connection, then select Try again.";
 
 	public static LoadOutcome CouldNotLoad(string what) => LoadOutcome.Failed($"Couldn't load {what}", CheckServer());
+
+	/// <summary>
+	/// 1.7.3 (rule 11): the server answered with an error of its own (5xx): the fault is on its side, so its owner is named,
+	/// and what the user can do here comes first.
+	/// </summary>
+	public static string ServerHadAProblem()
+	{
+		var name = ServerName();
+		return $"{(name == "the server" ? "The server" : name)} had a problem answering just now. Select Try again; if it keeps happening, its owner may need to know.";
+	}
+
+	/// <summary>
+	/// 1.7.3 (rule 11): the failure was Nixie's own (a bug, a file it couldn't read): no word about the server, which answered
+	/// or was never asked; what the user can do on this PC.
+	/// </summary>
+	public static string CouldNotShow() =>
+		$"{AppIdentity.Name} couldn't show this page. Select Try again; if it keeps happening, restart {AppIdentity.Name}, or use Report a problem in Settings.";
+
+	/// <summary>
+	/// 1.7.3 fix round (BH-173-q2): the server's own no (403): its account rules, which only its owner changes; never "check
+	/// this PC's connection", which answered.
+	/// </summary>
+	public static string NotAllowed()
+	{
+		var name = ServerName();
+		return $"{(name == "the server" ? "The server" : name)} doesn't let your account open this. Only the server's owner can change that.";
+	}
+
+	/// <summary>1.7.3: where a load's failure came from, which says whose words it gets (<see cref="Failed"/>).</summary>
+	public enum Cause
+	{
+		/// <summary>
+		/// The server didn't answer, didn't answer in time, or turned the sign-in or the pace down (401, 407, 408, 429):
+		/// <see cref="CheckServer"/>.
+		/// </summary>
+		Server,
+
+		/// <summary>
+		/// The server answered with a 5xx error, its own fault: <see cref="ServerHadAProblem"/>. The re-review: a 404 or 410 too
+		/// (an address it doesn't have).
+		/// </summary>
+		ServerFault,
+
+		/// <summary>
+		/// Anything else: Nixie's own failure, <see cref="CouldNotShow"/>. Fix round (BH-173-q2): a 4xx not below (a 400: a
+		/// request Nixie made that the server couldn't take) too.
+		/// </summary>
+		Local,
+
+		/// <summary>Fix round (BH-173-q2): 403, the account may not: <see cref="NotAllowed"/>.</summary>
+		NotAllowed,
+	}
+
+	/// <summary>
+	/// 1.7.3: whose failure <paramref name="ex"/> is, looking through what wraps it: an HTTP error (Jellyfin's API, Flurl,
+	/// HttpClient, a socket) or a timeout is the server's (a 5xx its own fault); anything else is Nixie's.
+	/// </summary>
+	public static Cause CauseOf(Exception ex)
+	{
+		var seen = 0;
+		var pending = new Stack<Exception>();
+		pending.Push(ex);
+		while (pending.Count > 0 && seen++ < 32)
+		{
+			var e = pending.Pop();
+			int? status = e switch
+			{
+				Microsoft.Kiota.Abstractions.ApiException api => api.ResponseStatusCode,
+				Flurl.Http.FlurlHttpTimeoutException => 0,
+				Flurl.Http.FlurlHttpException flurl => flurl.StatusCode ?? 0,
+				HttpRequestException http => (int?)http.StatusCode ?? 0,
+				HttpIOException or System.Net.Sockets.SocketException or System.Net.WebSockets.WebSocketException or TimeoutException => 0,
+				_ => null,
+			};
+
+			if (status is { } code)
+			{
+				// fix round (BH-173-q2): a 403 or a 404 isn't the connection (every 4xx but 401 got its words). The re-review: a 404
+				// is the server's (an address an older server doesn't have, a reverse proxy's path), never "removed": every page asks
+				// for its own item through calls that answer null, so a 404 that reaches here is never the item's
+				return code switch
+				{
+					>= 500 and <= 599 or 404 or 410 => Cause.ServerFault,
+					403 => Cause.NotAllowed,
+					401 or 407 or 408 or 429 => Cause.Server,
+					>= 400 and <= 499 => Cause.Local,
+					_ => Cause.Server,
+				};
+			}
+
+			if (e is AggregateException aggregate)
+			{
+				foreach (var inner in aggregate.InnerExceptions.Reverse())
+				{
+					pending.Push(inner);
+				}
+			}
+			else if (e.InnerException is { } inner)
+			{
+				pending.Push(inner);
+			}
+		}
+
+		return Cause.Local;
+	}
+
+	/// <summary>
+	/// 1.7.3: a cancellation that is a timeout (the HTTP client's own limit: a <see cref="TimeoutException"/> inside), not a
+	/// page that stopped its load.
+	/// </summary>
+	public static bool IsTimeout(Exception ex)
+	{
+		for (var (e, depth) = (ex, 0); e is not null && depth < 32; (e, depth) = (e.InnerException, depth + 1))
+		{
+			if (e is TimeoutException)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>1.7.3 (rule 11): a load of <paramref name="what"/> that threw <paramref name="ex"/>, in its cause's words (<see cref="CauseOf"/>).</summary>
+	public static LoadOutcome Failed(string what, Exception ex) => LoadOutcome.Failed($"Couldn't load {what}", CauseOf(ex) switch
+	{
+		Cause.Server => CheckServer(),
+		Cause.ServerFault => ServerHadAProblem(),
+		Cause.NotAllowed => NotAllowed(), // fix round (BH-173-q2)
+		_ => CouldNotShow(),
+	});
 
 	/// <summary>
 	/// 1.6.1 (BH-151-m2): what an action's failure says (a removal, a Save): <paramref name="otherwise"/>, unless the server no

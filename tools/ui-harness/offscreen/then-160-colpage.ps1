@@ -208,10 +208,12 @@ if ($c160Only -contains 'presets12') {
     $c160All = Find-Ui -Name 'All titles' -Contains
     if ($c160All) { [void][OffscreenUi]::SetFocus($c160All); C160-Settle 400 }
     Capture-Page "$c160Tag-presets12-1100"
+    # 1.7.3 fix round (BH-173-m4): HarnessPresetSource's last chip is 1.7.3's kind of name ("Directed by Kestrel" went with the
+    # director collections)
     Key 0x23; C160-Settle 800                              # End: the last preset
     $f = C160-FocusElement
     $b = if ($f) { $f.Current.BoundingRectangle } else { $null }
-    Check 'presets12: End puts the keyboard on the last preset, in view' ($f -and $f.Current.Name -like 'Directed by Kestrel*' -and $b.X -ge $c160W.L -and $b.Right -le $c160W.R) "$(if ($f) { "'$($f.Current.Name)' x $([int]($b.X - $c160W.L))..$([int]($b.Right - $c160W.L)) of $([int]($c160W.R - $c160W.L))" })"
+    Check 'presets12: End puts the keyboard on the last preset, in view' ($f -and $f.Current.Name -like 'Based on a true story*' -and $b.X -ge $c160W.L -and $b.Right -le $c160W.R) "$(if ($f) { "'$($f.Current.Name)' x $([int]($b.X - $c160W.L))..$([int]($b.Right - $c160W.L)) of $([int]($c160W.R - $c160W.L))" })"
     Capture-Page "$c160Tag-presets12-end-1100"
     Key 0x24; C160-Settle 600                              # Home: back to All
     $f = C160-FocusElement

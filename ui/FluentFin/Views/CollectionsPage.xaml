@@ -107,22 +107,31 @@
                 Style="{StaticResource PageHeaderStyle}"
                 Text="{x:Bind lc:PageGrid.Title(ViewModel.Title), Mode=OneWay}" />
 
-            <!--  the first read of the libraries: Made by Nixie is on its way (1.7.1, BH-171-m1: or it stopped part way, said so)  -->
-            <StackPanel
+            <!--
+                the first read of the libraries: Made by Nixie is on its way (1.7.1, BH-171-m1: or it stopped part way, said so).
+                1.7.3 (BH-171-m4): the panel around it is the page's (ShowReadingLine): when the line goes, the panel keeps its
+                height for the rest of the visit, so the rows under the keyboard and the pointer stay where they are
+            -->
+            <Grid
                 x:Name="ReadingPanel"
-                Orientation="Horizontal"
-                Spacing="12"
-                Visibility="{x:Bind ViewModel.ShowsReadingLine, Mode=OneWay}">
-                <ProgressRing
-                    Width="20"
-                    Height="20"
-                    IsActive="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}" />
-                <TextBlock
-                    AutomationProperties.LiveSetting="Polite"
-                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
-                    Text="{x:Bind ViewModel.ReadingText, Mode=OneWay}" />
-            </StackPanel>
+                MinHeight="20"
+                Visibility="Collapsed">
+                <StackPanel
+                    x:Name="ReadingLine"
+                    Orientation="Horizontal"
+                    Spacing="12"
+                    Visibility="{x:Bind ViewModel.ShowsReadingLine, Mode=OneWay}">
+                    <ProgressRing
+                        Width="20"
+                        Height="20"
+                        IsActive="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}" />
+                    <TextBlock
+                        AutomationProperties.LiveSetting="Polite"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                        Text="{x:Bind ViewModel.ReadingText, Mode=OneWay}" />
+                </StackPanel>
+            </Grid>
 
             <!--  the rows; an ItemsControl, not a virtualizing repeater, so Tab reaches every row  -->
             <ItemsControl

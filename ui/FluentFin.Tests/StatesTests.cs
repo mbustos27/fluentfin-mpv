@@ -150,8 +150,8 @@ public sealed class StatesTests
 	[InlineData(401, "Wrong username or password")]
 	[InlineData(403, "doesn't let this account sign in")]
 	[InlineData(500, "answered with an error (500)")]
-	[InlineData(503, "Wait a moment and try again")]
-	[InlineData(404, "Check that this is your Jellyfin server's address")]
+	[InlineData(503, "Wait a moment and try again; if it keeps happening, its owner may need to know.")]   // 1.7.3: not "check the server's logs"
+	[InlineData(404, "Check that this is the address of the Jellyfin server you use")]
 	public void AnErrorStatus_IsSaidInWords_WithWhatToDo(int status, string expected)
 	{
 		var text = JellyfinAuthenticationService.DescribeFailure(new ApiException("The server returned an unexpected status code") { ResponseStatusCode = status }, "https://jf.example:8920");
@@ -167,7 +167,8 @@ public sealed class StatesTests
 		var certificate = JellyfinAuthenticationService.DescribeFailure(new HttpRequestException("ssl", new AuthenticationException()), "https://jf.example");
 
 		// the exception's own words stay in the log (layout audit #11)
-		Assert.Equal("Can't reach http://127.0.0.1:9. Check that the server is running, that the address and port are right, and that this PC can reach it (VPN, firewall), then try again.", refused);
+		// 1.7.3 (rule 11): what the user can do on this PC (it said "Check that the server is running")
+		Assert.Equal("Can't reach http://127.0.0.1:9. Check that the address and port are right and that this PC can reach it (VPN, firewall), then try again.", refused);
 		Assert.Contains("isn't trusted by Windows", certificate, StringComparison.Ordinal);
 	}
 

@@ -256,7 +256,18 @@ public sealed unsafe partial class MpvVideoHost(ILogger<MpvVideoHost> logger) : 
 		}
 	}
 
-	private void OnResync(DispatcherQueueTimer sender, object args) => Update();
+	private void OnResync(DispatcherQueueTimer sender, object args)
+	{
+		// 1.7.3 fix round (the close crash): a tick in the window's teardown read the page's layout, and XAML's E_UNEXPECTED out of
+		// the dispatcher's callback ended the app with 0xc000027b
+		if (App.IsClosing)
+		{
+			sender.Stop();
+			return;
+		}
+
+		Update();
+	}
 
 	// re-assert HWND_TOP after activation, cheap insurance (research §1)
 	private void OnWindowActivated(object sender, WindowActivatedEventArgs args) => Update(force: true);

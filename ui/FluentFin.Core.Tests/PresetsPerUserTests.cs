@@ -39,6 +39,7 @@ public sealed class PresetsPerUserTests : IDisposable
 	private static BaseItemDto Film(string name, double rating, bool played) => new()
 	{
 		Id = Guid.NewGuid(), Name = name, Type = BaseItemDto_Type.Movie, ProductionYear = 2001, CommunityRating = (float)rating,
+		CriticRating = 80, // 1.7.3 (M1's review): Acclaimed takes only titles something backs
 		RunTimeTicks = TimeSpan.FromMinutes(120).Ticks, UserData = new UserItemDataDto { Played = played },
 	};
 

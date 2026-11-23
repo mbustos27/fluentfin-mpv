@@ -25,7 +25,7 @@ import smartdata  # noqa: E402
 import test_fakeserver as tf  # noqa: E402
 CREDS, make_media = tf.CREDS, tf.make_media
 
-UA = "Nixie/1.7.0 (https://github.com/mbustos27/fluentfin-mpv)"
+UA = "Nixie/1.7.0 (https://github.com/mbustos27/nixie)"
 QUERY = ("PREFIX wd: <http://www.wikidata.org/entity/>\nPREFIX wdt: <http://www.wikidata.org/prop/direct/>\n"
          "SELECT ?item ?tmdb ?imdb ?date WHERE { ?item wdt:P166 wd:Q102427 . OPTIONAL { ?item wdt:P4947 ?tmdb . } }")
 

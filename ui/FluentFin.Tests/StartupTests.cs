@@ -110,7 +110,7 @@ public sealed class StartupTests
 
 		var running = handler.SignIn();
 		await Task.Delay(20);
-		Assert.Equal("Signing in to your server…", window.Object.StartupStatus);
+		Assert.Equal("Signing in to the server…", window.Object.StartupStatus);   // 1.7.3 (rule 11): not "your server"
 		signIn.SetException(new HttpRequestException("unreachable"));
 
 		await Assert.ThrowsAsync<HttpRequestException>(() => running);

@@ -121,7 +121,16 @@ public sealed partial class PlaybackStatsPanel : UserControl
 		_copied.Start();
 	}
 
-	private void OnCopiedTick(DispatcherQueueTimer sender, object args) => ResetCopyLabel();
+	private void OnCopiedTick(DispatcherQueueTimer sender, object args)
+	{
+		if (App.IsClosing)
+		{
+			sender.Stop(); // 1.7.3 fix round (the close crash): nothing in the window's teardown
+			return;
+		}
+
+		ResetCopyLabel();
+	}
 
 	private void ResetCopyLabel()
 	{

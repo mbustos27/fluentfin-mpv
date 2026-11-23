@@ -28,7 +28,7 @@ public partial class PlaybackResumeViewModel(IJellyfinClient jellyfinClient) : S
 			{
 				DisplayName = "Internet streaming bitrate limit (Mbps)",
 				Description = "An optional per-stream bitrate limit for all out of network devices. This is useful to prevent devices from requesting a higher bitrate than your internet connection can handle. " +
-							  "This may result in increased CPU load on your server in order to transcode videos on the fly to a lower bitrate.",
+							  "This may result in increased CPU load on the server in order to transcode videos on the fly to a lower bitrate.",
 			}
 		];
 	}

@@ -1,5 +1,6 @@
 using System.Reactive.Subjects;
 using FluentFin.Core.Contracts.Services;
+using FluentFin.Core.Outside;
 using FluentFin.Core.Services;
 using FluentFin.Core.Settings;
 using FluentFin.Core.SmartCollections;
@@ -58,8 +59,10 @@ public sealed class CollectionsPageTests : IDisposable
 	{
 		SmartCollectionServices.Index = null;
 		SmartCollectionServices.Store = null;
+		TrendingServices.Collections = null; // 1.7.3
 		CollectionNames.ForgetBoxSets();
 		_homeCache.Dispose();
+		_rig?.Dispose(); // 1.7.3
 		TestFolder.Delete(_folder); // 1.7.1: the index's people pass may still be saving behind a test that ended
 	}
 
@@ -70,6 +73,7 @@ public sealed class CollectionsPageTests : IDisposable
 		Type = BaseItemDto_Type.Movie,
 		ProductionYear = year,
 		CommunityRating = (float)rating,
+		CriticRating = 80, // 1.7.3 (M1's review): Acclaimed takes only titles something backs
 		RunTimeTicks = TimeSpan.FromMinutes(120).Ticks,
 		ProviderIds = collection is null ? null : new BaseItemDto_ProviderIds { AdditionalData = new Dictionary<string, object> { ["TmdbCollection"] = collection } },
 		ImageTags = new BaseItemDto_ImageTags { AdditionalData = new Dictionary<string, object> { ["Primary"] = "p" + name.Length } },
@@ -615,7 +619,7 @@ public sealed class CollectionsPageTests : IDisposable
 
 		Assert.True(home.State.IsLoaded);
 		var row = Assert.Single(home.NixieRows, r => r.Collection.Kind == SmartCollectionKind.HighlyRated);
-		Assert.Equal("Highly rated, not watched", row.Title);
+		Assert.Equal("Acclaimed, not seen yet", row.Title); // 1.7.3 (P0-4): was "Highly rated, not watched"
 		Assert.Equal("Made by Nixie", row.Kicker);
 		Assert.Equal(["The Matrix", "Amélie", "Night of the Living Dead"], row.Items.Select(i => i.Dto.Name));
 		Assert.Single((await _homeCache.Get("http://server", _client.Object.UserId)).Snapshot!.NixieRows, r => r.Collection.Kind == SmartCollectionKind.HighlyRated);
@@ -662,6 +666,31 @@ public sealed class CollectionsPageTests : IDisposable
 	}
 
 	[Fact]
+	public async Task AKindTurnedOffInSettings_LeavesTheStripAtTheNextAsk_AndTurnedOnComesBack()
+	{
+		// 1.7.3 fix round (BH-173-m2): the strip's switches are back, and they act without waiting for the index's next read
+		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		var (index, store) = Services();
+		var settings = new SwitchSettings();
+		var presets = new NixieLibraryPresets(index, _client.Object, store, settings);
+		var movies = new BaseItemDto { Id = MoviesId, Name = "Movies", CollectionType = BaseItemDto_CollectionType.Movies };
+		await presets.PresetsForAsync(movies, _films, CancellationToken.None);
+		Assert.Contains(presets.PresetsFor(movies, _films), p => p.Id == "nixie:franchise:2344");
+
+		CollectionSettings.Set(settings, CollectionSettingKeys.KindsOff, SmartCollectionKind.Franchise, on: false);
+		Assert.DoesNotContain(presets.PresetsFor(movies, _films), p => p.Kind == SmartCollectionKind.Franchise); // at once
+		await presets.Making;
+
+		var changed = 0;
+		presets.Changed += (_, _) => Interlocked.Increment(ref changed);
+		CollectionSettings.Set(settings, CollectionSettingKeys.KindsOff, SmartCollectionKind.Franchise, on: true);
+		presets.PresetsFor(movies, _films); // the next ask makes them again
+		await presets.Making;
+		Assert.Equal(1, changed);
+		Assert.Contains(presets.PresetsFor(movies, _films), p => p.Id == "nixie:franchise:2344");
+	}
+
+	[Fact]
 	public async Task AskedLate_ThePresetsWaitForTheIndex_AndChangedSaysWhenTheyAreMade()
 	{
 		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
@@ -696,6 +725,154 @@ public sealed class CollectionsPageTests : IDisposable
 		Assert.True(await presets.SaveFilter("Matrix, unwatched", new SavedFilter(MoviesId, "Movies", Unwatched: true, PresetId: "nixie:franchise:2344", PresetLabel: "The Matrix")));
 		var saved = Assert.Single(await store.SavedAsync());
 		Assert.Equal("Your filter in Movies: The Matrix · Unwatched", saved.Why);
+		var vm = new CollectionViewModel(_client.Object, Commands());
+
+		await vm.OnNavigatedTo(new NixieCollection(saved));
+
+		Assert.Equal(["The Matrix", "The Matrix Reloaded", "The Matrix Revolutions"], vm.Entries.Select(e => e.Item.Dto.Name).Order());
+	}
+
+	[Fact]
+	public async Task MadeByNixieThatMadeNothing_SaysSoInOneLine_WhatNixieLooksFor_AndNothingAboutTheServer()
+	{
+		// 1.7.3 fix round (BH-173-m1): the throwaway's 25,736 films (no tags, no critics' ratings, no franchises) made nothing,
+		// and the page showed the server's row alone, with no word
+		_films.Clear();
+		_films.AddRange(Enumerable.Range(0, 8).Select(i => Film($"Plain {i}", 1990 + i, null, 6.0)));
+		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [BoxSet("Westerns", null, 2, 1)] });
+		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		var (index, store) = Services();
+		var vm = new CollectionsViewModel(_client.Object, Commands(), index, store);
+
+		await vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All)); // a first visit: the read, then the line
+		await vm.Reading;
+
+		Assert.Equal(["The server's collections"], vm.Rows.Select(r => r.Title));
+		Assert.True(vm.IsNixieEmpty);
+		Assert.True(vm.ShowsReadingLine);
+		Assert.False(vm.IsReadingIndex); // no ring: nothing is reading
+		Assert.Equal(CollectionsViewModel.NixieEmptyText, vm.ReadingText);
+		Assert.DoesNotContain("server", vm.ReadingText, StringComparison.OrdinalIgnoreCase); // rule 11
+		await vm.OnNavigatedFrom();
+
+		// the next visit, from the saved index: the same line at once; every kind turned off: that is why
+		var settings = new SwitchSettings();
+		settings.SaveSetting(CollectionSettingKeys.KindsOff, "Franchise,Keyword,HighlyRated,UnfinishedSeries,Seasonal,ShortFilms");
+		var again = new CollectionsViewModel(_client.Object, Commands(), index, store, settings);
+		await again.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All));
+		Assert.True(again.ShowsReadingLine);
+		Assert.Equal(CollectionsViewModel.NixieOffText, again.ReadingText);
+	}
+
+	// 1.7.2's shape of the saved collections file (SmartCollectionStore's Saved and SavedFilter then): no Revision
+	private sealed record Saved172(string Id, string Name, SavedFilter172 Filter);
+
+	private sealed record SavedFilter172(Guid LibraryId, string LibraryName, bool Unwatched = false, bool Favorites = false, IReadOnlyList<string>? Genres = null,
+		IReadOnlyList<string>? Tags = null, IReadOnlyList<string>? OfficialRatings = null, IReadOnlyList<string>? Years = null, string? PresetId = null, string? PresetLabel = null);
+
+	[Fact]
+	public async Task AFilterSavedBy173_KeepsItsRules_After172RewritesTheFile()
+	{
+		// the fix round's re-review: 1.7.2 rewrites the whole file when it saves a filter, with the fields it knows, so the
+		// Revision of a filter saved by 1.7.3 went, and back on 1.7.3 it took 1.7.2's rules. Its id carries the revision too
+		var (_, store) = Services();
+		await store.SaveFilter("Short laughs", new SavedFilter(MoviesId, "Movies", Genres: ["Comedy"], PresetId: "nixie:pick:short-films", PresetLabel: "Under 90 minutes"));
+		var file = Directory.GetFiles(Path.Combine(_folder, "SmartCollections"), "*.json").Single();
+		var root = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+		// 1.7.2 reads the filters into its records, adds one of its own, and writes them back
+		var filters = System.Text.Json.JsonSerializer.Deserialize<List<Saved172>>(root["Filters"])!;
+		filters.Add(new Saved172($"saved:{Guid.NewGuid():N}", "Old shorts", new SavedFilter172(MoviesId, "Movies", PresetId: "nixie:pick:short-films", PresetLabel: "Short films")));
+		root["Filters"] = System.Text.Json.JsonSerializer.SerializeToNode(filters);
+		await File.WriteAllTextAsync(file, root.ToJsonString());
+		Assert.DoesNotContain("\"Revision\"", await File.ReadAllTextAsync(file), StringComparison.Ordinal);
+
+		var reread = new SmartCollectionStore(_client.Object, _homeCache, Path.Combine(_folder, "SmartCollections"), new CoreListLogger<SmartCollectionStore>());
+		var saved = await reread.SavedAsync();
+
+		Assert.Equal(SavedFilter.CurrentRevision, saved.Single(x => x.Title == "Short laughs").Filter!.Revision); // 1.7.3's rules
+		Assert.Equal(0, saved.Single(x => x.Title == "Old shorts").Filter!.Revision); // 1.7.2's own: its rules
+		Assert.Equal(0, SavedFilter.RevisionOfId($"saved:{Guid.NewGuid():N}"));
+		Assert.Equal(3, SavedFilter.RevisionOfId(SavedFilter.NewId()));
+	}
+
+	[Fact]
+	public async Task AFilterSavedBy172OnShortFilms_Keeps172sMeaning_UncappedAndAnEmptyFilterSaysSo()
+	{
+		// 1.7.3 fix round (BH-173-M2): "Comedy + Short films" kept 100 titles in 1.7.2 and 0 in the first 1.7.3 build (Under 90
+		// minutes' best 20, of 60 to 90 minutes, unwatched), and the empty page said the titles had left the server
+		for (var i = 0; i < 30; i++)
+		{
+			var film = Film($"Short comedy {i:D2}", 1990 + i, null, 6.0);
+			film.RunTimeTicks = TimeSpan.FromMinutes(i < 25 ? 40 : 70).Ticks; // 25 shorts under an hour, 5 of 70 minutes
+			film.Genres = ["Comedy"];
+			film.UserData = new UserItemDataDto { Played = i % 6 == 0 };
+			_films.Add(film);
+		}
+
+		_client.Setup(x => x.GetLibraryItems(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync((BaseItemDto _, int start, int limit, bool _, CancellationToken _) => new BaseItemDtoQueryResult { Items = [.. _films.Skip(start).Take(limit)], TotalRecordCount = _films.Count });
+		var (index, store) = Services();
+		SmartCollectionServices.Index = index;
+		var now = await store.SaveFilter("Short laughs now", new SavedFilter(MoviesId, "Movies", Genres: ["Comedy"], PresetId: "nixie:pick:short-films", PresetLabel: "Under 90 minutes"));
+		Assert.Equal(SavedFilter.CurrentRevision, now.Filter!.Revision); // the store says which meaning it was saved with
+		await store.SaveFilter("Short laughs", new SavedFilter(MoviesId, "Movies", Genres: ["Comedy"], PresetId: "nixie:pick:short-films", PresetLabel: "Short films"));
+		await store.SaveFilter("Westerns", new SavedFilter(MoviesId, "Movies", Genres: ["Western"]));
+		// as 1.7.2 left the file: no Revision on the filter saved then
+		var file = Directory.GetFiles(Path.Combine(_folder, "SmartCollections"), "*.json").Single();
+		var root = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+		var old = root["Filters"]!.AsArray().Single(x => (string?)x!["Name"] == "Short laughs")!;
+		old["Filter"]!.AsObject().Remove("Revision");
+		old["Id"] = $"saved:{Guid.NewGuid():N}"; // and 1.7.2's id (the re-review: 1.7.3's says its revision)
+		await File.WriteAllTextAsync(file, root.ToJsonString());
+		var reread = new SmartCollectionStore(_client.Object, _homeCache, Path.Combine(_folder, "SmartCollections"), new CoreListLogger<SmartCollectionStore>());
+		SmartCollectionServices.Store = reread;
+		var saved = await reread.SavedAsync();
+
+		async Task<CollectionViewModel> Open(string name)
+		{
+			var vm = new CollectionViewModel(_client.Object, Commands());
+			await vm.OnNavigatedTo(new NixieCollection(saved.Single(x => x.Title == name)));
+			return vm;
+		}
+
+		// 1.7.2's meaning: every comedy under 90 minutes, watched or not: 30, more than Under 90 minutes' 20
+		Assert.Equal(30, (await Open("Short laughs")).Entries.Count);
+		// saved now: 1.7.3's rule (60 to 90 minutes, unwatched), every one of them
+		Assert.Equal(_films.Count(x => x.Name!.StartsWith("Short comedy", StringComparison.Ordinal) && x.RunTimeTicks == TimeSpan.FromMinutes(70).Ticks && x.UserData!.Played != true),
+			(await Open("Short laughs now")).Entries.Count);
+		// nothing matches: the filter says so, not the server
+		var empty = await Open("Westerns");
+		Assert.True(empty.State.IsEmpty);
+		Assert.Equal(("Nothing matches now", "No titles in Movies match this filter now."), (empty.State.Title, empty.State.Message));
+		Assert.DoesNotContain("server", empty.State.Message, StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
+	public async Task ASavedFilterWithANixiePreset_InATitlesSecondLibrary_KeepsThatTitle()
+	{
+		// 1.7.3 (P0-2a; M2's review: nothing held CollectionSources' InLibrary): the server lists the Matrix films under
+		// Movies first, and under Classics too. A filter saved in Classics with the franchise's preset on keeps them; with
+		// the entry's first library alone it kept nothing
+		var classicsId = Guid.NewGuid();
+		var movies = new BaseItemDto { Id = MoviesId, Name = "Movies", Type = BaseItemDto_Type.CollectionFolder, CollectionType = BaseItemDto_CollectionType.Movies };
+		var classics = new BaseItemDto { Id = classicsId, Name = "Classics", Type = BaseItemDto_Type.CollectionFolder, CollectionType = BaseItemDto_CollectionType.Movies };
+		var inClassics = _films.Where(f => f.Name!.StartsWith("The Matrix", StringComparison.Ordinal)).ToList();
+		List<BaseItemDto> Of(BaseItemDto library) => library.Id == classicsId ? inClassics : _films;
+		BaseItemDtoQueryResult Page(BaseItemDto library, int start, int limit) => new() { Items = [.. Of(library).Skip(start).Take(limit)], TotalRecordCount = Of(library).Count };
+		_client.Setup(x => x.GetUserViewsOrNull()).ReturnsAsync([movies, classics]);
+		_client.Setup(x => x.GetUserViews()).ReturnsAsync([movies, classics]);
+		_client.Setup(x => x.GetLibraryIndexPage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync((BaseItemDto library, int start, int limit, bool _, CancellationToken _) => Page(library, start, limit));
+		_client.Setup(x => x.GetLibraryItems(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync((BaseItemDto library, int start, int limit, bool _, CancellationToken _) => Page(library, start, limit));
+		var (index, store) = Services();
+		SmartCollectionServices.Index = index;
+		SmartCollectionServices.Store = store;
+		await store.SaveFilter("Matrix in Classics", new SavedFilter(classicsId, "Classics", PresetId: "nixie:franchise:2344", PresetLabel: "The Matrix"));
+		var saved = Assert.Single(await store.SavedAsync());
+		var matrix = (await index.GetAsync())!.Entries.Single(x => x.Name == "The Matrix");
+		Assert.Equal(MoviesId, matrix.LibraryId); // listed first under Movies
+		Assert.Contains(classicsId, matrix.LibraryIds);
 		var vm = new CollectionViewModel(_client.Object, Commands());
 
 		await vm.OnNavigatedTo(new NixieCollection(saved));
@@ -800,6 +977,280 @@ public sealed class CollectionsPageTests : IDisposable
 		Assert.Equal("[REC]", ItemLabels.CardName(BaseItemViewModel.FromDto(new BaseItemDto { Name = "[REC]", Type = BaseItemDto_Type.Movie })));
 	}
 
+	// --- 1.7.3: Made by Nixie, fewer and better (P0-3, P0-4, the owner's answers 2 and 3) -----------------------------------
+
+	private Outside.TrendingRig? _rig;
+
+	// 24 films that make every kind 1.7.2 made: two decades (14 of the 1990s, 10 of the 2000s), a genre mix (Comedy · Horror, 8),
+	// a country besides the commonest (Japan, 12), a studio (North Line, 24), three franchises of eight, and (the people pass)
+	// a director and an actor in all of them
+	private void UseEveryKindLibrary()
+	{
+		_films.Clear();
+		_films.AddRange(Enumerable.Range(0, 24).Select(i => new BaseItemDto
+		{
+			Id = Guid.Parse($"{i:D8}-0173-0000-0000-000000000000"),
+			Name = $"Film {i:D2}",
+			SortName = $"film {i:D2}",
+			Type = BaseItemDto_Type.Movie,
+			ProductionYear = 1990 + (i % 20),
+			CommunityRating = 5 + (i % 5),
+			CriticRating = 80, // 1.7.3 (M1's review): Acclaimed takes only titles something backs
+			RunTimeTicks = TimeSpan.FromMinutes(120).Ticks,
+			Genres = (i % 3) switch { 0 => ["Comedy", "Horror"], 1 => ["Comedy"], _ => ["Horror"] },
+			ProductionLocations = [i % 2 == 0 ? "France" : "Japan"],
+			Studios = [new NameGuidPair { Name = "North Line" }],
+			ProviderIds = new BaseItemDto_ProviderIds { AdditionalData = new Dictionary<string, object> { ["Tmdb"] = $"{i}", ["TmdbCollection"] = $"{i / 8}" } },
+			ImageTags = new BaseItemDto_ImageTags { AdditionalData = new Dictionary<string, object> { ["Primary"] = $"p{i}" } },
+			UserData = new UserItemDataDto { Played = false },
+		}));
+		_client.Setup(x => x.GetLibraryPeoplePage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync((BaseItemDto _, int start, int limit, bool total, CancellationToken _) => new BaseItemDtoQueryResult
+			{
+				Items = [.. _films.Skip(start).Take(limit).Select(x => new BaseItemDto
+				{
+					Id = x.Id, Type = BaseItemDto_Type.Movie,
+					People = [new BaseItemPerson { Name = "Ana Reyes", Type = BaseItemPerson_Type.Director }, new BaseItemPerson { Name = "Clara Quill", Type = BaseItemPerson_Type.Actor }],
+				})],
+				TotalRecordCount = total ? _films.Count : null,
+			});
+		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [BoxSet("[HUB] Marvel", null, 6, 3)] });
+		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+	}
+
+	// the index read once, with its people (a later visit shows it at once, as a restart's saved index)
+	private async Task<(LibraryIndex Index, SmartCollectionStore Store)> ReadServices()
+	{
+		var (index, store) = Services();
+		Assert.NotNull(await index.GetAsync());
+		await index.Settled;
+		return (index, store);
+	}
+
+	[Fact]
+	public async Task MadeByNixie_HasNoRowNorTileOfTheSevenRetiredKinds_ThoughTheLibraryMakesThemAll()
+	{
+		UseEveryKindLibrary();
+		var (index, store) = await ReadServices();
+		// the library makes every kind: its presets strip still has the decades, the genre mix and the country (the owner's answer 3)
+		var strip = NixiePresets.For(index.Current!, MoviesId, SmartCollectionCatalog.Now(), most: 50);
+		Assert.Contains(strip, p => p.Kind == SmartCollectionKind.Decade);
+		Assert.Contains(strip, p => p.Kind == SmartCollectionKind.GenreMix);
+		Assert.Contains(strip, p => p.Kind == SmartCollectionKind.Country);
+		var vm = new CollectionsViewModel(_client.Object, Commands(), index, store);
+
+		await vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.MadeByNixie));
+
+		Assert.True(vm.State.IsLoaded);
+		Assert.Equal(["The server's collections", "Picks", "Franchises"], vm.Rows.Select(r => r.Title));
+		Assert.All(vm.Rows.SelectMany(r => r.Tiles).Where(t => t.IsNixie), t => Assert.DoesNotContain(t.Nixie!.Kind, SmartCollectionCatalog.OnDemandOnly));
+		var published = vm.Rows.Where(r => r.Section == CollectionsSection.MadeByNixie).Sum(r => r.Tiles.Count);
+		Assert.Equal(published, vm.MadeByNixieCount); // the Libraries page's "Made by Nixie · N" counts what the page lists
+		// See all of Made by Nixie: the same, as a grid
+		var all = new CollectionsViewModel(_client.Object, Commands(), index, store);
+		await all.OnNavigatedTo(new CollectionsPlace(CollectionsSection.MadeByNixie, SeeAll: true));
+		Assert.NotEmpty(all.GridTiles);
+		Assert.All(all.GridTiles, t => Assert.DoesNotContain(t.Nixie!.Kind, SmartCollectionCatalog.OnDemandOnly));
+		Assert.All(new[] { "Decades", "Directors", "Actors", "Studios", "Studios and networks", "Genre mixes", "Countries" }, t => Assert.DoesNotContain(t, vm.Rows.Select(r => r.Title)));
+	}
+
+	[Fact]
+	public async Task PinsAndSavedFilters_OfDirectorsActorsStudiosAndNetworks_AreRemovedOnce_WithNoEmptyTileOrError()
+	{
+		// the owner's answer 2: they go (P1's "More from" brings people back on title pages); decades stay (the strip makes them)
+		UseEveryKindLibrary();
+		var (index, store) = await ReadServices();
+		foreach (var pin in new[] { "director:anareyes", "actor:claraquill", "studio:northline", "network:hbo", "franchise:0", "decade:movie:1990" })
+		{
+			await store.SetFavorite(pin, true);
+		}
+
+		await store.SaveFilter("By Ana", new SavedFilter(MoviesId, "Movies", PresetId: "nixie:director:anareyes", PresetLabel: "Ana Reyes"));
+		await store.SaveFilter("North Line, unwatched", new SavedFilter(MoviesId, "Movies", Unwatched: true, PresetId: "nixie:studio:northline", PresetLabel: "North Line"));
+		await store.SaveFilter("Nineties", new SavedFilter(MoviesId, "Movies", PresetId: "nixie:decade:movie:1990", PresetLabel: "1990s"));
+		await store.SaveFilter("Laughs", new SavedFilter(MoviesId, "Movies", Genres: ["Comedy"]));
+		var log = new CoreListLogger<CollectionsViewModel>();
+		var vm = new CollectionsViewModel(_client.Object, Commands(), index, store, logger: log);
+
+		await vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.Saved));
+
+		Assert.True(vm.State.IsLoaded, $"{vm.State.Title}: {vm.State.Message}");
+		var saved = vm.Rows.Single(r => r.Section == CollectionsSection.Saved);
+		// the saved filters left, then the pins: the franchise (published) and the decade (made by its id, no longer published)
+		Assert.Equal(["Nineties", "Laughs"], saved.Tiles.Take(2).Select(t => t.Title));
+		Assert.Equal(["franchise:0", "decade:movie:1990"], saved.Tiles.Skip(2).Select(t => t.Nixie!.Id));
+		Assert.All(saved.Tiles, t => Assert.NotEqual(0, t.Nixie!.ItemIds.Count + (t.Nixie.Filter is null ? 0 : 1))); // no empty tile
+		Assert.Equal(new HashSet<string> { "franchise:0", "decade:movie:1990" }, await store.FavoritesAsync());
+		Assert.Equal(["Nineties", "Laughs"], (await store.SavedAsync()).Select(x => x.Title));
+		Assert.Contains(log.Entries, x => x.Message == "Made by Nixie: 6 pinned or saved collections of directors, actors, studios or networks were removed (Nixie no longer makes them)");
+		Assert.Equal(0, await RetiredCollections.ForgetAsync(store)); // once: nothing left to do
+		// the decade's pin opens with its titles
+		Assert.Equal(14, saved.Tiles.Single(t => t.Title == "1990s films").Nixie!.ItemIds.Count);
+	}
+
+	[Fact]
+	public async Task AtStart_HomeRemovesTheRetiredPinsInTheBackground()
+	{
+		var (index, store) = Services();
+		SmartCollectionServices.Index = index;
+		SmartCollectionServices.Store = store;
+		await index.GetAsync();
+		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		await store.SetFavorite("director:anareyes", true);
+		await store.SetFavorite("franchise:2344", true);
+		var home = Home();
+
+		await home.OnNavigatedTo(new object());
+
+		for (var i = 0; i < 100 && (await store.FavoritesAsync()).Count > 1; i++)
+		{
+			await Task.Delay(20);
+		}
+
+		Assert.Equal(new HashSet<string> { "franchise:2344" }, await store.FavoritesAsync());
+	}
+
+	[Fact]
+	public void TheSwitches_AreThePublishedKinds_AndKindsOffIsLeftAsTheUserSetIt()
+	{
+		var settings = new SwitchSettings();
+		var page = new CollectionsSettingsViewModel(settings);
+
+		Assert.Equal(["Franchises", "Keywords", "Acclaimed, not seen yet", "Unfinished series", "In season", "Under 90 minutes"], page.Kinds.Select(x => x.Name));
+		Assert.Equal(["Acclaimed, not seen yet", "Unfinished series", "In season", "A collection a day"], page.HomeRows.Select(x => x.Name));
+		Assert.Equal(["Decades", "Genre mixes", "Countries"], page.LibraryFilters.Select(x => x.Name)); // fix round (BH-173-m2): the strip's switches
+		Assert.All(page.HomeRows.Concat(page.Kinds).Concat(page.LibraryFilters), x => Assert.DoesNotContain("your server", x.Description, StringComparison.OrdinalIgnoreCase)); // rule 11
+		// fix round (BH-173-q1): nothing counts raters
+		Assert.DoesNotContain("few people", page.HomeRows[0].Description, StringComparison.Ordinal);
+
+		// fix round (BH-173-m2, q4): 1.7.2 left Decades, Directors and Countries off (and Franchises, still a switch). Nothing is
+		// taken out: the strip's kinds stay off (their switches say so), and the four that went stay off for a return to 1.7.2
+		const string Before = "Actor,Country,Decade,Director,Franchise,GenreMix,HighlyRated,Network,Studio,SomethingNewer";
+		settings.SaveSetting(CollectionSettingKeys.KindsOff, Before);
+		var saves = settings.Saves;
+		CollectionSettings.Apply(settings);
+		Assert.Equal(Before, settings.ReadSetting(CollectionSettingKeys.KindsOff));
+		Assert.Equal(saves, settings.Saves);
+		Assert.All(page.LibraryFilters, x => Assert.False(x.IsOn, x.Name));
+		// the way back for what stayed off: its switch
+		Assert.False(page.Kinds[0].IsOn);
+		page.Kinds[0].IsOn = true;
+		Assert.DoesNotContain(SmartCollectionKind.Franchise, CollectionSettings.KindsOff(settings));
+		page.LibraryFilters[0].IsOn = true;
+		Assert.DoesNotContain(SmartCollectionKind.Decade, CollectionSettings.KindsOff(settings));
+		Assert.Contains(SmartCollectionKind.Director, CollectionSettings.KindsOff(settings));
+	}
+
+	[Fact]
+	public async Task HomesSavedPage_NeverPaintsARowOfARetiredKind_AndSaysTheRenamedPicksNewNames()
+	{
+		// 1.7.2's saved page: "Highly rated, not watched", and a director as the collection of the day
+		var rated = new SmartCollection("pick:highly-rated", SmartCollectionKind.HighlyRated, "Highly rated, not watched", "", false, [_films[0].Id!.Value]);
+		var director = new SmartCollection("director:anareyes", SmartCollectionKind.Director, "Ana Reyes", "", true, [_films[1].Id!.Value]);
+		var decade = new SmartCollection("decade:movie:1990", SmartCollectionKind.Decade, "1990s films", "", false, [_films[1].Id!.Value]);
+		var snapshot = new HomeSnapshot([], [], [new HomeSnapshotRow(new BaseItemDto { Id = MoviesId, Name = "Movies" }, [_films[3]])], [])
+		{
+			NixieRows = [new HomeSnapshotNixieRow(rated, [_films[0]]), new HomeSnapshotNixieRow(director, [_films[1]]), new HomeSnapshotNixieRow(decade, [_films[1]])],
+		};
+		var user = _client.Object.UserId;
+		await _homeCache.Save("http://server", user, snapshot, (await _homeCache.Get("http://server", user)).ChangesSeen);
+		var painted = new List<string>();
+		var home = Home();
+		home.NixieRows.CollectionChanged += (_, e) => painted.AddRange(e.NewItems?.OfType<NixieHomeRowViewModel>().Select(r => r.Title) ?? []);
+
+		await home.OnNavigatedTo(new object());
+
+		Assert.Equal(["Acclaimed, not seen yet"], painted.Distinct());
+		var none = new HashSet<NixieHomeRow>();
+		var noKinds = new HashSet<SmartCollectionKind>();
+		Assert.False(HomeViewModel.NixieRowShown(director, none, noKinds));
+		Assert.False(HomeViewModel.NixieRowShown(decade, none, noKinds));
+		Assert.True(HomeViewModel.NixieRowShown(rated, none, noKinds));
+		Assert.True(HomeViewModel.NixieRowShown(new SmartCollection(TrendingBuilder.HomeRowId, SmartCollectionKind.Trending, "Trending in your library", "", true, [Guid.NewGuid()]), none, noKinds));
+	}
+
+	[Fact]
+	public void TheRenamedPicks_SayTheirNewNames_OnTheirTilesChipsRowsAndToNarrator()
+	{
+		// P0-4: "Acclaimed, not seen yet" and "Under 90 minutes" keep their ids (pins, settings and Home's saved page carry over)
+		var acclaimed = new SmartCollection("pick:highly-rated", SmartCollectionKind.HighlyRated, "Acclaimed, not seen yet", "", false, [Guid.NewGuid()]);
+		var short90 = new SmartCollection("pick:short-films", SmartCollectionKind.ShortFilms, "Under 90 minutes", "", false, [Guid.NewGuid()]);
+
+		Assert.Equal(("Acclaimed", "Acclaimed, not seen yet"), (SmartCollectionKinds.Singular(SmartCollectionKind.HighlyRated), SmartCollectionKinds.Plural(SmartCollectionKind.HighlyRated)));
+		Assert.Equal(("Under 90 minutes", "Under 90 minutes"), (SmartCollectionKinds.Singular(SmartCollectionKind.ShortFilms), SmartCollectionKinds.Plural(SmartCollectionKind.ShortFilms)));
+		Assert.Equal("Made by Nixie · Acclaimed", acclaimed.Eyebrow);
+		Assert.Equal("Acclaimed, not seen yet, made by Nixie, acclaimed, 1 title", acclaimed.AutomationName);
+		Assert.Equal("Under 90 minutes, made by Nixie, under 90 minutes, 1 title", short90.AutomationName);
+		Assert.Equal(("Acclaimed", "Under 90 minutes"), (NixiePresets.ShortLabel(acclaimed), NixiePresets.ShortLabel(short90)));
+		Assert.Equal("Acclaimed, not seen yet", new NixieHomeRowViewModel(acclaimed with { Title = "Highly rated, not watched" }).Title);
+		Assert.Equal("ACCLAIMED, NOT SEEN YET", new NixieHomeRowViewModel(acclaimed).SignTitle);
+	}
+
+	[Fact]
+	[System.Runtime.Versioning.SupportedOSPlatform("windows")]
+	public async Task ATrendingMatchThatThrows_LeavesMadeByNixieShowing_OnThePageAndHome_AndIsSaidOnce()
+	{
+		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		_rig = new Outside.TrendingRig(trakt: true);
+		foreach (var list in new[] { "movies/trending", "shows/trending", "movies/popular", "shows/popular", "movies/anticipated", "shows/anticipated", "movies/boxoffice" })
+		{
+			_rig.Fake.Trakt[list] = [("603", null, null, "The Matrix")];
+		}
+
+		await _rig.Sources.RefreshAsync();
+		var trending = new TrendingCollections(_rig.Sources);
+		trending.Matching += () => throw new InvalidOperationException("The Matrix went wrong");
+		TrendingServices.Collections = trending;
+		var (index, store) = Services();
+		SmartCollectionServices.Index = index;
+		await index.GetAsync();
+		var log = new CoreListLogger<CollectionsViewModel>();
+		var vm = new CollectionsViewModel(_client.Object, Commands(), index, store, logger: log);
+
+		await vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.MadeByNixie));
+
+		Assert.True(vm.State.IsLoaded);
+		Assert.Equal(["Picks", "Franchises"], vm.Rows.Select(r => r.Title)); // 1.7.2: none at all
+		var said = Assert.Single(log.Entries, x => x.Level == Microsoft.Extensions.Logging.LogLevel.Warning);
+		Assert.Equal("Made by Nixie: the trending collections couldn't be matched (InvalidOperationException); the other kinds still are", said.Message);
+		Assert.DoesNotContain(log.Entries, x => x.Message.Contains("The Matrix", StringComparison.Ordinal));
+
+		var home = Home();
+		await home.OnNavigatedTo(new object());
+		Assert.Contains(home.NixieRows, r => r.Collection.Kind == SmartCollectionKind.HighlyRated); // 1.7.2: no Made by Nixie row
+	}
+
+	[Fact]
+	public async Task AThrowWhileShowingTheRows_IsLoggedAsItself_NotAsMadeByNixie()
+	{
+		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [BoxSet("[HUB] Marvel", null, 6, 3)] });
+		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		var (index, store) = Services();
+		await index.GetAsync();
+		var log = new CoreListLogger<CollectionsViewModel>();
+		var vm = new CollectionsViewModel(_client.Object, Commands(), index, store, logger: log);
+		// a view's handler that throws once as the first row goes in: nothing to do with making Made by Nixie
+		var once = true;
+		vm.Rows.CollectionChanged += (_, _) =>
+		{
+			if (once)
+			{
+				once = false;
+				throw new InvalidOperationException("a view's handler");
+			}
+		};
+
+		await vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All));
+
+		Assert.True(vm.State.IsLoaded, $"{vm.State.Title}: {vm.State.Message}");
+		Assert.Contains(vm.Rows, r => r.Title == "The server's collections");
+		var said = Assert.Single(log.Entries, x => x.Level == Microsoft.Extensions.Logging.LogLevel.Warning);
+		Assert.StartsWith("Collections: the rows couldn't be shown (InvalidOperationException in ", said.Message, StringComparison.Ordinal);
+		Assert.DoesNotContain(log.Entries, x => x.Message.Contains("Made by Nixie couldn't be made", StringComparison.Ordinal));
+		Assert.DoesNotContain(log.Entries, x => x.Message.Contains("a view's handler", StringComparison.Ordinal));
+	}
+
 	/// <summary>Settings in memory: what was saved, else the default asked for (as LocalSettingsService answers).</summary>
 	private sealed class SwitchSettings : ILocalSettingsService
 	{
@@ -809,7 +1260,14 @@ public sealed class CollectionsPageTests : IDisposable
 
 		public T ReadSetting<T>(string key, T defaultValue) => _values.TryGetValue(key, out var v) && v is T t ? t : defaultValue;
 
-		public void SaveSetting<T>(string key, T value) => _values[key] = value;
+		/// <summary>1.7.3: how many times a setting was written.</summary>
+		public int Saves { get; private set; }
+
+		public void SaveSetting<T>(string key, T value)
+		{
+			_values[key] = value;
+			Saves++;
+		}
 
 		public void RemoveSetting(string key) => _values.Remove(key);
 

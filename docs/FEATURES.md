@@ -43,16 +43,19 @@ changed in each version is in [CHANGELOG.md](../CHANGELOG.md); every key is in [
     episode?". The skip lands on the cut: the nearest black frame or silence within a few seconds.
   - **Settings → Playback** has "Learn skips from my seeks", "When a show has a skip rule" (a button, or skipped by
     itself) and the list of skip rules, with Forget for each rule, each show, and all.
-- **Collections made by Nixie** (1.6), from your libraries, on this PC (nothing is sent anywhere): franchises (two
-  or more films TMDb puts in one collection), decades, directors, actors, studios and networks, genre mixes,
-  keywords, countries, highly rated films you haven't watched, short films, shows you left over a month ago, and
-  Halloween or Christmas in season. They share one Collections page with the server's collections and playlists,
-  open like any other, and **Save as playlist** copies one to your server as a private playlist when you press it.
+- **Collections made by Nixie** (1.6; fewer and better in 1.7.3), from your libraries, on this PC (nothing is sent
+  anywhere): franchises (two or more films TMDb puts in one collection), keywords, "Acclaimed, not seen yet" (the
+  best 20 titles you haven't watched, weighted by how much backs each rating), "Under 90 minutes" (films of 60 to 90
+  minutes you haven't watched, best first), shows you left over a month ago, and Halloween or Christmas in season. A
+  title counts once however many files or libraries hold it. There are no collections of directors, actors, studios,
+  networks, decades, countries or genre pairs; a library's filters keep its decades, genre mixes and countries. They
+  share one Collections page with the server's collections and playlists, open like any other, and **Save as
+  playlist** copies one to the server as a private playlist when you press it.
 - **Discover** (1.7): **Settings → Look up lists online**, each source off until you turn it on. Award winners and
   finer genres from Wikidata, franchise names from TMDb, and what's trending on Trakt and TMDb, each matched to your
   libraries on this PC: an Awards row and Trending, Popular, Most anticipated and Box office rows on the Collections
   page, and "Trending in your library" on Home. Each source has a "What is sent" card: a request for a public list,
-  the same for everyone, with Nixie's name and version; never your server, account, libraries or what you watch.
+  the same for everyone, with Nixie's name and version; never the server you use, your account, libraries or what you watch.
   Details: [PRIVACY.md](../PRIVACY.md).
 - **The way up from an episode** (1.7): an episode shows its show and its season over its title ("Shows › What We Do
   in the Shadows › Season 3"), each a button that opens that page, and a season shows its show, in every theme and

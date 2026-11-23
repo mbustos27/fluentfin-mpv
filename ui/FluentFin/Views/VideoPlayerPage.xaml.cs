@@ -111,6 +111,14 @@ public sealed partial class VideoPlayerPage : Page
 
 	private void OnUnloaded(object sender, RoutedEventArgs e)
 	{
+		// 1.7.3 fix round (the close crash): the app is closing (the backend is stopped, the window gone): nothing to give back.
+		// Giving the chrome back showed the top bar again in the window's teardown, and its queued layout read XAML, which
+		// answered E_UNEXPECTED: out of the dispatcher's callback, 0xc000027b
+		if (App.IsClosing)
+		{
+			return;
+		}
+
 		// the video first: a request that waited for the running switch then goes at once, with nothing to wait for
 		DetachVideo();
 
@@ -139,6 +147,11 @@ public sealed partial class VideoPlayerPage : Page
 
 	private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash): the backend's stop changes the view model in the window's teardown
+		}
+
 		switch (e.PropertyName)
 		{
 			case nameof(VideoPlayerViewModel.IsMpv) when ViewModel.IsMpv && IsLoaded:
@@ -185,7 +198,13 @@ public sealed partial class VideoPlayerPage : Page
 		}
 	}
 
-	private void OnLeaveButtonFocus(object sender, RoutedEventArgs e) => _leaveButtonFocused = MpvLeaveButton.FocusState != FocusState.Unfocused;
+	private void OnLeaveButtonFocus(object sender, RoutedEventArgs e)
+	{
+		if (!App.IsClosing) // 1.7.3 fix round (the close crash): the button loses the keyboard in the window's teardown
+		{
+			_leaveButtonFocused = MpvLeaveButton.FocusState != FocusState.Unfocused;
+		}
+	}
 
 	private void AttachVideo()
 	{
@@ -465,12 +484,23 @@ public sealed partial class VideoPlayerPage : Page
 
 	private void OnSwitchLayout() => _transitionField?.Layout();
 
-	private void OnSwitchFrame(object? sender, object e) => _transitionField?.Frame(_composition.IsHolding);
+	private void OnSwitchFrame(object? sender, object e)
+	{
+		if (!App.IsClosing) // 1.7.3 fix round (the close crash): nothing of the page's in the window's teardown
+		{
+			_transitionField?.Frame(_composition.IsHolding);
+		}
+	}
 
 	private int _softLimitGeneration;
 
 	private void OnSoftLimit(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.3 fix round (the close crash)
+		}
+
 		if (_transitionField is { } transition && transition.Generation == _softLimitGeneration)
 		{
 			transition.LimitReached();

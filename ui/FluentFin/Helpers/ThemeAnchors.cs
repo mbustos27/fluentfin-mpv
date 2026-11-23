@@ -259,6 +259,11 @@ public sealed class ThemeAnchors
 		var restore = new RefreshRestore(page, timer, started, log);
 		timer.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			if (yieldTo?.Invoke() is { } why)
 			{
 				restore.Stop(why);

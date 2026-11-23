@@ -101,6 +101,12 @@ try {
     else { [OffscreenUi]::Close($hwnd, $ui.Id) }
     while ($close.Elapsed.TotalSeconds -lt $CloseSeconds -and -not $ui.HasExited) { Start-Sleep -Milliseconds 50; $ui.Refresh() }
     Check "$($how): FluentFin exited" $ui.HasExited "after $($close.ElapsedMilliseconds) ms"
+    if (-not $Kill) {
+        # 1.7.3 fix round: a crash at the close (0xC000027B, a stowed exception, then Windows Error Reporting's seconds) still
+        # ended within the wait and passed; a clean close exits with code 0
+        $code = try { if ($ui.HasExited) { $ui.ExitCode } else { $null } } catch { $null }
+        Check 'close: a clean exit (exit code 0, not a crash)' ($code -eq 0) $(if ($null -ne $code) { '0x{0:X8}' -f $code } elseif ($ui.HasExited) { 'exit code not readable' } else { 'still running' })
+    }
     Start-Sleep -Milliseconds 800
     $alive = @($tree | Where-Object { Get-TrackedProcess ([int]$_.ProcessId) })
     Check "$($how): nothing FluentFin started survives" ($alive.Count -eq 0) $(if ($alive) { ($alive | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ',' } else { "none of: $(($tree | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ',')" })

@@ -7,10 +7,14 @@ using Microsoft.Extensions.Logging;
 namespace FluentFin.Core.SmartCollections;
 
 /// <summary>
-/// Nixie 1.7.1 (the index on a big server): one read of the library index, in two steps. <see cref="TitlesAsync"/>: the
-/// server's check, the libraries, every title (<see cref="IndexPages"/>, two pages at a time) and the played episodes: an
-/// index every kind but the people's is made of. <see cref="PeopleAsync"/>: the people pass on top of it (about twice the
-/// titles' cost on the owner's server: 682 s of 1,198), lean, also two pages at a time.
+/// Nixie 1.7.1 (the index on a big server): one read of the library index. <see cref="TitlesAsync"/>: the server's check, the
+/// libraries, every title (<see cref="IndexPages"/>, two pages at a time) and the played episodes.
+/// <para>
+/// 1.7.3: no people pass (the owner's answer to the 1.7.3 plan: nothing published reads people any more, and the pass cost
+/// about twice the titles on the server the owner uses, 682 s of 1,198); a title in two libraries is one entry with both
+/// (P0-2); the reading line has the check's count as its total until every library's own is in (BH-171-q1); and the played
+/// episodes can be asked again on their own (<see cref="PlaysAsync"/>, BH-171-M1's other half).
+/// </para>
 /// </summary>
 internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogger? log)
 {
@@ -18,9 +22,6 @@ internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogg
 
 	/// <summary>Review M3: the size of the titles' pages, from the read before; smaller after a page ran out of time.</summary>
 	public int TitlesPageSize { get; set; } = IndexPages.PageSize;
-
-	/// <summary>Review M3: the size of the people's pages, from the read before; smaller after a page ran out of time.</summary>
-	public int PeoplePageSize { get; set; } = IndexPages.PageSize;
 
 	/// <summary>BH-171-M1: the played episodes didn't come (the index has none of them: a read with an index before keeps its plays).</summary>
 	public bool PlaysFailed { get; private set; }
@@ -34,7 +35,7 @@ internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogg
 	/// <summary>The titles read so far, as an index (<see cref="IndexSnapshot.Reading"/> set), at most every <see cref="LibraryIndex.PartialEvery"/>.</summary>
 	public event Action<IndexSnapshot>? Partial;
 
-	/// <summary>The index without its people; null when the libraries or a page of titles could not be read.</summary>
+	/// <summary>The index; null when the libraries or a page of titles could not be read.</summary>
 	public async Task<IndexSnapshot?> TitlesAsync(CancellationToken cancellationToken)
 	{
 		using var checkLimit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -51,13 +52,15 @@ internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogg
 		_libraries = [.. views.Where(v => v.Id is not null && JellyfinClient.IndexKinds(v) is not null)];
 		var libraries = _libraries.Select(l => new IndexLibrary(l.Id!.Value, l.Name ?? "", l.CollectionType == BaseItemDto_CollectionType.Movies ? IndexKind.Movie : IndexKind.Series)).ToList();
 		IndexKind? only = libraries.Count > 0 && libraries.All(l => l.Kind == libraries[0].Kind) ? libraries[0].Kind : null;
+		var counted = CountOf(check); // 1.7.3 (BH-171-q1)
 		var pages = new IndexPages(_libraries, client.GetLibraryIndexPage, "titles", log, TitlesPageSize);
 		var watch = Stopwatch.StartNew();
 		var lastPartial = TimeSpan.MinValue;
 		var partialLock = new Lock();
 		pages.PageIn += (read, total) =>
 		{
-			var progress = new IndexProgress(read, total, only);
+			// 1.7.3 (BH-171-q1): until every library's first page (and its count) is in, the server's check's count, "of about"
+			var progress = total is null && counted is { } about ? new IndexProgress(read, Math.Max(read, about), only) { About = true } : new IndexProgress(read, total, only);
 			Progress?.Invoke(progress);
 			if (Partial is not { } partial)
 			{
@@ -92,85 +95,34 @@ internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogg
 
 		var made = Stopwatch.StartNew();
 		var entries = Entries(pages);
-		log?.LogInformation("Library index: {Titles} titles made into the index in {Ms} ms", entries.Count, made.ElapsedMilliseconds);
-		var plays = await PlayedAsync(cancellationToken).ConfigureAwait(false);
+		log?.LogInformation("Library index: {Titles} titles made into the index in {Ms} ms ({Shared} in more than one library)", entries.Count, made.ElapsedMilliseconds,
+			entries.Count(x => x.LibraryIds.Length > 1));
+		var plays = await PlayedAsync(_libraries.Any(l => l.CollectionType == BaseItemDto_CollectionType.Tvshows), cancellationToken).ConfigureAwait(false);
 		PlaysFailed = plays is null; // BH-171-M1
-		return new IndexSnapshot(libraries, entries, plays ?? new Dictionary<Guid, SeriesPlays>(), false, time.GetUtcNow()) { Check = check };
+		return new IndexSnapshot(libraries, entries, plays ?? new Dictionary<Guid, SeriesPlays>(), false, time.GetUtcNow()) { Check = check, PlaysDue = plays is null };
 	}
 
+	// 1.7.3 (P0-2): each title once, with every library it came in
 	private List<IndexEntry> Entries(IndexPages pages) =>
-		[.. pages.Items().Select(x => IndexEntry.From(x.Item, _libraries[x.Library].Id!.Value)).OfType<IndexEntry>()];
+		[.. pages.Items().Select(x => IndexEntry.From(x.Item, _libraries[x.Libraries[0]].Id!.Value, x.Libraries.Count > 1 ? x.Libraries.Select(l => _libraries[l].Id!.Value) : null)).OfType<IndexEntry>()];
+
+	// 1.7.3 (BH-171-q1): how many films and shows the server's check counted ("25736:<id>"); null when it didn't answer
+	private static int? CountOf(string? check) =>
+		check?.Split(':')[0] is { } count && int.TryParse(count, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n > 0 ? n : null;
 
 	/// <summary>
-	/// The index with its people (<see cref="IndexSnapshot.PeopleDue"/> no longer); null when the people pass failed (review
-	/// M2: the caller keeps the people it had, lent by <see cref="Lend"/>, and reads them again later).
+	/// 1.7.3 (BH-171-M1's other half): the played episodes alone, for an index whose own didn't come
+	/// (<see cref="IndexSnapshot.PlaysDue"/>); null when they didn't come again.
 	/// </summary>
-	public async Task<IndexSnapshot?> PeopleAsync(IndexSnapshot titles, CancellationToken cancellationToken)
-	{
-		var pages = new IndexPages(_libraries, client.GetLibraryPeoplePage, "people", log, PeoplePageSize);
-		try
-		{
-			if (!await pages.ReadAsync(cancellationToken).ConfigureAwait(false))
-			{
-				cancellationToken.ThrowIfCancellationRequested();
-				return null;
-			}
-		}
-		finally
-		{
-			PeoplePageSize = pages.PageSizeNow; // review M3
-		}
-
-		var people = new Dictionary<Guid, IndexPerson[]>();
-		foreach (var (_, item) in pages.Items())
-		{
-			if (item.Id is { } id)
-			{
-				people.TryAdd(id, IndexEntry.PeopleOf(item));
-			}
-		}
-
-		return titles with { Entries = [.. titles.Entries.Select(x => people.TryGetValue(x.Id, out var p) ? x with { People = p } : x)], HasPeople = true, PeopleDue = false };
-	}
-
-	/// <summary>
-	/// Review M2: the people pass alone, over the libraries of an index read before (<paramref name="known"/>: its titles stay);
-	/// false when the server's libraries could not be read.
-	/// </summary>
-	public async Task<bool> LibrariesOfAsync(IndexSnapshot known)
-	{
-		var views = await client.GetUserViewsOrNull().ConfigureAwait(false);
-		if (views is null)
-		{
-			return false;
-		}
-
-		var ids = known.Libraries.Select(l => l.Id).ToHashSet();
-		_libraries = [.. views.Where(v => v.Id is { } id && ids.Contains(id) && JellyfinClient.IndexKinds(v) is not null)];
-		return _libraries.Count > 0 || ids.Count == 0; // re-review (Minor): none of its libraries is there: no people were read
-	}
-
-	/// <summary>
-	/// An index read before (<paramref name="previous"/>) lends its people to the titles it had, so that new titles never take
-	/// the Actor and Director collections away while their own people pass is to come or failed; none when it had none.
-	/// </summary>
-	public static IndexSnapshot Lend(IndexSnapshot titles, IndexSnapshot previous)
-	{
-		if (!previous.HasPeople)
-		{
-			return titles;
-		}
-
-		var before = previous.Entries.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().People);
-		return titles with { Entries = [.. titles.Entries.Select(x => before.TryGetValue(x.Id, out var p) ? x with { People = p } : x)], HasPeople = true };
-	}
+	public Task<Dictionary<Guid, SeriesPlays>?> PlaysAsync(IndexSnapshot known, CancellationToken cancellationToken) =>
+		PlayedAsync(known.Libraries.Any(l => l.Kind == IndexKind.Series), cancellationToken);
 
 	// the user's played episodes, latest first: each show's count and last play ("Unfinished series"); BH-171-M1: null when
 	// they didn't come (an empty answer said "none played", and a read again saved that)
-	private async Task<Dictionary<Guid, SeriesPlays>?> PlayedAsync(CancellationToken cancellationToken)
+	private async Task<Dictionary<Guid, SeriesPlays>?> PlayedAsync(bool hasShows, CancellationToken cancellationToken)
 	{
 		var plays = new Dictionary<Guid, SeriesPlays>();
-		if (!_libraries.Any(l => l.CollectionType == BaseItemDto_CollectionType.Tvshows))
+		if (!hasShows)
 		{
 			return plays;
 		}

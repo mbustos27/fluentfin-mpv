@@ -135,7 +135,7 @@ public sealed class TrendingSourcesTests
 			Assert.Equal("GET", r.Method);
 			Assert.Equal("api.trakt.tv", r.Url.Host);
 			Assert.Equal("https", r.Url.Scheme);
-			Assert.Equal("Nixie/1.7.0 (https://github.com/mbustos27/fluentfin-mpv)", string.Join(" ", r.Headers.Where(h => h.Key == "User-Agent").Select(h => h.Value)));
+			Assert.Equal("Nixie/1.7.0 (https://github.com/mbustos27/nixie)", string.Join(" ", r.Headers.Where(h => h.Key == "User-Agent").Select(h => h.Value)));
 			Assert.Contains(new KeyValuePair<string, string>("trakt-api-version", "2"), r.Headers);
 			Assert.Contains(new KeyValuePair<string, string>("trakt-api-key", TrendingFake.ClientId), r.Headers);
 			Assert.Contains(r.Headers, h => h.Key == "Content-Type" && h.Value.StartsWith("application/json", StringComparison.Ordinal));

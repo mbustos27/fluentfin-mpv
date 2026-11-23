@@ -17,6 +17,11 @@ namespace FluentFin.Core.Tests;
 /// the saved index shows at once after a restart and is read again only when it is stale; outside lists re-match it and
 /// never read it; a first read shows its rows as its pages come and says how far it has got; pages come two at a time; the
 /// people pass is lean; and the log says how long each part took.
+/// <para>
+/// Nixie 1.7.3: no people pass at all (the owner's answer to the 1.7.3 plan); a title the server lists in two libraries is
+/// one entry with both; the saved index's revision 3; played episodes that didn't come are asked again on their own; and the
+/// reading line has the server's check's count as its total until every library's own is in.
+/// </para>
 /// </summary>
 [Collection(CollectionNamesSerial.Name)]
 public sealed class IndexOnABigServerTests : IDisposable
@@ -149,8 +154,9 @@ public sealed class IndexOnABigServerTests : IDisposable
 		await index.Settled;
 
 		Assert.Equal(saved.Entries.Count, shown!.Entries.Count);
-		Assert.True(shown.HasPeople);
+		Assert.False(shown.HasPeople); // 1.7.3: no people pass
 		Assert.Equal(read, (_pages, _peoplePages)); // 1.7.0 read every title and every person again here, at every start
+		Assert.Equal(0, _peoplePages);
 		_client.Verify(x => x.GetIndexCheck(It.IsAny<CancellationToken>()), Times.Exactly(2)); // the read's own, and the restart's
 	}
 
@@ -202,13 +208,13 @@ public sealed class IndexOnABigServerTests : IDisposable
 		Assert.Equal(read, _pages); // unchanged: nothing read (1.7.0 read the whole library at the next visit after any change)
 	}
 
-	// review M2 (Minor): a change the check confirms reads the titles only, their people lent; the day's read reads the people
+	// review M2 (Minor): a change the check confirms reads the titles only (1.7.3: and no people, nor any lent)
 	[Fact]
-	public async Task AChangeTheCheckConfirms_ReadsTheTitlesOnly_AndLendsThemThePeople()
+	public async Task AChangeTheCheckConfirms_ReadsTheTitlesOnly()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
 		await ReadAndSave(time);
-		var read = (_pages, _peoplePages);
+		var read = _pages;
 		_check = "2501:another";
 		_films.Add(Film(2500)); // a film added
 
@@ -218,85 +224,59 @@ public sealed class IndexOnABigServerTests : IDisposable
 		await WaitForIndex(index, x => x.Entries.Count == 2501);
 		await index.Settled;
 
-		Assert.True(_pages > read._pages);
-		Assert.Equal(read._peoplePages, _peoplePages); // no person asked again
-		Assert.True(index.Current!.HasPeople);
-		Assert.False(index.Current.PeopleDue);
-		Assert.Contains(index.Current.Entries, x => x.People.Length > 0);
-		Assert.Empty(index.Current.Entries.Single(x => x.Name == "Film 02500").People); // the new one's, with the day's read
+		Assert.True(_pages > read);
+		Assert.Equal(0, _peoplePages);
+		Assert.False(index.Current!.HasPeople);
+		Assert.Equal(time.Now - TimeSpan.FromHours(2), index.Current.ReadAt); // the day's date kept
 	}
 
-	// review M2: a read again was saved only after its titles, people and played episodes were all in, so a Nixie closed
-	// during its people pass (the owner's: 303 s of titles, then 682 s of people) read every title again at the next start
+	// 1.7.3 (the owner's answer 1 to the 1.7.3 plan, closing BH-171-m3): the actors-and-directors pass stopped. It cost about
+	// twice the titles on the server the owner uses (682 s of 1,198) and nothing published reads people any more. No read asks
+	// for people: a first read, R, a library change's read, the day's read, and a start with an index saved before 1.7.3
+	// whose people were still due (1.7.2 read only its people then)
 	[Fact]
-	public async Task AReadAgainClosedDuringItsPeoplePass_KeepsItsTitles_AndTheNextStartReadsOnlyThePeople()
+	public async Task NoReadAsksForPeople_AndAnIndexWithItsPeopleDueReadsNothingForThem()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
-		await ReadAndSave(time);
-		var people = HoldPeople();
+		using (var first = Index(time))
+		{
+			Assert.Equal(2500, (await first.GetAsync())!.Entries.Count); // a first read
+			await first.Settled;
+			Assert.NotNull(await first.RefreshAsync()); // R
+			await first.Settled;
+			Assert.False(first.Current!.HasPeople);
+		}
+
+		// as 1.7.2 left it after a read closed before its people pass: no people, due (revision 3: nothing else to read for)
+		var file = Directory.GetFiles(Path.Combine(_folder, "LibraryIndex"), "*.json").Single();
+		await File.WriteAllTextAsync(file, (await File.ReadAllTextAsync(file)).Replace("\"PeopleDue\":false", "\"PeopleDue\":true", StringComparison.Ordinal));
+		var read = _pages;
+		time.Now += TimeSpan.FromHours(2); // past the hour
+		using (var later = Index(time))
+		{
+			Assert.True((await later.GetAsync())!.PeopleDue);
+			await Task.Delay(100);
+			await later.Checking;
+			await later.Settled;
+			Assert.Equal(read, _pages); // 1.7.2 read the people of every title here
+		}
+
+		_check = "2501:another"; // a library change's read
 		_films.Add(Film(2500));
+		using var change = Index(time);
+		await change.GetAsync();
+		await WaitForIndex(change, x => x.Entries.Count == 2501);
+		await change.Settled;
+		time.Now += LibraryIndex.FreshFor + TimeSpan.FromHours(1); // and the day's
+		using var day = Index(time);
+		await day.GetAsync();
+		await WaitForIndex(day, x => x.ReadAt == time.Now);
+		await day.Settled;
 
-		time.Now += LibraryIndex.FreshFor + TimeSpan.FromHours(1); // a day on: read again behind the saved one
-		var index = Index(time);
-		await index.GetAsync();
-		await WaitForIndex(index, x => x.Entries.Count == 2501); // the titles are in, and shown; the people pass waits
-		Assert.True(index.Current!.HasPeople); // lent: the Actor and Director collections stay
-		Assert.True(index.Current.PeopleDue);
-		await WaitForSaved(x => x.Contains("\"PeopleDue\":true", StringComparison.Ordinal));
-		index.Dispose(); // Nixie closed
-		people.TrySetResult();
-		await index.Settled;
-		var asked = (_pages, _peoplePages);
-
-		time.Now += TimeSpan.FromMinutes(10); // the next start, within the hour: nothing read
-		using (var soon = Index(time))
-		{
-			Assert.Equal(2501, (await soon.GetAsync())!.Entries.Count);
-			await Task.Delay(100);
-			await soon.Settled;
-			Assert.Equal(asked, (_pages, _peoplePages));
-		}
-
-		time.Now += TimeSpan.FromHours(1); // a start after it: the people only
-		using var later = Index(time);
-		Assert.Equal(2501, (await later.GetAsync())!.Entries.Count);
-		await WaitForIndex(later, x => !x.PeopleDue);
-		await later.Settled;
-		Assert.Equal(asked._pages, _pages); // no title asked again
-		Assert.True(_peoplePages > asked._peoplePages);
-		Assert.Equal($"Director {1950 + (2500 % 70)}", later.Current!.Entries.Single(x => x.Name == "Film 02500").People.Single().Name);
-	}
-
-	// review M2: a first read closed during its people pass read every title again at every start (its people missing)
-	[Fact]
-	public async Task AFirstReadClosedDuringItsPeoplePass_TheNextStartReadsOnlyThePeople_AndNotWithinTheHour()
-	{
-		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
-		var people = HoldPeople();
-		var index = Index(time);
-		Assert.Equal(2500, (await index.GetAsync())!.Entries.Count); // the titles, in and saved before the people pass
-		await WaitForSaved(x => x.Contains("\"HasPeople\":false", StringComparison.Ordinal));
-		index.Dispose(); // Nixie closed
-		people.TrySetResult();
-		await index.Settled;
-		var asked = (_pages, _peoplePages);
-
-		time.Now += TimeSpan.FromMinutes(20);
-		using (var soon = Index(time))
-		{
-			Assert.False((await soon.GetAsync())!.HasPeople);
-			await Task.Delay(100);
-			await soon.Settled;
-			Assert.Equal(asked, (_pages, _peoplePages)); // 1.7.1 before the review: every title and person again, at every start
-		}
-
-		time.Now += TimeSpan.FromHours(1);
-		using var later = Index(time);
-		await later.GetAsync();
-		await WaitForIndex(later, x => x.HasPeople);
-		await later.Settled;
-		Assert.Equal(asked._pages, _pages);
-		Assert.True(_peoplePages > asked._peoplePages);
+		Assert.True(_pages > read);
+		Assert.Equal(0, _peoplePages);
+		_client.Verify(x => x.GetLibraryPeoplePage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never());
+		Assert.False(day.Current!.PeopleDue);
 	}
 
 	// review (Minor): R during a read was kept, and the next visit read the whole library again behind it
@@ -320,6 +300,37 @@ public sealed class IndexOnABigServerTests : IDisposable
 		await index.Settled;
 
 		Assert.Equal(asked, (_pages, _peoplePages));
+	}
+
+	// 1.7.3: with no people pass, a library change's read reads every title, as R's does; R during it was kept, and the next
+	// visit read every title again (65 requests on a server of 25,736 films)
+	[Fact]
+	public async Task RDuringALibraryChangesRead_IsAnsweredByThatRead()
+	{
+		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		await ReadAndSave(time);
+		_check = "2501:another";
+		_films.Add(Film(2500));
+		var release = new TaskCompletionSource();
+		Pages(_ => release.Task);
+		time.Now += TimeSpan.FromHours(2);
+		using var index = Index(time);
+		await index.GetAsync();
+		await index.Checking; // the check said the libraries changed: their titles are being read
+		Assert.False(index.Settled.IsCompleted);
+
+		index.MarkStale(); // R, while it reads
+		var reading = index.RefreshAsync();
+		release.SetResult();
+		Assert.Equal(2501, (await reading)!.Entries.Count);
+		await index.Settled;
+		var asked = _pages;
+		time.Now += TimeSpan.FromMinutes(10);
+		await index.GetAsync(); // the next visit
+		await Task.Delay(100);
+		await index.Settled;
+
+		Assert.Equal(asked, _pages);
 	}
 
 	// review (Minor, 1.7.1): a first read that stopped left its pages so far as the page's newest index; new outside (or
@@ -633,10 +644,386 @@ public sealed class IndexOnABigServerTests : IDisposable
 
 			Assert.Equal(10, fresh!.SeriesPlays.Count);
 			Assert.Equal(10, index.Current!.SeriesPlays.Count);
+			Assert.True(index.Current.PlaysDue); // 1.7.3: and asked again within the hour
 		}
 
 		using var again = Index(); // and saved so
 		Assert.Equal(10, (await again.GetAsync())!.SeriesPlays.Count);
+	}
+
+	// a Movies and a Shows library (the shows none of their own), and 10 shows' played episodes; `played` false: they don't come
+	private System.Runtime.CompilerServices.StrongBox<int> MoviesAndShows(Func<bool> played)
+	{
+		var asked = new System.Runtime.CompilerServices.StrongBox<int>();
+		_client.Setup(x => x.GetUserViewsOrNull()).ReturnsAsync([Library(MoviesId, "Movies"), Library(ShowsId, "Shows", BaseItemDto_CollectionType.Tvshows)]);
+		_client.Setup(x => x.GetLibraryIndexPage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync((BaseItemDto library, int start, int limit, bool total, CancellationToken _) =>
+			{
+				Interlocked.Increment(ref _pages);
+				return library.Id == ShowsId
+					? new BaseItemDtoQueryResult { Items = [], TotalRecordCount = total ? 0 : null }
+					: new BaseItemDtoQueryResult { Items = [.. _films.Skip(start).Take(limit)], TotalRecordCount = total ? _films.Count : null };
+			});
+		var episodes = Enumerable.Range(0, 10).Select(i => new BaseItemDto
+		{
+			Id = Guid.Parse($"{i:D8}-0173-0000-0000-0000000000ee"),
+			Type = BaseItemDto_Type.Episode,
+			SeriesId = Guid.Parse($"{i:D8}-0173-0000-0000-0000000000bb"),
+			UserData = new UserItemDataDto { Played = true, LastPlayedDate = new DateTimeOffset(2026, 11, 20, 20, 0, 0, TimeSpan.Zero) },
+		}).ToList();
+		_client.Setup(x => x.GetPlayedEpisodesPage(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync((int start, int limit, bool total, CancellationToken _) =>
+			{
+				Interlocked.Increment(ref asked.Value);
+				return played() ? new BaseItemDtoQueryResult { Items = [.. episodes.Skip(start).Take(limit)], TotalRecordCount = total ? episodes.Count : null } : null;
+			});
+		return asked;
+	}
+
+	private static BaseItemDto Library(Guid id, string name, BaseItemDto_CollectionType type = BaseItemDto_CollectionType.Movies) =>
+		new() { Id = id, Name = name, Type = BaseItemDto_Type.CollectionFolder, CollectionType = type };
+
+	// 1.7.3 (BH-171-M1's other half): a first read whose played episodes didn't come kept none until the next whole read, a
+	// day away or R: Unfinished series stayed off Home and the Collections page all that time
+	[Fact]
+	public async Task PlayedEpisodesThatDidNotCome_AreAskedAgainOnTheirOwn_AtMostOnceAnHour()
+	{
+		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		var answers = false;
+		var asked = MoviesAndShows(() => answers);
+		var first = await ReadAndSave(time); // a 500, a dropped connection, over 45 s
+		Assert.Empty(first.SeriesPlays);
+		Assert.True(first.PlaysDue);
+		await WaitForSaved(x => x.Contains("\"PlaysDue\":true", StringComparison.Ordinal));
+		var (pages, plays) = (_pages, asked.Value);
+		answers = true; // they would come now
+
+		time.Now += TimeSpan.FromMinutes(20); // a start within the hour: not asked yet
+		using (var soon = Index(time))
+		{
+			Assert.True((await soon.GetAsync())!.PlaysDue);
+			await Task.Delay(100);
+			await soon.Settled;
+			Assert.Equal((pages, plays), (_pages, asked.Value));
+		}
+
+		time.Now += TimeSpan.FromHours(1); // a start after it: the played episodes alone, the titles kept
+		using var later = Index(time);
+		await later.GetAsync();
+		await WaitForIndex(later, x => !x.PlaysDue);
+		await later.Settled;
+		Assert.Equal(10, later.Current!.SeriesPlays.Count);
+		Assert.Equal(pages, _pages); // no title asked again
+		Assert.True(asked.Value > plays);
+		Assert.Equal(first.ReadAt, later.Current.ReadAt); // the day's read still comes at its time
+		await WaitForSaved(x => x.Contains("\"PlaysDue\":false", StringComparison.Ordinal));
+		using var again = Index(time);
+		Assert.Equal(10, (await again.GetAsync())!.SeriesPlays.Count); // and saved so
+	}
+
+	// 1.7.3 (P0-2): 1.7.1's read kept a title the server lists in two libraries under the first one only (3,167 of 34,006 on
+	// the server the owner uses): the other library's presets missed it. Now it is one entry, with both
+	[Fact]
+	public async Task ATitleInTwoLibraries_IsOneEntryWithBoth_AndStaysSoWhenSaved()
+	{
+		var kidsId = Guid.Parse("aaaaaaaa-3333-0000-0000-000000000173");
+		List<BaseItemDto> kids = [_films[5], _films[10], _films[2400], Film(3000)]; // three shared, one of its own
+		_client.Setup(x => x.GetUserViewsOrNull()).ReturnsAsync([Library(MoviesId, "Movies"), Library(kidsId, "Kids")]);
+		_client.Setup(x => x.GetLibraryIndexPage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync((BaseItemDto library, int start, int limit, bool total, CancellationToken _) =>
+			{
+				var films = library.Id == kidsId ? kids : _films;
+				return new BaseItemDtoQueryResult { Items = [.. films.Skip(start).Take(limit)], TotalRecordCount = total ? films.Count : null };
+			});
+
+		var read = await ReadAndSave();
+
+		Assert.Equal(2501, read.Entries.Count); // each title once
+		var shared = read.Entries.Single(x => x.Name == "Film 00005");
+		Assert.Equal(MoviesId, shared.LibraryId);
+		Assert.Equal([MoviesId, kidsId], shared.LibraryIds);
+		Assert.Equal(["Film 00005", "Film 00010", "Film 02400", "Film 03000"], read.Entries.Where(x => x.InLibrary(kidsId)).Select(x => x.Name).Order());
+		Assert.Equal(2500, read.Entries.Count(x => x.InLibrary(MoviesId)));
+		Assert.Equal([kidsId], read.Entries.Single(x => x.Name == "Film 03000").LibraryIds);
+		using var restart = Index();
+		var saved = await restart.GetAsync();
+		Assert.Equal(4, saved!.Entries.Count(x => x.InLibrary(kidsId)));
+		Assert.Equal([MoviesId, kidsId], saved.Entries.Single(x => x.Name == "Film 02400").LibraryIds);
+	}
+
+	// 1.7.3 (P0-2): 1.7.0 saved a title once per library it is in; 1.7.2 kept the first and dropped the rest, and with them the
+	// title's other library
+	[Fact]
+	public async Task ASavedIndexWithATitleTwice_KeepsItOnce_InBothItsLibraries()
+	{
+		var kidsId = Guid.Parse("aaaaaaaa-3333-0000-0000-000000000173");
+		await ReadAndSave();
+		var file = Directory.GetFiles(Path.Combine(_folder, "LibraryIndex"), "*.json").Single();
+		var root = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+		var entries = root["Entries"]!.AsArray();
+		foreach (var entry in entries)
+		{
+			entry!.AsObject().Remove("LibraryIds"); // as 1.7.0 left it
+		}
+
+		var again = entries[7]!.DeepClone().AsObject();
+		again["LibraryId"] = kidsId.ToString();
+		entries.Add(again); // Film 00007, in Kids too
+		root.Remove("Revision");
+		await File.WriteAllTextAsync(file, root.ToJsonString());
+		var release = new TaskCompletionSource();
+		Pages(_ => release.Task); // its read again behind it (an older revision) waits
+		var log = new CoreListLogger<LibraryIndex>();
+
+		using var index = Index(log: log);
+		try
+		{
+			var shown = await index.GetAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+			Assert.Equal(2500, shown!.Entries.Count);
+			var twice = shown.Entries.Single(x => x.Name == "Film 00007");
+			Assert.True(twice.InLibrary(MoviesId) && twice.InLibrary(kidsId));
+			Assert.Equal([MoviesId, kidsId], twice.LibraryIds);
+			var once = shown.Entries.Single(x => x.Name == "Film 00008"); // as 1.7.0 saved it: its one library
+			Assert.Empty(once.LibraryIds);
+			Assert.True(once.InLibrary(MoviesId));
+			Assert.Single(shown.Entries, x => x.InLibrary(kidsId));
+			Assert.Contains(log.Entries, x => x.Message == "Library index: the saved one had 1 repeated title; each is kept once");
+		}
+		finally
+		{
+			release.TrySetResult();
+			await index.Settled;
+		}
+	}
+
+	// 1.7.3: the saved index's revision 3, inside version 2 (1.7.2 skips what it doesn't know, so a downgrade still reads it).
+	// An index saved by 1.7.2 (no revision: no LibraryIds, Critic or TagCount) shows at once and is read again behind it, at
+	// most once an hour after a read this version began (fix round, BH-173-M1: 1.7.2's own note of its read doesn't hold it,
+	// TheUpdateFrom172_KeepsAcclaimed_AndReadsTheIndexAgainAtOnce)
+	[Fact]
+	public async Task AnIndexOfAnOlderRevision_ShowsAtOnce_AndIsReadAgainBehindIt_NotWithinTheHour()
+	{
+		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		await ReadAndSave(time);
+		var file = Directory.GetFiles(Path.Combine(_folder, "LibraryIndex"), "*.json").Single();
+		var text = await File.ReadAllTextAsync(file);
+		Assert.Contains("\"Version\":2", text);
+		Assert.Contains("\"Revision\":3", text);
+		await File.WriteAllTextAsync(file, text.Replace(",\"Revision\":3", "", StringComparison.Ordinal)); // as 1.7.2 left it
+		var read = _pages;
+
+		time.Now += TimeSpan.FromMinutes(10); // within the hour of its read: shown, not read yet
+		using (var soon = Index(time))
+		{
+			Assert.Equal(2500, (await soon.GetAsync())!.Entries.Count);
+			await Task.Delay(100);
+			await soon.Settled;
+			Assert.Equal(read, _pages);
+		}
+
+		time.Now += TimeSpan.FromHours(1);
+		var release = new TaskCompletionSource();
+		Pages(_ => release.Task); // the server is slow now
+		using var later = Index(time);
+		try
+		{
+			var shown = await later.GetAsync().WaitAsync(TimeSpan.FromSeconds(10));
+			Assert.Equal(2500, shown!.Entries.Count); // at once
+		}
+		finally
+		{
+			release.TrySetResult();
+		}
+
+		await Task.Delay(100);
+		await later.Settled;
+		Assert.True(_pages > read); // then read again behind it
+		await WaitForSaved(x => x.Contains("\"Revision\":3", StringComparison.Ordinal));
+	}
+
+	// 1.7.3 fix round (BH-173-M1): the update from 1.7.2 within the hour of 1.7.2's last read. 1.7.2's index has no Critic or
+	// TagCount (every title read as "nothing backs it": Home dropped the Acclaimed row it painted), and its note of the last
+	// read no revision (the read again waited out 1.7.2's hour). Acclaimed comes from it, by the rating alone, and it is read
+	// again at once; the test above holds for a read 1.7.3 itself began within the hour
+	[Fact]
+	public async Task TheUpdateFrom172_KeepsAcclaimed_AndReadsTheIndexAgainAtOnce()
+	{
+		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		foreach (var film in _films.Where((_, i) => i % 2 == 1))
+		{
+			film.Tags = ["one", "two", "three", "four", "five", "six"]; // the server keeps TMDb's keywords as tags
+		}
+
+		await ReadAndSave(time);
+		var folder = Path.Combine(_folder, "LibraryIndex");
+		var file = Directory.GetFiles(folder, "*.json").Single();
+		var root = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+		root.Remove("Revision");
+		foreach (var entry in root["Entries"]!.AsArray())
+		{
+			entry!.AsObject().Remove("TagCount");
+			entry.AsObject().Remove("Critic");
+			entry.AsObject().Remove("LibraryIds");
+		}
+
+		await File.WriteAllTextAsync(file, root.ToJsonString()); // as 1.7.2 left it
+		var note = Directory.GetFiles(Path.Combine(folder, "Reads"), "*.json").Single();
+		var reads = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(note))!.AsObject();
+		Assert.Equal(3, (int?)reads["Revision"]);
+		reads.Remove("Revision");
+		await File.WriteAllTextAsync(note, reads.ToJsonString()); // 1.7.2's note of its read, ten minutes before the update
+		var read = _pages;
+		time.Now += TimeSpan.FromMinutes(10);
+		var release = new TaskCompletionSource();
+		Pages(_ => release.Task); // the read again, held
+
+		using var index = Index(time);
+		try
+		{
+			var shown = await index.GetAsync().WaitAsync(TimeSpan.FromSeconds(10));
+			Assert.False(shown!.BackingKnown);
+			Assert.All(shown.Entries, x => Assert.Equal(0, x.TagCount));
+			var acclaimed = Assert.Single(SmartCollectionCatalog.BuildAll(shown, time.Now), x => x.Kind == SmartCollectionKind.HighlyRated);
+			Assert.Equal(FluentFin.Core.SmartCollections.Builders.HighlyRatedBuilder.Most, acclaimed.ItemIds.Count);
+			for (var i = 0; i < 200 && _pages == read; i++)
+			{
+				await Task.Delay(10);
+			}
+
+			Assert.True(_pages > read, "read again at once, within 1.7.2's hour");
+		}
+		finally
+		{
+			release.TrySetResult();
+		}
+
+		await index.Settled;
+		await WaitForSaved(x => x.Contains("\"Revision\":3", StringComparison.Ordinal) && x.Contains("\"TagCount\":6", StringComparison.Ordinal));
+		Assert.True(index.Current!.BackingKnown);
+		Assert.Single(SmartCollectionCatalog.BuildAll(index.Current, time.Now), x => x.Kind == SmartCollectionKind.HighlyRated);
+	}
+
+	// the fix round's re-review: the note of a read was stamped with 1.7.3's revision when the read began, so an upgrade read
+	// that failed (or was closed part way) held 1.7.2's index for the hour, across restarts. It is stamped when a read is in
+	[Fact]
+	public async Task AnUpgradeReadThatFails_DoesntHoldTheNextStart_OneThatIsInDoes()
+	{
+		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		await ReadAndSave(time);
+		var folder = Path.Combine(_folder, "LibraryIndex");
+		var file = Directory.GetFiles(folder, "*.json").Single();
+		await File.WriteAllTextAsync(file, (await File.ReadAllTextAsync(file)).Replace(",\"Revision\":3", "", StringComparison.Ordinal)); // 1.7.2's index
+		var note = Directory.GetFiles(Path.Combine(folder, "Reads"), "*.json").Single();
+		await File.WriteAllTextAsync(note, (await File.ReadAllTextAsync(note)).Replace(",\"Revision\":3", "", StringComparison.Ordinal)); // and its note
+		Assert.DoesNotContain("Revision", await File.ReadAllTextAsync(note), StringComparison.Ordinal);
+
+		// the first start after the update: the read begins at once, and the server goes away part way
+		time.Now += TimeSpan.FromMinutes(10);
+		Pages(start => start == 0 ? Task.CompletedTask : Task.FromException(new HttpRequestException("the server went away")));
+		var before = _pages;
+		using (var first = Index(time))
+		{
+			Assert.NotNull(await first.GetAsync());
+			for (var i = 0; i < 200 && _pages == before; i++)
+			{
+				await Task.Delay(10);
+			}
+
+			await first.Settled;
+		}
+
+		Assert.True(_pages > before, "the upgrade read began");
+		Assert.DoesNotContain("\"Revision\":3", await File.ReadAllTextAsync(file), StringComparison.Ordinal); // it never came in
+
+		// the next start, five minutes later: read again at once (the note's read never finished)
+		time.Now += TimeSpan.FromMinutes(5);
+		Pages(_ => Task.CompletedTask);
+		var failed = _pages;
+		using (var again = Index(time))
+		{
+			Assert.NotNull(await again.GetAsync());
+			for (var i = 0; i < 200 && _pages == failed; i++)
+			{
+				await Task.Delay(10);
+			}
+
+			Assert.True(_pages > failed, "read again at once after a failed upgrade read");
+			await again.Settled;
+		}
+
+		await WaitForSaved(x => x.Contains("\"Revision\":3", StringComparison.Ordinal));
+		var stamped = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(note))!;
+		Assert.Equal(3, (int?)stamped["Revision"]); // this read came in: stamped
+	}
+
+	// 1.7.3 (P0-4): the critics' rating and the tag count before the allowlist (the confidence of a title's score) are kept
+	// in the saved index
+	[Fact]
+	public async Task TheCriticsRatingAndTheTagCount_SurviveASaveAndALoad()
+	{
+		_films[4].CriticRating = 87;
+		_films[4].Tags = ["heist", "Hand typed", "another", "and one more"];
+
+		await ReadAndSave();
+		using var restart = Index();
+		var saved = await restart.GetAsync();
+
+		var film = saved!.Entries.Single(x => x.Name == "Film 00004");
+		Assert.Equal(87f, film.Critic);
+		Assert.Equal(4, film.TagCount);
+		Assert.Equal(["heist"], film.Tags); // the allowlist's only
+		var none = saved.Entries.Single(x => x.Name == "Film 00001");
+		Assert.Null(none.Critic);
+		Assert.Equal(0, none.TagCount);
+	}
+
+	// 1.7.3 (BH-171-q1): the reading line had no total until every library's first page was in: 84 s on a server of 23
+	// libraries at 3-10 s a request, "4,600 films" the while. Now the server's check's count, until then
+	[Fact]
+	public async Task AFirstRead_SaysAboutHowMany_BeforeEveryLibrarysCountIsIn()
+	{
+		var kidsId = Guid.Parse("aaaaaaaa-3333-0000-0000-000000000173");
+		List<BaseItemDto> kids = [.. Enumerable.Range(3000, 100).Select(Film)];
+		_check = "2600:newest"; // the check counts every film once
+		var kidsFirst = new TaskCompletionSource();
+		var release = new TaskCompletionSource();
+		_client.Setup(x => x.GetUserViewsOrNull()).ReturnsAsync([Library(MoviesId, "Movies"), Library(kidsId, "Kids")]);
+		_client.Setup(x => x.GetLibraryIndexPage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+			.Returns(async (BaseItemDto library, int start, int limit, bool total, CancellationToken token) =>
+			{
+				var films = library.Id == kidsId ? kids : _films;
+				await (library.Id == kidsId ? kidsFirst.Task : start == 0 ? Task.CompletedTask : release.Task).WaitAsync(token);
+				return new BaseItemDtoQueryResult { Items = [.. films.Skip(start).Take(limit)], TotalRecordCount = total ? films.Count : null };
+			});
+		using var index = Index();
+		var said = new System.Collections.Concurrent.ConcurrentQueue<IndexProgress>();
+		index.Progress += (_, progress) => said.Enqueue(progress);
+		using var ui = new UiThread();
+		var vm = Page(index);
+		try
+		{
+			await ui.Run(() => vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All))).WaitAsync(TimeSpan.FromSeconds(20));
+			await WaitFor(ui, () => vm.Rows.Any(r => r.Section == CollectionsSection.MadeByNixie));
+
+			// what the line says, with the Kids library's first page (and its count) still to come
+			await WaitFor(ui, () => vm.ReadingText.EndsWith(" films", StringComparison.Ordinal));
+			Assert.Equal("Nixie is reading your libraries to make its collections: 200 of about 2,600 films", await ui.Invoke(() => vm.ReadingText));
+			Assert.True(await ui.Invoke(() => vm.IsReadingIndex));
+
+			kidsFirst.SetResult(); // every library's count in: the total is theirs
+			await WaitFor(ui, () => vm.ReadingText.EndsWith("of 2,600 films", StringComparison.Ordinal) && !vm.ReadingText.Contains("about", StringComparison.Ordinal));
+			Assert.Equal("Nixie is reading your libraries to make its collections: 300 of 2,600 films", await ui.Invoke(() => vm.ReadingText));
+		}
+		finally
+		{
+			kidsFirst.TrySetResult();
+			await Settle(release, vm, index, ui);
+		}
+
+		Assert.True(said.First().About);
+		Assert.False(said.Last().About);
+		Assert.Equal(2600, index.Current!.Entries.Count);
 	}
 
 	// BH-171-m5: a read whose check didn't answer saved no check, and the next start's check always "differed": every title
@@ -782,7 +1169,9 @@ public sealed class IndexOnABigServerTests : IDisposable
 		await vm.Reading.WaitAsync(TimeSpan.FromSeconds(20));
 		await index.Settled;
 
-		Assert.True(await ui.Invoke(() => vm.Rows.Any(r => r.Section == CollectionsSection.MadeByNixie)));
+		// 1.7.3: the read's end doesn't wait for its pages' rows to be shown (a show still pending, a cold first build);
+		// it failed run alone at 1.7.2's 2406079b too, so the rows are waited for
+		await WaitFor(ui, () => vm.Rows.Any(r => r.Section == CollectionsSection.MadeByNixie));
 		Assert.Equal((false, true, true, CollectionsViewModel.ReadStoppedText),
 			await ui.Invoke(() => (vm.IsReadingIndex, vm.IsReadStopped, vm.ShowsReadingLine, vm.ReadingText)));
 		// what the page draws: the line by ShowsReadingLine, its ring only while reading
@@ -813,10 +1202,10 @@ public sealed class IndexOnABigServerTests : IDisposable
 		await ui.Run(vm.OnNavigatedFrom);
 	}
 
-	// re-review (Major B): a library change's titles read dated the index anew, so the day's whole read (and its people) never
-	// came on a server whose library changes every day
+	// re-review (Major B): a library change's titles read dated the index anew, so the day's whole read never came on a server
+	// whose library changes every day
 	[Fact]
-	public async Task ALibraryChangesRead_KeepsTheDaysDate_SoTheDaysReadStillReadsThePeople()
+	public async Task ALibraryChangesRead_KeepsTheDaysDate_SoTheDaysReadStillComes()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
 		await ReadAndSave(time);
@@ -831,13 +1220,14 @@ public sealed class IndexOnABigServerTests : IDisposable
 			await change.Settled;
 		}
 
-		var people = _peoplePages;
+		var pages = _pages;
 		time.Now += TimeSpan.FromHours(2); // 25 h after the day's read
 		using var later = Index(time);
 		await later.GetAsync();
 		await Task.Delay(100);
 		await later.Settled;
-		Assert.True(_peoplePages > people);
+		Assert.True(_pages > pages);
+		Assert.Equal(time.Now, later.Current!.ReadAt);
 	}
 
 	// re-review (Minor): a note of the last read dated after now (the clock moved back) held every automatic read until the
@@ -857,28 +1247,6 @@ public sealed class IndexOnABigServerTests : IDisposable
 		await Task.Delay(100);
 		await index.Settled;
 		Assert.True(_pages > read);
-	}
-
-	// re-review (Minor): a people-only read that found none of its libraries on the server counted as done (people none, due no more)
-	[Fact]
-	public async Task APeopleOnlyReadThatFindsNoneOfItsLibraries_LeavesThePeopleDue()
-	{
-		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
-		var people = HoldPeople();
-		var first = Index(time);
-		await first.GetAsync(); // the titles in and saved; the people pass waits
-		await WaitForSaved(x => x.Contains("\"HasPeople\":false", StringComparison.Ordinal));
-		first.Dispose(); // closed
-		people.TrySetResult();
-		await first.Settled;
-		_client.Setup(x => x.GetUserViewsOrNull()).ReturnsAsync([new BaseItemDto { Id = Guid.NewGuid(), Name = "Films", Type = BaseItemDto_Type.CollectionFolder, CollectionType = BaseItemDto_CollectionType.Movies }]);
-
-		time.Now += TimeSpan.FromHours(2); // the people only: but the library is gone
-		using var later = Index(time);
-		await later.GetAsync();
-		await Task.Delay(100);
-		await later.Settled;
-		Assert.False(later.Current!.HasPeople);
 	}
 
 	// re-review (Minor): two asks at a start (Home and a library's presets): the second went on without the note of the last
@@ -904,24 +1272,6 @@ public sealed class IndexOnABigServerTests : IDisposable
 		await Task.Delay(100);
 		await index.Settled;
 		Assert.Equal(read, _pages);
-	}
-
-	// the people pass, held until the test lets it go
-	private TaskCompletionSource HoldPeople()
-	{
-		var people = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-		_client.Setup(x => x.GetLibraryPeoplePage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-			.Returns(async (BaseItemDto _, int start, int limit, bool total, CancellationToken token) =>
-			{
-				await people.Task.WaitAsync(token);
-				Interlocked.Increment(ref _peoplePages);
-				return new BaseItemDtoQueryResult
-				{
-					Items = [.. _films.Skip(start).Take(limit).Select(x => new BaseItemDto { Id = x.Id, Type = BaseItemDto_Type.Movie, People = [new BaseItemPerson { Name = $"Director {x.ProductionYear}", Type = BaseItemPerson_Type.Director }] })],
-					TotalRecordCount = total ? _films.Count : null,
-				};
-			});
-		return people;
 	}
 
 	private static async Task WaitForIndex(LibraryIndex index, Func<IndexSnapshot, bool> condition)
@@ -1070,90 +1420,36 @@ public sealed class IndexOnABigServerTests : IDisposable
 		}
 	}
 
-	[Fact]
-	public async Task ThePeoplePassLandingWhileThePageShows_AddsItsRows_AndKeepsTheRowsThatStay()
-	{
-		var people = new TaskCompletionSource();
-		_client.Setup(x => x.GetLibraryPeoplePage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-			.Returns(async (BaseItemDto _, int start, int limit, bool total, CancellationToken _) =>
-			{
-				await people.Task;
-				return new BaseItemDtoQueryResult
-				{
-					Items = [.. _films.Skip(start).Take(limit).Select(x => new BaseItemDto { Id = x.Id, Type = BaseItemDto_Type.Movie, People = [new BaseItemPerson { Name = $"Director {x.ProductionYear % 7}", Type = BaseItemPerson_Type.Director }] })],
-					TotalRecordCount = total ? _films.Count : null,
-				};
-			});
-		using var index = Index();
-		using var ui = new UiThread();
-		var vm = Page(index);
-		try
-		{
-			await ui.Run(() => vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All))).WaitAsync(TimeSpan.FromSeconds(20));
-			await WaitFor(ui, () => !vm.IsReadingIndex && vm.Rows.Any(r => r.Kind == SmartCollectionKind.Franchise));
-			var franchises = await ui.Invoke(() => vm.Rows.Single(r => r.Kind == SmartCollectionKind.Franchise));
-			Assert.False(await ui.Invoke(() => vm.Rows.Any(r => r.Kind == SmartCollectionKind.Director)));
-
-			people.SetResult(); // the people pass lands while the page shows
-			await index.Settled;
-			await WaitFor(ui, () => vm.Rows.Any(r => r.Kind == SmartCollectionKind.Director));
-
-			// the franchises' row is the one the page had: its tiles (and the keyboard on one) stay
-			Assert.Same(franchises, await ui.Invoke(() => vm.Rows.Single(r => r.Kind == SmartCollectionKind.Franchise)));
-		}
-		finally
-		{
-			people.TrySetResult();
-			await ui.Run(vm.OnNavigatedFrom).WaitAsync(TimeSpan.FromSeconds(5));
-			await ui.Invoke(() => 0);
-		}
-	}
-
 	// review M1 (1.7.1): a row that stayed while a first read's pages came kept its tiles as the first page made them: with
-	// 2,500 films "Highly rated, not watched" said 80 films through the whole read, in its count and when opened
+	// 2,500 films "Highly rated, not watched" said 80 films through the whole read, in its count and when opened.
+	// 1.7.3 (P0-4): Picks' first tile is "Acclaimed, not seen yet", 20 titles early and after, so the Keywords row's
+	// "Heists" (a film in four, no cap) is the tile that grows
 	[Fact]
 	public async Task AfterAFirstRead_EveryTileHoldsTheWholeIndexsCollection_InTheRowsThatStayed()
 	{
 		var release = new TaskCompletionSource();
 		Pages(start => start == 0 ? Task.CompletedTask : release.Task);
-		var people = new TaskCompletionSource();
-		_client.Setup(x => x.GetLibraryPeoplePage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-			.Returns(async (BaseItemDto _, int start, int limit, bool total, CancellationToken _) =>
-			{
-				await people.Task;
-				return new BaseItemDtoQueryResult
-				{
-					Items = [.. _films.Skip(start).Take(limit).Select(x => new BaseItemDto { Id = x.Id, Type = BaseItemDto_Type.Movie, People = [new BaseItemPerson { Name = $"Director {x.ProductionYear % 7}", Type = BaseItemPerson_Type.Director }] })],
-					TotalRecordCount = total ? _films.Count : null,
-				};
-			});
 		using var index = Index();
 		using var ui = new UiThread();
 		var vm = Page(index);
 		try
 		{
 			await ui.Run(() => vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All))).WaitAsync(TimeSpan.FromSeconds(20));
-			await WaitFor(ui, () => vm.Rows.Any(r => r.Title == "Picks"));
-			var picks = await ui.Invoke(() => vm.Rows.Single(r => r.Title == "Picks"));
-			var tile = picks.Tiles[0];
+			await WaitFor(ui, () => vm.Rows.Any(r => r.Title == "Keywords"));
+			var keywords = await ui.Invoke(() => vm.Rows.Single(r => r.Title == "Keywords"));
+			var tile = await ui.Invoke(() => keywords.Tiles.Single(t => t.Nixie?.Title == "Heists"));
 			var early = (tile.Nixie!, tile.Detail);
 
 			release.SetResult(); // every title
 			await vm.Reading.WaitAsync(TimeSpan.FromSeconds(20));
 
-			Assert.Same(picks, await ui.Invoke(() => vm.Rows.Single(r => r.Title == "Picks"))); // the row stayed (the keyboard with it)
+			Assert.Same(keywords, await ui.Invoke(() => vm.Rows.Single(r => r.Title == "Keywords"))); // the row stayed (the keyboard with it)
 			Assert.True(await ui.Invoke(() => tile.Nixie!.ItemIds.Count) > early.Item1.ItemIds.Count);
 			Assert.NotEqual(early.Detail, await ui.Invoke(() => tile.Detail));
-			await TilesAreOf(ui, vm, index.Current!);
-
-			people.SetResult(); // and their people
-			await index.Settled;
-			await WaitFor(ui, () => vm.Rows.Any(r => r.Kind == SmartCollectionKind.Director));
 			await TilesAreOf(ui, vm, index.Current!);
 		}
 		finally
 		{
-			people.TrySetResult();
 			await Settle(release, vm, index, ui);
 		}
 	}
@@ -1216,27 +1512,12 @@ public sealed class IndexOnABigServerTests : IDisposable
 		_client.Setup(x => x.GetLibraryIndexPage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
 			.ReturnsAsync((BaseItemDto _, int start, int limit, bool total, CancellationToken _) => start >= 1200 ? null : new BaseItemDtoQueryResult { Items = [.. _films.Skip(start).Take(limit)], TotalRecordCount = total ? _films.Count : null });
 		using var index = Index();
-		await index.GetAsync();
+		var shown = await index.GetAsync();
 
 		Assert.Null(await index.RefreshAsync()); // R: the read stops
 		await index.Settled;
 		Assert.Equal(saved.Entries.Count, index.Current!.Entries.Count); // what was shown stays
-		Assert.True(index.Current.HasPeople);
-	}
-
-	[Fact]
-	public async Task ARefreshWhosePeoplePassFails_KeepsThePeopleItHad()
-	{
-		await ReadAndSave();
-		_client.Setup(x => x.GetLibraryPeoplePage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-			.ReturnsAsync((BaseItemDtoQueryResult?)null);
-		using var index = Index();
-		await index.GetAsync();
-
-		var fresh = await index.RefreshAsync();
-
-		Assert.True(fresh!.HasPeople);
-		Assert.Contains(fresh.Entries, x => x.People.Length > 0); // the Director collections don't go
+		Assert.Same(shown, index.Current);
 	}
 
 	[Fact]
@@ -1325,8 +1606,9 @@ public sealed class IndexOnABigServerTests : IDisposable
 		var lines = log.Entries.Select(e => e.Message).Concat(pageLog.Entries.Select(e => e.Message)).ToList();
 		Assert.Contains(lines, l => l.StartsWith("Library index: titles page of library 1 from 0: 200 titles in ", StringComparison.Ordinal) && l.EndsWith(" ms", StringComparison.Ordinal));
 		Assert.Contains(lines, l => l.StartsWith("Library index: titles pass done: 2500 titles in 4 requests (2 at a time)", StringComparison.Ordinal));
-		Assert.Contains(lines, l => l.StartsWith("Library index: people pass done: 2500 titles", StringComparison.Ordinal));
-		Assert.Contains(lines, l => l.StartsWith("Library index: 2500 titles in 1 libraries, people True, ", StringComparison.Ordinal));
+		Assert.Contains(lines, l => l.StartsWith("Library index: 2500 titles made into the index in ", StringComparison.Ordinal) && l.EndsWith(" ms (0 in more than one library)", StringComparison.Ordinal));
+		Assert.Contains(lines, l => l.StartsWith("Library index: 2500 titles in 1 libraries, played episodes in, ", StringComparison.Ordinal) && l.EndsWith(" s", StringComparison.Ordinal));
+		Assert.DoesNotContain(lines, l => l.Contains("people", StringComparison.OrdinalIgnoreCase)); // 1.7.3: no people pass
 		Assert.Contains(lines, l => l.StartsWith("Library index: the saved one (2500 titles, read ", StringComparison.Ordinal) && l.EndsWith(" ms from this PC", StringComparison.Ordinal));
 		Assert.Contains(lines, l => l.StartsWith("Collections: ", StringComparison.Ordinal) && l.Contains(" ms (Made by Nixie from the saved index)", StringComparison.Ordinal));
 		Assert.DoesNotContain(lines, l => l.Contains("Film 0", StringComparison.Ordinal) || l.Contains("Movies", StringComparison.Ordinal));

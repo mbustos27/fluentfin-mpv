@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.7.3
+
+A fix release: Made by Nixie, fewer and better.
+
+- **Made by Nixie, fewer and better.** There were too many collections, and too generic ones:
+  - Nixie no longer makes collections of directors, actors, studios, networks, decades, countries or genre pairs.
+  - A library's filters keep its decades, genre mixes and countries.
+  - Pinned director, actor, studio and network collections, and saved filters made with one, are removed.
+  - A title counts once however many files or libraries hold it.
+  - "Acclaimed, not seen yet" replaces "Highly rated, not watched": the best 20 titles you haven't watched. Titles with
+    more behind their rating come first: a critics' rating, many tags, copies, outside lists. Where the server keeps
+    none of these, the rating alone ranks them.
+  - "Under 90 minutes" replaces "Short films": films of 60 to 90 minutes you haven't watched, best first.
+  - Settings > Collections has switches for the library filters (decades, genre mixes, countries) again, and the ones
+    you turned off in 1.7.2 stay off.
+  - Filters you saved on "Highly rated" or "Short films" keep what they kept in 1.7.2, every title of them. A library's
+    Nixie filters, and a filter saved on one, keep every title they match, not only a collection's first 20, and when
+    nothing matches, the saved filter's page says so.
+  - When Nixie makes no collection from your libraries, the Collections page says so in one line, and what it looks for.
+  - The log says once per index how many candidates each kind of collection had, and how Acclaimed was ranked (counts
+    only).
+  - Going back to 1.7.2 later: its director, actor, studio and network collections come back, but the pins and saved
+    filters of them that 1.7.3 removed don't. Filters saved in 1.7.3 keep 1.7.3's rules when you return, even if 1.7.2
+    saved a filter meanwhile.
+- **The library index:**
+  - Nixie no longer reads the actors and directors of every title, so a read asks the server for about half as much.
+  - A title in two libraries counts in both.
+  - The reading line gives an approximate total from the first page ("200 of about 2,600 films").
+  - Played episodes that didn't come are asked for again within the hour.
+  - After the update, the saved index shows at once, with "Acclaimed, not seen yet", and is read again once, in the
+    background, straight away, and again at the next start if that read didn't finish.
+- **Errors say whose failure it is:** this PC's connection, the server (its owner may need to know), or Nixie itself.
+  Something your account may not open says so too. No message asks you to do anything on the server.
+- **Nixie's warnings and errors go to its own log only,** where sign-in details are masked; they also went to the
+  Windows Event Log.
+- **"The server", never "your server",** across the app, the README and the installer.
+- **The repository's new name, `mbustos27/nixie`,** in the update check, Settings > About, the installer's links and
+  the User-Agent. Copies up to 1.7.2 keep updating through GitHub's redirect.
+- **Closing Nixie no longer crashes,** from the player page (with or without mpv, playing or not), from Drive-in's
+  Home, or anywhere else, on a busy PC too. Since 1.6.1 it crashed just after the window went, and Windows' error
+  reporting made the close take 3 to 20 seconds; it now closes at once.
+- **Collections:** the keyboard lands on the first tile even on a busy PC, and the rows stay where they are when the
+  reading line goes.
+- **Drive-in:** "All of Up next (N)" counts and opens Next Up, and says "Nothing up next" when it's empty.
+- **Libraries:** logo artwork on a library tile is cropped around its middle, not to its top strip.
+
 ## 1.7.2
 
 A fix release: the Collections page.

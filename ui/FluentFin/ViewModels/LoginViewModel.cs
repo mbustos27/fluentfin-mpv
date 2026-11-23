@@ -183,8 +183,9 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 
 		if (response is null)
 		{
-			ErrorMessage = $"Quick Connect isn't available on {ServerName}: it may be turned off on the server (Dashboard > General > Quick Connect), " +
-				"or the server can't be reached. Sign in with your username and password instead.";
+			// 1.7.3 (rule 11): no step on the server's dashboard; what the user can do here
+			ErrorMessage = $"Quick Connect isn't available on {ServerName}: it may be off there, or the server can't be reached. " +
+				"Sign in with your username and password instead.";
 			SignInFailed?.Invoke(this, EventArgs.Empty);
 			return;
 		}

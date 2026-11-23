@@ -39,6 +39,15 @@ public partial class App : Application
 
 	private bool _isClosing;
 
+	/// <summary>
+	/// Nixie 1.7.3: the app is closing (its window hidden, then closed): what follows a page or the window going away (the
+	/// shell's Unloaded, the caption buttons) has nothing to do. Set once, on the UI thread, when the close begins.
+	/// </summary>
+	public static bool IsClosing { get; private set; }
+
+	// 1.7.3 (verify-package: a close from the player page took 3 to 20 s): when the close began, for the log's durations
+	private static readonly System.Diagnostics.Stopwatch s_closing = new();
+
 	public static T GetService<T>()
 		where T : class
 	{
@@ -143,7 +152,7 @@ public partial class App : Application
 			{
 				Log.Information("{Note}", migrationNote);
 			}
-			services.AddLogging(builder => builder.AddSerilog());
+			services.AddLogging(NixieLogging.OnlyNixiesLog); // 1.7.3 fix round's re-review: not the host's Event Log provider too (unmasked)
 
 			// Default Activation Handler
 			services.AddTransient<ActivationHandler<LaunchActivatedEventArgs>, DefaultActivationHandler>();
@@ -491,6 +500,9 @@ public partial class App : Application
 		// the process exits as soon as the window closes, so finish reporting first and close again afterwards
 		args.Cancel = true;
 		_isClosing = true;
+		IsClosing = true;
+		s_closing.Start();
+		var log = GetService<ILogger<App>>();
 		try
 		{
 			// fluentfin-mpv: gone for the user at once; the mpv backend may need ~10 s for its final report (docs/BRIDGE.md §3)
@@ -508,14 +520,43 @@ public partial class App : Application
 			// fluentfin-mpv: upstream's stop report (bounded: a hung server must not keep a hidden FluentFin alive) and, side by
 			// side, the mpv backend's shutdown and any crash report FluentFin is sending for it. Before the window goes, so the
 			// backend's mpv window is gone before ours is destroyed.
-			await CloseSequence.RunAsync(GetService<IJellyfinClient>(), GetService<MpvPlaybackService>(), GetService<ILogger<App>>());
+			await CloseSequence.RunAsync(GetService<IJellyfinClient>(), GetService<MpvPlaybackService>(), log);
+			log.LogInformation("[close] the reports and the backend: done after {Ms} ms", s_closing.ElapsedMilliseconds);
 			// fluentfin-mpv player controls: the in-process mpv after the backend that used it (bounded)
 			GetService<MpvCompositionVideo>().Dispose();
 			await Host.StopAsync();
+			log.LogInformation("[close] the app's services: stopped after {Ms} ms", s_closing.ElapsedMilliseconds);
 		}
 		finally
 		{
+			WatchExit(log);
 			MainWindow.Close();
+			log.LogInformation("[close] the window: closed after {Ms} ms", s_closing.ElapsedMilliseconds);
 		}
+	}
+
+	/// <summary>
+	/// Nixie 1.7.3 (rule 10): the close's last parts in the log, as durations from the moment it began: the UI thread's queue
+	/// shutting down and done (the window's pages taken away), and the process's exit (after every foreground thread).
+	/// </summary>
+	private static void WatchExit(Microsoft.Extensions.Logging.ILogger log)
+	{
+		void Said(string what) => log.LogInformation("[close] {What} after {Ms} ms", what, s_closing.ElapsedMilliseconds);
+		try
+		{
+			var queue = MainWindow.DispatcherQueue;
+			queue.ShutdownStarting += (_, _) => Said("the UI thread's queue: shutting down");
+			queue.ShutdownCompleted += (_, _) => Said("the UI thread's queue: done");
+		}
+		catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+		{
+			// the queue has gone already: the exit's line below still comes
+		}
+
+		AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+		{
+			Said("the process: exiting");
+			Log.CloseAndFlush();
+		};
 	}
 }

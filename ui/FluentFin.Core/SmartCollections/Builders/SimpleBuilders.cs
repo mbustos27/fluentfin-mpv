@@ -1,61 +1,83 @@
 namespace FluentFin.Core.SmartCollections.Builders;
 
-/// <summary>Decades: films (and shows, apart) of one decade, ten or more: "1980s films".</summary>
+// 1.7.3 (P0-2b): every builder counts the titles with their copies collapsed (BuildContext.Titles), and (P0-1) says what it
+// counted (BuildContext.Gates): its candidates, those past its floor, those past its cap
+
+/// <summary>Decades: films (and shows, apart) of one decade, ten or more: "1980s films". On demand only since 1.7.3.</summary>
 public sealed class DecadeBuilder : ISmartCollectionBuilder
 {
 	public const int Least = 10;
 
 	public SmartCollectionKind Kind => SmartCollectionKind.Decade;
 
-	public IEnumerable<SmartCollection> Build(BuildContext context) =>
-		context.Index.Entries
+	public IEnumerable<SmartCollection> Build(BuildContext context)
+	{
+		var groups = context.Titles.Entries
 			.Where(x => x.Year is >= 1900 and < 2100)
 			.GroupBy(x => (x.Kind, Decade: x.Year!.Value / 10 * 10))
-			.Where(g => g.Count() >= Least)
+			.ToList();
+		var made = groups.Where(g => g.Count() >= Least)
 			.OrderBy(g => g.Key.Kind).ThenByDescending(g => g.Key.Decade)
 			.Select(g => Make.Of($"decade:{g.Key.Kind.ToString().ToLowerInvariant()}:{g.Key.Decade}", Kind, $"{g.Key.Decade}s {Make.Noun(g.Key.Kind, 2)}",
-				$"Your {Make.Noun(g.Key.Kind, 2)} from {g.Key.Decade} to {g.Key.Decade + 9}", hasOwnOrder: false, Make.ByName(g)));
+				$"Your {Make.Noun(g.Key.Kind, 2)} from {g.Key.Decade} to {g.Key.Decade + 9}", hasOwnOrder: false, Make.ByName(g)))
+			.ToList();
+		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
+		return made;
+	}
 }
 
-/// <summary>Directors with three or more owned films (the people pass).</summary>
+/// <summary>Directors with three or more owned films (the people pass). On demand only since 1.7.3.</summary>
 public sealed class DirectorBuilder : ISmartCollectionBuilder
 {
 	public const int Least = 3;
 
 	public SmartCollectionKind Kind => SmartCollectionKind.Director;
 
-	public IEnumerable<SmartCollection> Build(BuildContext context) =>
-		context.Index.Entries
+	public IEnumerable<SmartCollection> Build(BuildContext context)
+	{
+		var groups = context.Titles.Entries
 			.Where(x => x.Kind == IndexKind.Movie)
-			.SelectMany(x => x.People.Where(p => p.Kind == "Director").Select(p => (p.Name, Entry: x)))
+			.SelectMany(x => (x.People ?? []).Where(p => p.Kind == "Director").Select(p => (p.Name, Entry: x)))
 			.GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
 			.Select(g => (Name: g.First().Name, Films: g.Select(x => x.Entry).DistinctBy(x => x.Id).ToList()))
-			.Where(g => g.Films.Count >= Least)
+			.ToList();
+		var made = groups.Where(g => g.Films.Count >= Least)
 			.OrderByDescending(g => g.Films.Count).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
-			.Select(g => Make.Of($"director:{Make.Key(g.Name)}", Kind, g.Name, $"Your films directed by {g.Name}, in release order", hasOwnOrder: true, Make.ByRelease(g.Films)));
+			.Select(g => Make.Of($"director:{Make.Key(g.Name)}", Kind, g.Name, $"Your films directed by {g.Name}, in release order", hasOwnOrder: true, Make.ByRelease(g.Films)))
+			.ToList();
+		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
+		return made;
+	}
 }
 
-/// <summary>Actors among the first five billed, in five or more owned titles (the people pass).</summary>
+/// <summary>Actors among the first five billed, in five or more owned titles (the people pass). On demand only since 1.7.3.</summary>
 public sealed class ActorBuilder : ISmartCollectionBuilder
 {
 	public const int Least = 5;
 
 	public SmartCollectionKind Kind => SmartCollectionKind.Actor;
 
-	public IEnumerable<SmartCollection> Build(BuildContext context) =>
-		context.Index.Entries
-			.SelectMany(x => x.People.Where(p => p.Kind == "Actor").Select(p => (p.Name, Entry: x)))
+	public IEnumerable<SmartCollection> Build(BuildContext context)
+	{
+		var groups = context.Titles.Entries
+			.SelectMany(x => (x.People ?? []).Where(p => p.Kind == "Actor").Select(p => (p.Name, Entry: x)))
 			.GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
 			.Select(g => (Name: g.First().Name, Titles: g.Select(x => x.Entry).DistinctBy(x => x.Id).ToList()))
-			.Where(g => g.Titles.Count >= Least)
+			.ToList();
+		var made = groups.Where(g => g.Titles.Count >= Least)
 			.OrderByDescending(g => g.Titles.Count).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
 			.Select(g => Make.Of($"actor:{Make.Key(g.Name)}", Kind, g.Name, $"Your films and shows with {g.Name}", hasOwnOrder: false,
-				[.. Make.ByRelease(g.Titles).AsEnumerable().Reverse()]));
+				[.. Make.ByRelease(g.Titles).AsEnumerable().Reverse()]))
+			.ToList();
+		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
+		return made;
+	}
 }
 
 /// <summary>
 /// Film studios with five or more films; shows' studios (networks, and on Jellyfin 12 production companies too, which can't
 /// be told apart) with three or more, as "Studios and networks". Names that differ only in case or punctuation are one.
+/// On demand only since 1.7.3.
 /// </summary>
 public sealed class StudioBuilder(IndexKind kind) : ISmartCollectionBuilder
 {
@@ -63,22 +85,29 @@ public sealed class StudioBuilder(IndexKind kind) : ISmartCollectionBuilder
 
 	public SmartCollectionKind Kind => kind == IndexKind.Movie ? SmartCollectionKind.Studio : SmartCollectionKind.Network;
 
-	public IEnumerable<SmartCollection> Build(BuildContext context) =>
-		context.Index.Entries
+	public IEnumerable<SmartCollection> Build(BuildContext context)
+	{
+		var groups = context.Titles.Entries
 			.Where(x => x.Kind == kind)
-			.SelectMany(x => x.Studios.Select(s => (Studio: s, Entry: x)))
+			.SelectMany(x => (x.Studios ?? []).Select(s => (Studio: s, Entry: x)))
 			.GroupBy(x => Make.Key(x.Studio))
 			.Where(g => g.Key.Length > 0)
 			.Select(g => (Key: g.Key, Name: g.GroupBy(x => x.Studio).OrderByDescending(n => n.Count()).First().Key, Titles: g.Select(x => x.Entry).DistinctBy(x => x.Id).ToList()))
-			.Where(g => g.Titles.Count >= Least)
+			.ToList();
+		var made = groups.Where(g => g.Titles.Count >= Least)
 			.OrderByDescending(g => g.Titles.Count).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
 			.Select(g => Make.Of($"{(kind == IndexKind.Movie ? "studio" : "network")}:{g.Key}", Kind, g.Name,
-				kind == IndexKind.Movie ? $"Your films from {g.Name}" : $"Your shows from {g.Name}", hasOwnOrder: false, Make.ByName(g.Titles)));
+				kind == IndexKind.Movie ? $"Your films from {g.Name}" : $"Your shows from {g.Name}", hasOwnOrder: false, Make.ByName(g.Titles)))
+			.ToList();
+		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
+		return made;
+	}
 }
 
 /// <summary>
 /// Genre mixes: two genres, eight or more titles in both, where the pair is under 80 % of the smaller genre (so a pair that
-/// says nothing new, like most Animation being Family, is skipped). Films and shows apart; the twelve largest.
+/// says nothing new, like most Animation being Family, is skipped). Films and shows apart; the twelve largest. On demand
+/// only since 1.7.3.
 /// </summary>
 public sealed class GenreMixBuilder : ISmartCollectionBuilder
 {
@@ -91,9 +120,10 @@ public sealed class GenreMixBuilder : ISmartCollectionBuilder
 	public IEnumerable<SmartCollection> Build(BuildContext context)
 	{
 		var found = new List<(IndexKind Kind, string A, string B, List<IndexEntry> Titles)>();
-		foreach (var group in context.Index.Entries.GroupBy(x => x.Kind))
+		var pairs = 0;
+		foreach (var group in context.Titles.Entries.GroupBy(x => x.Kind))
 		{
-			var byGenre = group.SelectMany(x => x.Genres.Select(g => (Genre: g, Entry: x)))
+			var byGenre = group.SelectMany(x => (x.Genres ?? []).Select(g => (Genre: g, Entry: x)))
 				.GroupBy(x => x.Genre, StringComparer.OrdinalIgnoreCase)
 				.ToDictionary(g => g.First().Genre, g => g.Select(x => x.Entry.Id).ToHashSet(), StringComparer.OrdinalIgnoreCase);
 			var genres = byGenre.Keys.Where(g => byGenre[g].Count >= Least).OrderBy(g => g, StringComparer.OrdinalIgnoreCase).ToList();
@@ -102,6 +132,7 @@ public sealed class GenreMixBuilder : ISmartCollectionBuilder
 			{
 				for (var j = i + 1; j < genres.Count; j++)
 				{
+					pairs++;
 					var both = byGenre[genres[i]].Intersect(byGenre[genres[j]]).ToList();
 					var smaller = Math.Min(byGenre[genres[i]].Count, byGenre[genres[j]].Count);
 					if (both.Count >= Least && both.Count < MostOfSmaller * smaller)
@@ -112,9 +143,12 @@ public sealed class GenreMixBuilder : ISmartCollectionBuilder
 			}
 		}
 
-		return found.OrderByDescending(x => x.Titles.Count).ThenBy(x => x.A).ThenBy(x => x.B).Take(Most)
+		var made = found.OrderByDescending(x => x.Titles.Count).ThenBy(x => x.A).ThenBy(x => x.B).Take(context.Whole ? int.MaxValue : Most) // fix round (BH-173-M2)
 			.Select(x => Make.Of($"genres:{x.Kind.ToString().ToLowerInvariant()}:{Make.Key(x.A)}+{Make.Key(x.B)}", Kind, $"{x.A} · {x.B}",
-				$"Your {Make.Noun(x.Kind, 2)} that are both {x.A} and {x.B}", hasOwnOrder: false, Make.ByName(x.Titles)));
+				$"Your {Make.Noun(x.Kind, 2)} that are both {x.A} and {x.B}", hasOwnOrder: false, Make.ByName(x.Titles)))
+			.ToList();
+		context.Gates.Count(Kind, pairs, found.Count, made.Count);
+		return made;
 	}
 }
 
@@ -128,7 +162,7 @@ public sealed class KeywordBuilder : ISmartCollectionBuilder
 	public IEnumerable<SmartCollection> Build(BuildContext context)
 	{
 		var tmdb = context.Outside.KeywordNames;
-		var groups = context.Index.Entries
+		var groups = context.Titles.Entries
 			.SelectMany(x => x.Tags.Where(t => Keywords.NameOf(t, tmdb) is not null).Select(t => (Tag: t, Entry: x)))
 			.GroupBy(x => x.Tag, StringComparer.OrdinalIgnoreCase)
 			.Select(g => (Tag: g.Key, Titles: g.Select(x => x.Entry).DistinctBy(x => x.Id).ToList()))
@@ -140,7 +174,7 @@ public sealed class KeywordBuilder : ISmartCollectionBuilder
 		var lists = context.Outside.Lists.Where(x => x.Kind == Outside.OutsideListKind.Genre && x.KeywordTag is not null).ToList();
 		if (lists.Count > 0)
 		{
-			var matcher = new Outside.OutsideMatcher(context.Index);
+			var matcher = context.Matcher; // 1.7.3 (P0-2b): matched to the titles, copies collapsed
 			foreach (var list in lists)
 			{
 				genres[list.KeywordTag!] = [.. matcher.MatchAll(list.Items.Select(x => x.Ref))];
@@ -153,9 +187,12 @@ public sealed class KeywordBuilder : ISmartCollectionBuilder
 			.ToList();
 		// end 1.7 keyless
 		// only the allowlist's keywords, each confirmed by TMDb's names when its export is on (Keywords.NameOf)
-		return merged.Where(g => Keywords.NameOf(g.Tag, tmdb) is not null && g.Titles.Count >= Least)
+		var made = merged.Where(g => Keywords.NameOf(g.Tag, tmdb) is not null && g.Titles.Count >= Least)
 			.OrderByDescending(g => g.Titles.Count).ThenBy(g => g.Tag)
-			.Select(g => Make.Of($"keyword:{Make.Key(g.Tag)}", Kind, Keywords.NameOf(g.Tag, tmdb)!, Why(g.Tag, g.Tagged, g.FromWikidata ? genreWhy[g.Tag] : null), hasOwnOrder: false, Make.ByName(g.Titles)));
+			.Select(g => Make.Of($"keyword:{Make.Key(g.Tag)}", Kind, Keywords.NameOf(g.Tag, tmdb)!, Why(g.Tag, g.Tagged, g.FromWikidata ? genreWhy[g.Tag] : null), hasOwnOrder: false, Make.ByName(g.Titles)))
+			.ToList();
+		context.Gates.Count(Kind, merged.Count, made.Count, made.Count);
+		return made;
 	}
 
 	// 1.7 keyless: the why line names where the titles came from: TMDb's keyword, Wikidata's genre, or both
@@ -168,41 +205,80 @@ public sealed class KeywordBuilder : ISmartCollectionBuilder
 	};
 }
 
-/// <summary>Highly rated, not watched: community rating 7.5 or more, not played; best first.</summary>
+/// <summary>
+/// 1.7.3 (P0-4): "Acclaimed, not seen yet" (the kind and id of 1.6's "Highly rated, not watched", so Settings, pins and Home's
+/// saved rows carry over): titles rated 7.5 or more, not watched and backed by something beyond their own rating
+/// (<see cref="QualityScore.IsBacked"/>), ranked by <see cref="QualityScore"/> (a high rating little backs up doesn't lead),
+/// the best <see cref="Most"/>. Fix round (BH-173-M1, m1): when nothing in the index can back a rating (an index saved before
+/// 1.7.3, a server that keeps no critics' ratings or tags: <see cref="RatingBacking"/>), every title rated 7.5 or more and not
+/// watched, ranked the same way; and (M2) every title of its rule, uncapped, for a saved filter (<see cref="BuildContext.Whole"/>).
+/// </summary>
 public sealed class HighlyRatedBuilder : ISmartCollectionBuilder
 {
 	public const double Least = 7.5;
 	public const int Fewest = 3;
+	public const int Most = 20;
+	public const string Title = "Acclaimed, not seen yet";
 
 	public SmartCollectionKind Kind => SmartCollectionKind.HighlyRated;
 
 	public IEnumerable<SmartCollection> Build(BuildContext context)
 	{
-		var titles = context.Index.Entries.Where(x => x.Rating >= Least && !x.Played).OrderByDescending(x => x.Rating).ThenBy(x => x.OrderName, StringComparer.CurrentCultureIgnoreCase).ToList();
-		if (titles.Count >= Fewest)
-		{
-			yield return Make.Of("pick:highly-rated", Kind, "Highly rated, not watched", "Rated 7.5 or more on the server, and not watched yet", hasOwnOrder: false, titles);
-		}
+		var quality = context.Quality;
+		var backing = context.Backing;
+		var rated = context.Titles.Entries.Where(x => x.Rating >= Least && !x.Played).ToList();
+		// 1.7.3 (M1's review, Major): only a title something backs (critics, five or more tags, an outside list): an obscure
+		// 9.8 with a poster and two tags took the places of the films everyone knows. Fix round (BH-173-M1, m1): only where
+		// the index has something that can back a rating (missing data is not a decision, rule 4)
+		var pool = backing.Any ? rated.Where(quality.IsBacked).ToList() : rated;
+		var titles = Best.Of(pool, quality).Take(context.Whole ? int.MaxValue : Most).ToList();
+		context.Gates.Note(Kind, backing.Census);
+		var made = pool.Count >= Fewest
+			? [Make.Of("pick:highly-rated", Kind, Title, "Rated 7.5 or more and not watched yet, the best first, weighted by how much backs each rating", hasOwnOrder: false, titles)]
+			: new List<SmartCollection>();
+		context.Gates.Count(Kind, rated.Count, pool.Count >= Fewest ? pool.Count : 0, made.Count == 0 ? 0 : titles.Count);
+		return made;
 	}
 }
 
-/// <summary>Short films: films with a runtime under 90 minutes (a title with none is left out); shortest first.</summary>
+/// <summary>
+/// 1.7.3 (P0-4): "Under 90 minutes" (the kind and id of 1.6's "Short films"): feature films of 60 minutes up to (not
+/// including) 90, not watched, best first by <see cref="QualityScore"/> (unrated ones last), the first <see cref="Most"/>.
+/// A title with no runtime is left out. 1.6's took every film under 90, shortest first: its first posters were shorts.
+/// </summary>
 public sealed class ShortFilmsBuilder : ISmartCollectionBuilder
 {
 	public static readonly long Under = TimeSpan.FromMinutes(90).Ticks;
+	public static readonly long AtLeast = TimeSpan.FromMinutes(60).Ticks;
 	public const int Fewest = 3;
+	public const int Most = 20;
+	public const string Title = "Under 90 minutes";
 
 	public SmartCollectionKind Kind => SmartCollectionKind.ShortFilms;
 
 	public IEnumerable<SmartCollection> Build(BuildContext context)
 	{
-		var films = context.Index.Entries.Where(x => x.Kind == IndexKind.Movie && x.RunTimeTicks is > 0 && x.RunTimeTicks < Under)
-			.OrderBy(x => x.RunTimeTicks).ThenBy(x => x.OrderName, StringComparer.CurrentCultureIgnoreCase).ToList();
-		if (films.Count >= Fewest)
-		{
-			yield return Make.Of("pick:short-films", Kind, "Short films", "Films under 90 minutes", hasOwnOrder: false, films);
-		}
+		var pool = context.Titles.Entries.Where(x => x.Kind == IndexKind.Movie && !x.Played && x.RunTimeTicks >= AtLeast && x.RunTimeTicks < Under).ToList();
+		var films = Best.Of(pool, context.Quality).Take(context.Whole ? int.MaxValue : Most).ToList(); // fix round (BH-173-M2): a saved filter's, uncapped
+		var made = pool.Count >= Fewest
+			? [Make.Of("pick:short-films", Kind, Title, "Feature films of 60 to 90 minutes, not watched yet, the best rated first", hasOwnOrder: false, films)]
+			: new List<SmartCollection>();
+		context.Gates.Count(Kind, pool.Count, pool.Count >= Fewest ? pool.Count : 0, made.Count == 0 ? 0 : films.Count);
+		return made;
 	}
+}
+
+/// <summary>1.7.3 (P0-4): best first: by score (titles with none last), then rating, name, id (the same order every time).</summary>
+internal static class Best
+{
+	public static IEnumerable<IndexEntry> Of(IEnumerable<IndexEntry> titles, QualityScore quality) =>
+		titles.Select(x => (Entry: x, Q: quality.Of(x)))
+			.OrderBy(x => x.Q is null)
+			.ThenByDescending(x => x.Q ?? 0)
+			.ThenByDescending(x => x.Entry.Rating ?? 0)
+			.ThenBy(x => x.Entry.OrderName, StringComparer.CurrentCultureIgnoreCase)
+			.ThenBy(x => x.Entry.Id)
+			.Select(x => x.Entry);
 }
 
 /// <summary>
@@ -219,17 +295,25 @@ public sealed class UnfinishedSeriesBuilder : ISmartCollectionBuilder
 	public IEnumerable<SmartCollection> Build(BuildContext context)
 	{
 		var plays = context.Index.SeriesPlays;
-		var shows = context.Index.Entries
-			.Where(x => x.Kind == IndexKind.Series && x.Unplayed > 0 && plays.TryGetValue(x.Id, out var p) && p.Played > 0 && context.Now - p.LastPlayed > Away)
-			.OrderByDescending(x => plays[x.Id].LastPlayed).ToList();
-		if (shows.Count >= Fewest)
-		{
-			yield return Make.Of("pick:unfinished-series", Kind, "Unfinished series", "Shows you started and haven't watched for a month", hasOwnOrder: false, shows);
-		}
+		var titles = context.Titles;
+		// 1.7.3 (P0-2b): a show in two libraries is one, its plays the latest of either copy's
+		SeriesPlays? PlaysOf(IndexEntry show) => titles.CopyIds(show.Id).Select(id => plays.TryGetValue(id, out var p) ? p : null).OfType<SeriesPlays>().MaxBy(p => p.LastPlayed);
+		var shows = titles.Entries
+			.Where(x => x.Kind == IndexKind.Series && x.Unplayed > 0)
+			.Select(x => (Show: x, Plays: PlaysOf(x)))
+			.Where(x => x.Plays is { Played: > 0 } p && context.Now - p.LastPlayed > Away)
+			.OrderByDescending(x => x.Plays!.LastPlayed)
+			.Select(x => x.Show)
+			.ToList();
+		var made = shows.Count >= Fewest
+			? [Make.Of("pick:unfinished-series", Kind, "Unfinished series", "Shows you started and haven't watched for a month", hasOwnOrder: false, shows)]
+			: new List<SmartCollection>();
+		context.Gates.Count(Kind, shows.Count, made.Count == 0 ? 0 : shows.Count, made.Count == 0 ? 0 : shows.Count);
+		return made;
 	}
 }
 
-/// <summary>Countries: films by their first production country, five or more, except the library's most common one.</summary>
+/// <summary>Countries: films by their first production country, five or more, except the library's most common one. On demand only since 1.7.3.</summary>
 public sealed class CountryBuilder : ISmartCollectionBuilder
 {
 	public const int Least = 5;
@@ -238,13 +322,16 @@ public sealed class CountryBuilder : ISmartCollectionBuilder
 
 	public IEnumerable<SmartCollection> Build(BuildContext context)
 	{
-		var groups = context.Index.Entries.Where(x => x.Kind == IndexKind.Movie && x.Countries.Length > 0)
+		var groups = context.Titles.Entries.Where(x => x.Kind == IndexKind.Movie && x.Countries.Length > 0)
 			.GroupBy(x => x.Countries[0], StringComparer.OrdinalIgnoreCase)
 			.Select(g => (Country: g.Key, Films: g.ToList()))
 			.OrderByDescending(g => g.Films.Count).ThenBy(g => g.Country).ToList();
 		var home = groups.FirstOrDefault().Country;
-		return groups.Where(g => g.Country != home && g.Films.Count >= Least)
-			.Select(g => Make.Of($"country:{Make.Key(g.Country)}", Kind, $"Films from {Short(g.Country)}", $"Your films made in {Short(g.Country)}", hasOwnOrder: false, Make.ByName(g.Films)));
+		var made = groups.Where(g => g.Country != home && g.Films.Count >= Least)
+			.Select(g => Make.Of($"country:{Make.Key(g.Country)}", Kind, $"Films from {Short(g.Country)}", $"Your films made in {Short(g.Country)}", hasOwnOrder: false, Make.ByName(g.Films)))
+			.ToList();
+		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
+		return made;
 	}
 
 	private static string Short(string country) => country switch
@@ -270,17 +357,23 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 
 	public IEnumerable<SmartCollection> Build(BuildContext context)
 	{
-		var entries = context.Index.Entries;
+		var entries = context.Titles.Entries;
+		var made = new List<SmartCollection>();
+		var candidates = 0;
+		var shown = 0;
 		switch (context.Now.Month)
 		{
 			case 10:
 				{
 					var tagged = entries.Where(x => x.Tags.Contains("halloween", StringComparer.OrdinalIgnoreCase));
 					var horror = entries.Where(x => x.Kind == IndexKind.Movie && !x.Played && x.Genres.Contains("Horror", StringComparer.OrdinalIgnoreCase)).OrderByDescending(x => x.Rating);
-					var titles = tagged.Concat(horror).DistinctBy(x => x.Id).Take(Most).ToList();
-					if (titles.Count >= Fewest)
+					var all = tagged.Concat(horror).DistinctBy(x => x.Id).ToList();
+					candidates = all.Count;
+					if (all.Count >= Fewest)
 					{
-						yield return Make.Of("seasonal:halloween", Kind, "Halloween", "Halloween and horror, for October", hasOwnOrder: false, titles);
+						var titles = all.Take(context.Whole ? int.MaxValue : Most).ToList(); // fix round (BH-173-M2)
+						shown = titles.Count;
+						made.Add(Make.Of("seasonal:halloween", Kind, "Halloween", "Halloween and horror, for October", hasOwnOrder: false, titles));
 					}
 
 					break;
@@ -288,15 +381,21 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 
 			case 12:
 				{
-					var titles = entries.Where(x => x.Tags.Any(t => t.StartsWith("christmas", StringComparison.OrdinalIgnoreCase) || t.Equals("santa claus", StringComparison.OrdinalIgnoreCase)))
-						.OrderByDescending(x => x.Rating).Take(Most).ToList();
-					if (titles.Count >= Fewest)
+					var all = entries.Where(x => x.Tags.Any(t => t.StartsWith("christmas", StringComparison.OrdinalIgnoreCase) || t.Equals("santa claus", StringComparison.OrdinalIgnoreCase)))
+						.OrderByDescending(x => x.Rating).ToList();
+					candidates = all.Count;
+					if (all.Count >= Fewest)
 					{
-						yield return Make.Of("seasonal:christmas", Kind, "Christmas", "Christmas films and shows, for December", hasOwnOrder: false, titles);
+						var titles = all.Take(context.Whole ? int.MaxValue : Most).ToList(); // fix round (BH-173-M2)
+						shown = titles.Count;
+						made.Add(Make.Of("seasonal:christmas", Kind, "Christmas", "Christmas films and shows, for December", hasOwnOrder: false, titles));
 					}
 
 					break;
 				}
 		}
+
+		context.Gates.Count(Kind, candidates, made.Count == 0 ? 0 : candidates, shown);
+		return made;
 	}
 }

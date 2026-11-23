@@ -32,6 +32,11 @@ public sealed partial class CinematicPreviewStage : UserControl
 		InitializeComponent();
 		_settle.Tick += (_, _) =>
 		{
+			if (App.IsClosing)
+			{
+				return; // 1.7.3 fix round (the close crash's class): nothing in the window's teardown
+			}
+
 			_settle.Stop();
 			Apply(_pending, animate: true);
 		};

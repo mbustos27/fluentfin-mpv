@@ -99,10 +99,13 @@ public sealed class SmartCollectionStore
 		}
 	}
 
+	// the fix round's re-review: a filter's revision is its own or its id's, whichever is newer. 1.7.2 rewrites the file with
+	// the fields it knows (a filter saved by 1.7.3 lost its Revision at a 1.7.2 save, and back on 1.7.3 took 1.7.2's rules),
+	// and it keeps the id as it is
 	private static SmartCollection ToCollection(Saved saved) =>
 		new(saved.Id, SmartCollectionKind.Saved, saved.Name, $"Your filter in {saved.Filter.LibraryName}: {saved.Filter.Describe()}", HasOwnOrder: false, [])
 		{
-			Filter = saved.Filter,
+			Filter = saved.Filter with { Revision = Math.Max(saved.Filter.Revision, SavedFilter.RevisionOfId(saved.Id)) },
 		};
 
 	/// <summary>
@@ -115,9 +118,10 @@ public sealed class SmartCollectionStore
 		try
 		{
 			var state = await Load().ConfigureAwait(false);
+			filter = filter with { Revision = SavedFilter.CurrentRevision }; // fix round (BH-173-M2): its preset means what it means now
 			var title = string.IsNullOrWhiteSpace(name) ? filter.Describe() : name.Trim();
 			state.Filters.RemoveAll(x => x.Filter.LibraryId == filter.LibraryId && string.Equals(x.Name, title, StringComparison.CurrentCultureIgnoreCase));
-			var saved = new Saved($"saved:{Guid.NewGuid():N}", title, filter);
+			var saved = new Saved(SavedFilter.NewId(), title, filter); // the re-review: its id says its revision too (1.7.2 keeps ids)
 			state.Filters.Add(saved);
 			await Save(state).ConfigureAwait(false);
 			return ToCollection(saved);
