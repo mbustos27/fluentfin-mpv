@@ -13,6 +13,21 @@ A fix release: the Collections page.
   connection, then select Try again." It said to check that the server is running.
 - **The Collections page's first section is "The server's collections".**
 
+**Verified**
+
+- The cause, on a real server with 23 libraries: 1.7.1 failed on the index 1.7.0 had saved, and loaded once its own
+  fresh read had replaced it. That read took 3 min 14 s for the titles (34,006 titles in 62 requests, none timed out).
+- Each fix has a test that fails without it, the owner's symptom included; the Collections page off-screen (33 checks);
+  an independent review found no Blocker or Major. The release build ran every test (5,525 core, 1,630 UI, 569 bridge)
+  and the package's 134 checks (one, Nixie's exit after closing, took over 20 s once on a busy PC and passed on its
+  rerun); Microsoft Defender found nothing.
+- The upgrade, in Windows Sandbox as a standard user, right after publishing: 1.7.1 to 1.7.2 by the installer, 1.7.2's
+  own Restart to update, and 1.7.1's Restart to update installing 1.7.2, which opens again and says "Updated".
+
+**Known issues in 1.7.2** (being fixed in 1.7.3): a title listed in two libraries counts under the first one only (since
+1.7.1); Drive-in's library tiles crop logo art to its top; Nixie's exit after closing can take long on a busy PC; and
+1.7.1's own (the rows move up when the reading line goes, Drive-in's "All of Up next" count).
+
 ## 1.7.1
 
 A fix release: Nixie's collections on a big server.
