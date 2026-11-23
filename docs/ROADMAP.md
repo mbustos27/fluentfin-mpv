@@ -902,7 +902,7 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
 - **1.7.0's Sandbox test runs after publishing** (the owner, 2026-11-22: "sandbox test after publishing and opening
   test build"). The order: build, verify-package, Defender, publish, open the release build on the owner's desktop
   as their test copy, then the Sandbox. As with 1.5.0 and 1.6.0, a failure there makes a hotfix.
-- **Ten design rules, for desktop and TV** (the owner, 2026-11-22: "remember the issues we have and make them a part of
+- **Eleven design rules, for desktop and TV** (the owner, 2026-11-22: "remember the issues we have and make them a part of
   the design philosophy to look for things like that"): [DESIGN-RULES.md](DESIGN-RULES.md), each from a real bug.
   - The first screen waits only for what it shows.
   - Time against a real Jellyfin at scale.
@@ -914,6 +914,7 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   - A way up from every page.
   - A switch turned off stops in-flight work.
   - Detailed logs record durations.
+  - The user is not the server's admin (the owner, 2026-11-22: "always remember im not a jellyfin server admin"; added after 1.7.1's Collections card).
 
   Every TV and desktop brief carries them, and the bug hunts check them as class 12.
 - **A filled-in Report a problem in 1.8 and TV 1.0** (the owner, 2026-11-22: "yes"): the issue form opens filled in

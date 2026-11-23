@@ -64,6 +64,17 @@ hunt; the hunt checks them as class 12. Each rule comes from a real bug, given i
 
     [TV: the log showed when Home and a library opened, but not how long their parts took.]
 
+11. **The user is not the server's admin.**
+    - Advice, docs and app text never send the user to the server's dashboard, logs, library scans, plugins,
+      metadata or image fixes, transcoding settings or restarts.
+    - An error says what Nixie couldn't do and what the user can do on this device. It keeps showing the saved copy
+      when there is one, and points to the server's owner only when the fault really is on the server's side.
+    - "The server" or "the server you use", never "your server".
+    - Problems are diagnosed from Nixie's own logs and a test Jellyfin, never by asking the user to look at the server.
+
+    [Desktop 1.7.1: the Collections page said "Check that the server is running" while every other page loaded. The
+    fault was Nixie's own: a title listed twice in its saved index.]
+
 Where the rules live:
 - the visual design rules: [design/DESIGN.md](design/DESIGN.md);
 - the release steps: [RELEASE.md](RELEASE.md).
