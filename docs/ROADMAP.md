@@ -1,7 +1,7 @@
 # Nixie roadmap
 
 Updated 2026-11-22 (1.7.1 released, the library index on a big server, its Sandbox upgrade test passed right after
-publishing; 1.7.2 queued with the rename's code constants and 1.7.1's bug hunt; TV's second fix round done, its APK
+publishing, then "Couldn't load your collections" on the owner's server and a 1.7.2 hotfix running; 1.7.3 queued with the rename's code constants and 1.7.1's bug hunt; TV's second fix round done, its APK
 waiting to go onto the owner's box; 1.7.0 released and the repository renamed to `mbustos27/nixie`). These are
 the planned releases in order, with the backburner ideas placed where they fit. Version numbers past 1.6 are a guide.
 **Sizes are calendar time at the measured pace** (below): several streams in parallel, each building in hours, plus a
@@ -18,7 +18,8 @@ and the owner's own steps are the real limits.
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Released** 2026-11-22 00:16 (started 2026-11-21 18:10, 3 streams; its Sandbox upgrade test passed before publishing) |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Released** 2026-11-22 08:37 (https://github.com/mbustos27/nixie/releases/tag/v1.7.0; started 2026-11-21 19:40, 3 streams). The release carries Nixie's own TMDb key and the Trakt Production Client ID, never the repository; TMDb trending was checked live with it. Its Sandbox upgrade test ran right after publishing, at the owner's call, and passed (08:41-08:54) |
 | 1.7.1 | Fixes | The library index on a big server: "Nixie is reading your libraries" took minutes on the owner's server (the owner, 2026-11-22: "figure out why and release 1.7.1 quick fix bc thats the whole thing"). The saved index shows at once and is read again behind it only when stale; a first read comes two pages of 1,000 at a time and shows its rows as it goes | **Released** 2026-11-22 15:27 (https://github.com/mbustos27/nixie/releases/tag/v1.7.1; 1 stream, a review, a bug hunt through a proxy slowing every request by 3-10 s, two re-reviews and three fix rounds). Measured on a test Jellyfin with 25,736 films, not yet on the owner's server. Its Sandbox upgrade test ran right after publishing, as 1.7.0's did, and passed (15:29-15:41); the owner's test copy is 1.7.1 now |
-| 1.7.2 | Fixes | The rename's code constants (the updater's repository, the installer's links, the sources link), Drive-in's Up next count, 1.7.0's queue, and 1.7.1's bug hunt queue (the people pass when its collections are off, the rows' 40 px jump, reading only what was added since, the reading line's total) | **Queued**: the next fix release, one stream beside 1.8 |
+| 1.7.2 | Hotfix | "Couldn't load your collections" on the owner's server with 1.7.1 (their test copy, 2026-11-22 20:09): the saved index from 1.7.0 lists one title twice, a genre-mix builder (1.6 code) throws on it, and 1.7.1 builds Made by Nixie inside the page's load, so the whole page failed. 1.7.0 met the same throw after its read and quietly showed no Made by Nixie. The fix: a saved index keeps each title once, no builder throws on a repeat, one failing builder can't take the page down | **Running** (started 20:15; ETA about 23:30 published, the Sandbox right after). The version is 1.7.2, not 1.7.1.1: Windows Installer ignores a fourth number |
+| 1.7.3 | Fixes | The rename's code constants (the updater's repository, the installer's links, the sources link), Drive-in's Up next count, 1.7.0's queue, and 1.7.1's bug hunt queue (the people pass when its collections are off, the rows' 40 px jump, reading only what was added since, the reading line's total) | **Queued**: the next fix release, one stream beside 1.8 |
 | 1.8 | Player | A floating picture-in-picture player (decided 2026-11-22), chapter extras, a filled-in Report a problem (decided 2026-11-22) | **Planned** (`briefs\180-plan.md`): a 30-minute spike first, then a setup commit and two streams, PiP (about 12 hours) and chapter extras (about 7), about 20 hours of work, so about a day and a half at the measured pace. Starts after 1.7 and TV 1.0, which keep priority |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
@@ -887,7 +888,7 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
      updating. The owner's own copy checking for 1.7 after the rename is the first real-world check of that.
   4. 1.4.1 and earlier would need one manual download.
   5. The next fix release switches every old-name place to the new name: never before the rename, since the API
-     URL would 404. That is 1.7.2: 1.7.1 became the library-index fix alone, at the owner's call.
+     URL would 404. That is 1.7.3: 1.7.1 became the library-index fix alone, at the owner's call, and 1.7.2 its hotfix.
   6. A new repository named `fluentfin-mpv` is never created, because it would break every redirect. The local folder
      `Dev\fluentfin-mpv` keeps its name, and only the git remote changes.
   - **Done 2026-11-22, right after 1.7.0:**
@@ -896,7 +897,7 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
     - the old page and download links answer 301;
     - the docs' links switched on main.
 
-    The owner's installed copy finding 1.7.0 is the real-world check. 1.7.2 switches the code's constants (the
+    The owner's installed copy finding 1.7.0 is the real-world check. 1.7.3 switches the code's constants (the
     updater's repository, the installer's links, the sources link); until then they follow the redirect.
 - **1.7.0's Sandbox test runs after publishing** (the owner, 2026-11-22: "sandbox test after publishing and opening
   test build"). The order: build, verify-package, Defender, publish, open the release build on the owner's desktop
