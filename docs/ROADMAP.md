@@ -1,6 +1,6 @@
 # Nixie roadmap
 
-Updated 2026-11-22, late (the owner: "review the whole roadmap to shorten the timeline", then "Yes, with P1": every release's tail is shorter, 1.8 no longer waits for TV 1.0 and gains collections P1, and the heavy streams follow the weekly usage reset. 1.7.2 released at 21:21; 1.7.3 running since 21:20; TV streams T, R, M and D running). These are
+Updated 2026-11-22, late (the owner: "review the whole roadmap to shorten the timeline", "Yes, with P1", then "Yes, on its own": collections P1 is its own release, 1.8, before the player, now 1.9, and Social, now 1.10; every release's tail is shorter, 1.8 no longer waits for TV 1.0 and gains collections P1, and the heavy streams follow the weekly usage reset. 1.7.2 released at 21:21; 1.7.3 running since 21:20; TV streams T, R, M and D running). These are
 the planned releases in order, with the backburner ideas placed where they fit. Version numbers past 1.6 are a guide.
 **Sizes are calendar time at the measured pace** (below): several streams in parallel, each building in hours, plus a
 fixed tail of about 2 to 2.5 hours per release (half a day before 2026-11-22). A date past today is an estimate, not a promise; usage, the 3 test slots
@@ -18,8 +18,9 @@ and the owner's own steps are the real limits.
 | 1.7.1 | Fixes | The library index on a big server: "Nixie is reading your libraries" took minutes on the owner's server (the owner, 2026-11-22: "figure out why and release 1.7.1 quick fix bc thats the whole thing"). The saved index shows at once and is read again behind it only when stale; a first read comes two pages of 1,000 at a time and shows its rows as it goes | **Released** 2026-11-22 15:27 (https://github.com/mbustos27/nixie/releases/tag/v1.7.1; 1 stream, a review, a bug hunt through a proxy slowing every request by 3-10 s, two re-reviews and three fix rounds). Measured on a test Jellyfin with 25,736 films, not yet on the owner's server. Its Sandbox upgrade test ran right after publishing, as 1.7.0's did, and passed (15:29-15:41); the owner's test copy is 1.7.1 now |
 | 1.7.2 | Hotfix | "Couldn't load your collections" on the owner's server with 1.7.1 (their test copy, 2026-11-22 20:09): the saved index from 1.7.0 lists titles twice, a genre-mix builder (1.6 code) throws on a repeat, and 1.7.1 builds Made by Nixie inside the page's load, so the whole page failed. 1.7.0 met the same throw after its read and quietly showed no Made by Nixie. The fix: a saved index keeps each title once, no builder throws on a repeat, one failing builder can't take the page down, and the error card no longer sends the user to the server | **Released** 2026-11-22 21:21 (https://github.com/mbustos27/nixie/releases/tag/v1.7.2; started 20:15; a review found no Blocker or Major). The version is 1.7.2, not 1.7.1.1: Windows Installer ignores a fourth number. Its Sandbox upgrade test ran right after publishing and passed (21:23-21:36); the owner's test copy is 1.7.2 |
 | 1.7.3 | Fixes | **Made by Nixie, fewer and better** (the owner: "too many, too generic"; "Yes, plan 1.7.3"): no directors, actors, studios, networks, decades, countries or genre pairs as collections; a title counted once across its libraries and copies; "Acclaimed, not seen yet" and "Under 90 minutes". The owner's answers ("Yes, all three"): the actors-and-directors pass stops, pins of those kinds go, the library preset strip keeps decades, genre mixes and countries. Plus the queued fixes: the rename's constants, Up next's count, the rows' 40 px jump, the reading line's total, the Collections page's arrival focus, Drive-in's logo crop, errors that blame the server only when it is the server's fault, "the server" wording everywhere, and the slow exit under load | **Running** (started 2026-11-22 21:20; 5 streams, `briefs\173-plan.md`). ETA: published 23 Nov early morning (about 04:00), midday at the latest if a fix round is needed |
-| 1.8 | Player and collections | A floating picture-in-picture player, chapter extras, a filled-in Report a problem, and **collections P1** (the owner, 2026-11-22: "Yes, with P1"): the lineup assembler, anchors with "Next in" and "More from", the weekly Spotlight, and titles with reason lines and award badges | **Planned, sooner** (`briefs\180-plan.md`; P1 sized in `briefs\173-plan.md`): no longer waits for TV 1.0. The 30-minute PiP spike on 23 Nov beside 1.7.3. Chapters and Report a problem may start on 23 Nov once 1.7.3 merges, if usage allows. PiP and P1 (about 21 h of P1 work, in four streams) start after the weekly reset (24 Nov, about 05:00). Each stream starts only after the 1.7.3 stream that owns its files merges: PiP touches `App.xaml.cs` and the main window (stream C), P1 builds on the collections work (M1, M2), Report a problem touches Settings (B). ETA: published 24 Nov evening |
-| 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes, Discover extras | **Research done** 2026-11-22 (`docs\reports\Nixie 1.9 social research.md`, local): an ordinary user can share a private playlist with chosen people on the same server since Jellyfin 10.9, no admin needed; a friend code covers users the server hides; 11 Diary findings are open (about 14.5 h); TVmaze, AniList and MDBList all allow a free app. **Decided 2026-11-22** (the owner, "Yes, all ten"; see "Decided for 1.9" below). About 64 h of agent work, 1 to 1.5 days in parallel streams after 1.8, in the new usage week: about 26–27 Nov |
+| 1.8 | Collections, better | **Collections P1, its own release** (the owner, 2026-11-22: "Yes, with P1", then "Yes, on its own"): the lineup assembler, anchors with "Next in" and "More from", the weekly Spotlight, and titles with reason lines and award badges, on top of 1.7.3's fewer, better collections | **Planned.** Its streams start once 1.7.3's collection streams (M1, M2) merge, the heavy part after the weekly reset (24 Nov, about 05:00), earlier if usage allows. About 21 h of work in four streams (`briefs\173-plan.md`). Published the moment its streams, review, bug hunt and build are done; nothing in 1.9 can hold it. ETA: 24 Nov afternoon |
+| 1.9 | Player | A floating picture-in-picture player, chapter extras, and a filled-in Report a problem (all decided 2026-11-22; planned as 1.8 until the collections release went first) | **Planned** (`briefs\180-plan.md`): the 30-minute PiP spike on 23 Nov beside 1.7.3; chapters and Report a problem may start on 23 Nov once 1.7.3 merges, if usage allows; PiP after the weekly reset. PiP waits for 1.7.3's stream C (`App.xaml.cs`, the main window), Report a problem for B (Settings). ETA: 24 Nov evening. If it is ready before the collections release, the two numbers swap |
+| 1.10 | Social | Friends and suggestions through the shared server, the Diary fixes, Discover extras | **Research done** 2026-11-22 (`docs\reports\Nixie 1.9 social research.md`, local): an ordinary user can share a private playlist with chosen people on the same server since Jellyfin 10.9, no admin needed; a friend code covers users the server hides; 11 Diary findings are open (about 14.5 h); TVmaze, AniList and MDBList all allow a free app. **Decided 2026-11-22** (the owner, "Yes, all ten"; see "Decided for Social, 1.10" below; planned as 1.9 until 2026-11-22). About 64 h of agent work, 1 to 1.5 days in parallel streams after the player release (1.9), in the new usage week: about 26–27 Nov |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike (about 1 day) in a scratch worktree, any day from the weekly reset (24 Nov); it conflicts with nothing but usage. If go, a rewrite of 1 to 2 weeks even at this pace |
 | TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). The fix round merged and went onto the owner's box 2026-11-22: Home about a minute and Movies about 10 s on their real server, a slow trailer, Quit blocked while Home loads, a 1080p limit on their 4K TV. **The second fix round is done** (2026-11-22, 3 streams and a bug hunt, timed on a real Jellyfin 12.4 with 25,736 films): Home's first row 2.0-2.2 s from a cold start, Movies about 1 s, the A-Z jump 1.3 s, search 0.6 s, a trailer 2.7-2.9 s, Quit at once while Home loads, and a 4K display's mode used for transcodes. Its APK (0.1.1-beta.1) went onto the owner's box 2026-11-22 20:19 for their re-check. **Home becomes Continue watching then Up next, on one page, and Collections gets its own place in the top bar** (the owner, 2026-11-22; stream T running, timed on the throwaway Jellyfin). The owner's 8-point check of it (2026-11-22): Home instant, Quit fine, Projectivy's row kept; Movies 7 s, A-Z 8 s and a trailer 6-10 s on their server, and a paused video "loaded 3 times" on return. **Running now, in parallel:** T (Home), R (resume loads once), M (Movies, A-Z and the trailer timed from the key press, through a proxy as slow as their server), D (the dev build's log straight to a file on the PC). The public repository's contents (README, issue forms, RELEASING) are prepared beside them; the Report a problem QR (decided 2026-11-22) once D merges, since both touch diagnostics. The merged build goes onto the box as soon as it exists, then the owner's re-check, the key and the push to `mbustos27/nixie-tv`. ETA: 23 Nov, 24 Nov if a fix round is needed |
 | Fire TV | Fire TV | The same TV app on Amazon's Fire OS devices (not Vega OS, which runs no Android apps), **sideloaded only** | **Planned, sooner** (`Dev\nixie-tv\docs\FIRE-TV-PLAN.md`): its compatibility work (about half a day, on Android TV emulators: no device, no Appstore, at the owner's call) starts on a branch once streams T, R and M merge, after the weekly reset, instead of after TV 1.0 ships. The same GitHub APK with its updater. What an emulator can't prove is listed as known gaps. ETA: 24–25 Nov |
@@ -35,12 +36,12 @@ and the owner's own steps are the real limits.
   - no TV emulator or TV build on the PC during a desktop release build (that load once pushed verify-package's
     exit check past 20 s).
 - **No serial gates between releases:**
-  - 1.8 doesn't wait for TV 1.0 (different repositories; they share only the 3 test slots and usage);
-  - 1.9's research runs now;
+  - 1.8 and 1.9 don't wait for TV 1.0 (different repositories; they share only the 3 test slots and usage);
+  - Social's research ran first (done 2026-11-22);
   - the TV repository's contents are prepared beside the TV streams;
   - Fire TV starts once T, R and M merge;
   - the Rust spike runs any day in a scratch worktree.
-- **Checked for overlaps:** a 1.8 stream starts only after the 1.7.3 stream that owns its files merges:
+- **Checked for overlaps:** a 1.8 or 1.9 stream starts only after the 1.7.3 stream that owns its files merges:
   - PiP waits for C (`App.xaml.cs`, the main window);
   - P1 waits for M1 and M2;
   - Report a problem waits for B (Settings).
@@ -48,8 +49,8 @@ and the owner's own steps are the real limits.
 - **The real limit is usage.** The weekly limit was at 71% on 2026-11-22 evening and resets 24 Nov at about 05:00. In
   order:
   1. the work in flight (1.7.3; TV's T, R, M and D);
-  2. cheap work beside it (the PiP spike, 1.9's research);
-  3. the heavy streams after the reset (1.8's PiP and P1, the Rust spike, Fire TV).
+  2. cheap work beside it (the PiP spike, Social's research);
+  3. the heavy streams after the reset (1.8's collections P1, 1.9's PiP, the Rust spike, Fire TV).
   At 99% everything stops until the reset.
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
@@ -630,7 +631,15 @@ its test fake, and Nixie's own message when it refuses.
   assuming 250) and box office (an unpaged top 10, updated Mondays) wrong, and left out Wikidata's limit of 30 failed
   queries a minute. Wikidata's old service runs through June 2027, with no shutdown date.
 
-## 1.8: Player (from the backburner)
+## 1.8: Collections, better (its own release)
+- **Collections P1** (the owner, 2026-11-22: "Yes, with P1", then "Yes, on its own"): from `docseportsSEFUL MADE BY
+  NIXIE COLLECTIONS.MD` (LOCAL), ON TOP OF 1.7.3'S P0 WORK. SIZES IN `BRIEFS{-PLAN.MD`: THE LINEUP ASSEMBLER (7 H),
+  ANCHORS WITH "NEXT IN" AND "MORE FROM" (6 H; THE PEOPLE PASS COMES BACK, THE TOP 3 BILLED ONLY), THE WEEKLY SPOTLIGHT
+  (3.5 H), AND TITLES WITH REASON LINES AND AWARD BADGES IN FOUR THEMES (4.5 H). P2 AND P3 AREN'T APPROVED.
+- **VERSION NUMBERS:** 1.8 IS THIS RELEASE, 1.9 THE PLAYER, 1.10 SOCIAL. THE UPDATER AND THE INSTALLER COMPARE
+  VERSIONS AS NUMBERS (`UPDATEVERSION.CS`), SO 1.10 COMES AFTER 1.9. IF THE PLAYER IS READY FIRST, THE NUMBERS SWAP.
+
+## 1.9: PLAYER (FROM THE BACKBURNER; PLANNED AS 1.8 UNTIL 2026-11-22)
 - **A floating picture-in-picture player** (the owner, 2026-11-22: "Yes, floating PiP"): a small always-on-top player
   window you can move and resize, while the rest of Nixie, or other apps, stays usable.
   - **The plan** (`briefs\180-plan.md`, 2026-11-22, from the player code):
@@ -671,7 +680,7 @@ its test fake, and Nixie's own message when it refuses.
   - **Checked once against GitHub's real form,** read only and never submitted (design rule 2): a fake can't show
     whether GitHub takes the values.
 
-## 1.9: Social (research first)
+## 1.10: Social (research done; planned as 1.9 until 2026-11-22)
 - **The journal's social side:** friends, and suggesting shows to each other, **through the shared server** (for
   example shared playlists), so nothing about what you watch leaves it. A Trakt sign-in for friends anywhere would send
   watch history off the PC and need an https redirect on a domain the project controls, so it's only an explicit
@@ -943,14 +952,14 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   - The user is not the server's admin (the owner, 2026-11-22: "always remember im not a jellyfin server admin"; added after 1.7.1's Collections card).
 
   Every TV and desktop brief carries them, and the bug hunts check them as class 12.
-- **A filled-in Report a problem in 1.8 and TV 1.0** (the owner, 2026-11-22: "yes"): the issue form opens filled in
+- **A filled-in Report a problem in the player release (1.9; 1.8 when decided) and TV 1.0** (the owner, 2026-11-22: "yes"): the issue form opens filled in
   with the app's and the server's versions, with an anonymised log to attach, and nothing sent by Nixie.
-- **P opens 1.8's mini player** (the owner, 2026-11-22, asked "Should P open 1.8's mini player?": "Yes, P"). Plain P is
+- **P opens the mini player (1.9; 1.8 when decided)** (the owner, 2026-11-22, asked "Should P open 1.8's mini player?": "Yes, P"). Plain P is
   free: the app's shortcut maps use P only as Shift+P (Previous, `MpvControlsViewModel.cs:1882`,
   `AppShortcuts.cs:191`), and the keys matrix has no P case.
-- **1.8's pop-out player is a floating picture-in-picture window** (the owner, 2026-11-22, asked whether it meant that:
-  "Yes, floating PiP"). It's a small always-on-top window you can move and resize, beside chapter extras. 1.8 starts
-  after 1.7 and TV 1.0.
+- **The pop-out player (1.9; 1.8 when decided) is a floating picture-in-picture window** (the owner, 2026-11-22, asked whether it meant that:
+  "Yes, floating PiP"). It's a small always-on-top window you can move and resize, beside chapter extras. It no longer waits for TV 1.0
+  (the shorter timeline).
 - **Fire TV is sideloaded only and tested by emulation** (the owner, 2026-11-21: "lets just emulate it i dont want to
   buy one", then "we'll do this sideload only on firetvb", meaning Fire TV). There's no Amazon Appstore build, listing,
   account or review, and no Fire TV device. Fire TV gets the same GitHub APK with its updater, tested on Android TV
@@ -977,17 +986,16 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
 
 - **TV Home (TV 1.0):** the owner, 2026-11-22: "the goal of home tv loading should be continue watching then up next and then that on one page basically and then an easier way to access collections". Home shows Continue watching, then Up next, on one screen and nothing else; Favorites, each library, Music and Live TV stay in the top bar, and **Collections** gets its own top-bar entry (every collection on the server, A to Z). Home asks the server for those two rows only. Stream T (`briefs	v-home-two-rows.md`, branch `tv-home-two-rows`).
 
-## Decided for 1.9 (2026-11-22, the owner: "Yes, all ten")
+## Decided for Social, 1.10 (2026-11-22, the owner: "Yes, all ten"; planned as 1.9 then)
 From `docs\reports\Nixie 1.9 social research.md` (local), each the recommended answer:
 1. **Suggestions** go through playlists between friends on the same server (a private playlist shared with chosen
    people works for an ordinary user since Jellyfin 10.9; no admin step).
 2. **Friends** come from the server's login-screen user list, plus friend codes for users the server hides.
 3. **One picks playlist per sender**, read-only for the friend.
-4. **No sharing of what you watch** in 1.9.
+4. **No sharing of what you watch** in this release.
 5. **Suggestions show** as a Home row plus a Friends page.
-6. **Discover extras: to confirm.** "Yes, all ten" means all three, TVmaze first (then AniList, then MDBList with the
-   user's own key, stripped from logged URLs). Asked about this choice alone in another thread, the owner answered
-   "TVmaze". If that means TVmaze only, choice 7 falls away and 1.9 is about 49 h instead of 64.
+6. **All three Discover extras,** TVmaze first, then AniList, then MDBList (the user's own key, stripped from logged
+   URLs). Asked once more after a one-word "TVmaze" in another thread, the owner answered "i want it all".
 7. **AniList's id map** comes from Kometa's MIT-licensed file, matched on this PC.
 8. **TVmaze:** one full schedule a day.
 9. **The Diary** is restyled in all four themes now (its 11 open findings).
@@ -997,7 +1005,7 @@ From `docs\reports\Nixie 1.9 social research.md` (local), each the recommended a
 - Skip repeated extras: one skip stream in 1.6 (the rules with their margin, then audio-matched intros once the spike
   passes); audio intros become 1.7's first item if 1.6 is full. Waits on the owner: chapters, a button or skip by
   itself, per show or per season, how Sunny behaves today and with online lookup on, and the fingerprint tool.
-- Friends through the server only, or a Trakt exception (1.9).
+- Friends through the server only, or a Trakt exception (Social, 1.10).
 - Rust: go or no-go after the spike (2.0).
 
 ## Every release
