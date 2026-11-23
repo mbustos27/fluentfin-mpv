@@ -41,10 +41,23 @@ A fix release: Made by Nixie, fewer and better.
 - **Closing Nixie no longer crashes,** from the player page (with or without mpv, playing or not), from Drive-in's
   Home, or anywhere else, on a busy PC too. Since 1.6.1 it crashed just after the window went, and Windows' error
   reporting made the close take 3 to 20 seconds; it now closes at once.
-- **Collections:** the keyboard lands on the first tile even on a busy PC, and the rows stay where they are when the
+- **Collections:** the keyboard lands on the first tile far more reliably, and the rows stay where they are when the
   reading line goes.
 - **Drive-in:** "All of Up next (N)" counts and opens Next Up, and says "Nothing up next" when it's empty.
 - **Libraries:** logo artwork on a library tile is cropped around its middle, not to its top strip.
+
+**Verified**
+
+- Five streams, each reviewed as it merged, and a bug hunt through a slow proxy against a test Jellyfin with 25,736
+  films in 23 libraries; every Major they found was fixed before the build, with every Minor.
+- Each fix has a test that fails without it. Off-screen in all four themes: the Collections page (34 checks), the
+  library filters, Settings, and closing from Home and the player page (each closes cleanly in well under a second).
+  The release build ran every test (5,597 core, 1,649 UI, 569 bridge) and the package's 141 checks, which now fail on
+  a crash at close; Microsoft Defender found nothing.
+- The upgrade, in Windows Sandbox as a standard user, right after publishing: 1.7.2 to 1.7.3 by the installer, 1.7.3's
+  own Restart to update, and 1.7.2's Restart to update installing 1.7.3, which opens again and says "Updated".
+
+**Known issue:** on a very busy PC the keyboard sometimes doesn't land on the Collections page's first tile.
 
 ## 1.7.2
 
