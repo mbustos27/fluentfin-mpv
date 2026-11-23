@@ -46,7 +46,7 @@ changed in each version is in [CHANGELOG.md](../CHANGELOG.md); every key is in [
 - **Collections made by Nixie** (1.6), from your libraries, on this PC (nothing is sent anywhere): franchises (two
   or more films TMDb puts in one collection), decades, directors, actors, studios and networks, genre mixes,
   keywords, countries, highly rated films you haven't watched, short films, shows you left over a month ago, and
-  Halloween or Christmas in season. They share one Collections page with your server's collections and playlists,
+  Halloween or Christmas in season. They share one Collections page with the server's collections and playlists,
   open like any other, and **Save as playlist** copies one to your server as a private playlist when you press it.
 - **Discover** (1.7): **Settings → Look up lists online**, each source off until you turn it on. Award winners and
   finer genres from Wikidata, franchise names from TMDb, and what's trending on Trakt and TMDb, each matched to your

@@ -400,6 +400,7 @@ public partial class App : Application
 			Core.ViewModels.SmartCollectionServices.Store = GetService<Core.SmartCollections.SmartCollectionStore>();
 			Core.ViewModels.SmartCollectionServices.Settings = GetService<ILocalSettingsService>();
 			GetService<Core.SmartCollections.NixieLibraryPresets>(); // listening to the index from the start: the presets are ready when a library opens
+			Core.SmartCollections.SmartCollectionCatalog.Log = GetService<Microsoft.Extensions.Logging.ILoggerFactory>().CreateLogger(typeof(Core.SmartCollections.SmartCollectionCatalog)); // 1.7.2: a kind that couldn't be made
 			// 1.7 keyless: the outside lists (each source's cache; what is stale is fetched, for the sources turned on). When they
 			// change, Home builds its Made by Nixie rows again
 			Core.Outside.OutsideLists.App = GetService<Core.Outside.OutsideLists>();

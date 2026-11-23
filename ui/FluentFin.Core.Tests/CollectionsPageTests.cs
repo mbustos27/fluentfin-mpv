@@ -107,7 +107,7 @@ public sealed class CollectionsPageTests : IDisposable
 		await vm.Reading;
 
 		Assert.True(vm.State.IsLoaded);
-		Assert.Equal(["Your server's collections", "Playlists", "Picks", "Franchises"], vm.Rows.Select(r => r.Title));
+		Assert.Equal(["The server's collections", "Playlists", "Picks", "Franchises"], vm.Rows.Select(r => r.Title));
 		var marvel = vm.Rows[0].Tiles[0];
 		Assert.Equal(("Marvel", "6 films · 3 left"), (marvel.Title, marvel.Detail));
 		Assert.Equal("Marvel, collection, 6 films, 3 left", marvel.AutomationName);
@@ -156,7 +156,7 @@ public sealed class CollectionsPageTests : IDisposable
 			Assert.NotSame(reading, await Task.WhenAny(reading, Task.Delay(300))); // not over while its rows are being made
 			release.SetResult();
 			await reading.WaitAsync(TimeSpan.FromSeconds(20));
-			Assert.Equal(["Your server's collections", "Picks", "Franchises"], await ui.Invoke(() => vm.Rows.Select(r => r.Title).ToList()));
+			Assert.Equal(["The server's collections", "Picks", "Franchises"], await ui.Invoke(() => vm.Rows.Select(r => r.Title).ToList()));
 			Assert.False(await ui.Invoke(() => vm.IsReadingIndex));
 		}
 		finally
@@ -220,7 +220,7 @@ public sealed class CollectionsPageTests : IDisposable
 		// the server's row at once, the page loaded (not a spinner for the minutes a 25,000-film library takes), "reading" said
 		Assert.True(vm.State.IsLoaded);
 		Assert.True(vm.IsReadingIndex);
-		Assert.Equal(["Your server's collections"], vm.Rows.Select(r => r.Title));
+		Assert.Equal(["The server's collections"], vm.Rows.Select(r => r.Title));
 
 		gate.SetResult();
 		await vm.Reading;
@@ -243,7 +243,7 @@ public sealed class CollectionsPageTests : IDisposable
 
 		Assert.True(vm.State.IsLoaded);
 		Assert.False(vm.IsReadingIndex);
-		Assert.Equal(["Your server's collections"], vm.Rows.Select(r => r.Title));
+		Assert.Equal(["The server's collections"], vm.Rows.Select(r => r.Title));
 	}
 
 	[Fact]

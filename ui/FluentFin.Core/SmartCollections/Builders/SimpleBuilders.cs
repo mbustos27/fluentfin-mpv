@@ -97,7 +97,7 @@ public sealed class GenreMixBuilder : ISmartCollectionBuilder
 				.GroupBy(x => x.Genre, StringComparer.OrdinalIgnoreCase)
 				.ToDictionary(g => g.First().Genre, g => g.Select(x => x.Entry.Id).ToHashSet(), StringComparer.OrdinalIgnoreCase);
 			var genres = byGenre.Keys.Where(g => byGenre[g].Count >= Least).OrderBy(g => g, StringComparer.OrdinalIgnoreCase).ToList();
-			var entries = group.ToDictionary(x => x.Id);
+			var entries = group.GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First()); // 1.7.2: a title listed twice is one (ToDictionary threw)
 			for (var i = 0; i < genres.Count; i++)
 			{
 				for (var j = i + 1; j < genres.Count; j++)

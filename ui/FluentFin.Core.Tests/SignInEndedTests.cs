@@ -261,7 +261,7 @@ public sealed class SignInEndedTests : IDisposable
 			Assert.True(state.SignInNeeded);
 			Assert.Equal("Your sign-in to Home server ended", state.Title);
 			Assert.Contains("no longer accepts this sign-in", state.Message);
-			Assert.DoesNotContain("Check that the server is running", state.Message);
+			Assert.DoesNotContain("Check this PC's connection", state.Message); // 1.7.2: the error card's words (they said "Check that the server is running")
 			Assert.Equal("Sign in again", state.RetryText);
 		}
 		finally
@@ -331,7 +331,7 @@ public sealed class SignInEndedTests : IDisposable
 	}
 
 	[Fact]
-	public async Task WhileTheSignInIsGood_AFailureStillSaysCheckTheServer_AndTryAgainLoadsAgain()
+	public async Task WhileTheSignInIsGood_AFailureStillSaysCheckThisPCsConnection_AndTryAgainLoadsAgain()
 	{
 		var loads = 0;
 		var state = new LoadState("this library");
@@ -342,7 +342,9 @@ public sealed class SignInEndedTests : IDisposable
 		});
 
 		Assert.False(state.SignInNeeded);
-		Assert.Contains("Check that the server is running", state.Message);
+		// 1.7.2 (the owner is not the server's admin): what the user can do on this PC, no step on the server
+		Assert.Contains("just now. Check this PC's connection, then select Try again.", state.Message);
+		Assert.DoesNotContain("server is running", state.Message);
 		Assert.Equal("Try again", state.RetryText);
 		await state.RetryCommand.ExecuteAsync(null);
 		Assert.Equal(2, loads);

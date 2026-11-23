@@ -1,4 +1,7 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using FluentFin.Core.SmartCollections.Builders;
+using Microsoft.Extensions.Logging;
 
 namespace FluentFin.Core.SmartCollections;
 
@@ -22,22 +25,49 @@ public static class SmartCollectionCatalog
 	/// </summary>
 	/// 1.7 keyless: with the outside lists of <paramref name="outside"/>, else the app's (<see cref="Outside.OutsideListsSnapshot.Shared"/>).
 	public static IReadOnlyList<SmartCollection> BuildAll(IndexSnapshot index, DateTimeOffset now, IReadOnlySet<string>? boxedFranchises = null, IReadOnlySet<SmartCollectionKind>? kindsOff = null,
-		Outside.OutsideListsSnapshot? outside = null)
+		Outside.OutsideListsSnapshot? outside = null) =>
+		BuildAll(Builders, index, now, boxedFranchises, kindsOff, outside, Log);
+
+	// 1.7.2: a kind whose builder throws is left out, and said once in the log (its kind and the exception's type: no titles);
+	// the other kinds still come. One builder's throw (a title listed twice) took Made by Nixie, and the Collections page, down
+	/// <summary>1.7.2: where a kind that couldn't be made is said (the app's log); nothing is said without one.</summary>
+	public static ILogger? Log { get; set; }
+
+	private static readonly ConditionalWeakTable<ILogger, ConcurrentDictionary<SmartCollectionKind, byte>> Said = new();
+
+	internal static IReadOnlyList<SmartCollection> BuildAll(IReadOnlyList<ISmartCollectionBuilder> builders, IndexSnapshot index, DateTimeOffset now, IReadOnlySet<string>? boxedFranchises,
+		IReadOnlySet<SmartCollectionKind>? kindsOff, Outside.OutsideListsSnapshot? outside, ILogger? log)
 	{
 		var context = new BuildContext(index, now, boxedFranchises ?? new HashSet<string>()) { Outside = outside ?? Outside.OutsideListsSnapshot.Shared };
 		var all = new List<SmartCollection>();
-		foreach (var builder in Builders)
+		foreach (var builder in builders)
 		{
 			if (kindsOff?.Contains(builder.Kind) == true)
 			{
 				continue;
 			}
 
-			all.AddRange(builder.Build(context).Where(x => x.ItemIds.Count > 0));
+			List<SmartCollection> made;
+			try
+			{
+				made = [.. builder.Build(context).Where(x => x.ItemIds.Count > 0)]; // all of it here: a builder's throw is part way through
+			}
+			catch (Exception ex)
+			{
+				if (log is not null && Said.GetOrCreateValue(log).TryAdd(builder.Kind, 0))
+				{
+					log.LogWarning("Made by Nixie: the {Kind} collections couldn't be made ({Error}); the other kinds still are", builder.Kind, ex.GetType().Name);
+				}
+
+				continue;
+			}
+
+			all.AddRange(made);
 		}
 
 		return all;
 	}
+	// end 1.7.2
 
 	/// <summary>
 	/// <see cref="BuildAll"/> off the calling thread: a 25,000-film index takes a moment to group, and a page must not wait

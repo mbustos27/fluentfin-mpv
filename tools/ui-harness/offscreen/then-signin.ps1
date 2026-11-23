@@ -6,7 +6,8 @@
      Home loads). Up to 1.5.0 every copy sent the PC's id, and that sign-in ended this one.
   2. "ended": a copy with this copy's device id signs in (as two copies did up to 1.5.0); this copy's session ends. R on Home
      shows "Your sign-in to <server> ended" below the top bar, with Sign in again clear of the search box; a library and a
-     search say the same in place of "Check that the server is running". On a QA server the administrator then also
+     search say the same in place of the error card's "Check this PC's connection" (1.7.2; it said "Check that the server
+     is running"). On a QA server the administrator then also
      removes the device (Dashboard > Devices), the other real trigger.
   3. "again": Sign in again reaches the server's sign-in page; Quick Connect, approved as on another device, opens Home
      again, loaded.
@@ -66,7 +67,7 @@ if ($siParts -contains 'ended') {
     $box = Find-Ui -Name 'Search' -Type 'Edit' -Contains
     $again = SiButton 'Sign in again'
     Capture-Page "signin-home-$siTag"
-    Check 'signin (BH-150-M2): R on Home says the sign-in ended (not "check that the server is running")' ([bool]$notice -and -not (SiText 'Check that the server is running')) "$(if ($notice) { $notice.Current.Name } else { 'none' })"
+    Check 'signin (BH-150-M2): R on Home says the sign-in ended (not "check this PC''s connection")' ([bool]$notice -and -not (SiText 'Check this PC''s connection')) "$(if ($notice) { $notice.Current.Name } else { 'none' })"
     Check 'signin (BH-150-M2): the notice is below the top bar''s tabs' ($notice -and $bar -and $notice.Current.BoundingRectangle.Top -ge $bar.Current.BoundingRectangle.Bottom) "notice $(& $siRect $notice); tabs $(& $siRect $bar)"
     Check 'signin (BH-150-M2): its button is Sign in again, shown and clear of the search box' ($again -and -not $again.Current.IsOffscreen -and (-not $box -or -not $again.Current.BoundingRectangle.IntersectsWith($box.Current.BoundingRectangle))) "Sign in again $(& $siRect $again); search $(& $siRect $box)"
     Check 'signin: no Try again beside it (it can never work)' (-not (SiButton 'Try again')) ''
@@ -76,7 +77,7 @@ if ($siParts -contains 'ended') {
     $lib = Wait-Until { SiText 'Your sign-in to' } -Seconds 20 -PollMs 200
     Start-Sleep -Milliseconds 800
     Capture-Page "signin-library-$siTag"
-    Check 'signin (BH-150-M2): a library says the sign-in ended, with Sign in again' ([bool]$lib -and [bool](SiButton 'Sign in again') -and -not (SiText 'Check that the server is running')) ''
+    Check 'signin (BH-150-M2): a library says the sign-in ended, with Sign in again' ([bool]$lib -and [bool](SiButton 'Sign in again') -and -not (SiText 'Check this PC''s connection')) ''
 
     # a search
     SrType 'matrix' -Slash
@@ -84,7 +85,7 @@ if ($siParts -contains 'ended') {
     $sr = Wait-Until { SiText 'Your sign-in to' } -Seconds 20 -PollMs 200
     Start-Sleep -Milliseconds 800
     Capture-Page "signin-search-$siTag"
-    Check 'signin (BH-150-M2): a search says the sign-in ended, with Sign in again' ([bool]$sr -and [bool](SiButton 'Sign in again') -and -not (SiText 'Check that the server is running')) ''
+    Check 'signin (BH-150-M2): a search says the sign-in ended, with Sign in again' ([bool]$sr -and [bool](SiButton 'Sign in again') -and -not (SiText 'Check this PC''s connection')) ''
     Key 0x1B
 
     if ($QaUpstream) {

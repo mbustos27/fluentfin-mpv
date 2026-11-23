@@ -6,8 +6,9 @@ below is low severity, an accepted cost of the contract, or not verified yet. Ea
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Fix queue (next fix release)
-For 1.7.2 now: 1.7.1 was the library index alone (the owner, 2026-11-22: "release 1.7.1 quick fix bc thats the whole
-thing"), so 1.7.0's queue below waits for 1.7.2, with 1.7.1's own (in its section) and the rename's code constants.
+For 1.7.3 now: 1.7.1 was the library index alone (the owner, 2026-11-22: "release 1.7.1 quick fix bc thats the whole
+thing"), and 1.7.2 the Collections page's hotfix alone (in its section), so 1.7.0's queue below waits for 1.7.3, with
+1.7.1's own (in its section) and the rename's code constants.
 1.6.1 took what it could of the queue it was given, and what is left of it stays below, after 1.7.0's own.
 
 From the 1.7.0 bug hunt (`docs\reports\Bug hunt 2026-11-22 (1.7.0).md`; no Blocker; its Major BH-170-M1 and q1, q4 were
@@ -148,6 +149,28 @@ runs post keys and cannot move the real cursor or hear sound).
   - Sign in again mid-playback on the owner's server: never tested by us (the server isn't ours, and ending a sign-in
     there is the owner's to do); not run, for the owner.
 
+## Nixie 1.7.2: the Collections page hotfix
+- **Fixed** (`wip/172-fix`): on the owner's server 1.7.1's Collections page showed "Couldn't load your collections" at
+  once, and Try again kept failing. The saved index, written by 1.7.0 (whose read kept repeats), listed one title twice;
+  1.7.1 shows the saved index at once, `GenreMixBuilder` threw on the repeated id (`ToDictionary`), and the page's load
+  awaited that build beside the server's sets, so the whole page failed. Home lost its Made by Nixie rows the same way.
+  Now the saved index keeps each title once as it is read (logged with a count only), no builder throws on a repeated
+  id (the genre mixes; a library's presets on a repeated library), a builder that throws leaves out only its own kind
+  (logged once per kind: the kind and the exception's type), and a Made by Nixie that can't be made never fails the
+  page: the server's collections and playlists show without it, as 1.7.0 showed them.
+- **Copy:** the error card says "{App} couldn't get it from {server} just now. Check this PC's connection, then select
+  Try again." (it said "Check that the server is running": the user may not be the server's admin), and the page's first
+  section is "The server's collections". The app's other "your server" strings, Settings' "Your change didn't reach …
+  Check that the server is running" and the sign-in page's "Can't reach …" are left for the 1.7.3 sweep, as is the
+  README's "Your server's collections and playlists".
+- **Verified:** `RepeatedTitleTests` (a format 2 and a format 1 saved index with a title twice: the page with the server's
+  sets, playlists and Made by Nixie, Home's rows, the title once), each failing with its fix reverted (all three reverted:
+  the page's error card, as on the owner's server); the Collections harness off-screen in Classic, 33 checks.
+- **The saved file keeps its repeat until the next read writes it** (a day, R, or a change the check confirms); every
+  read since 1.7.1 keeps each title once.
+- **Other builders still count a title listed twice** where they don't throw (decades, countries, highly rated, short
+  films, franchises' "two or more"), on an index built by hand; the app's own indexes no longer have repeats.
+
 ## Nixie 1.7.1: the library index on a big server
 - **Fixed** (stream I, `wip/171-index`): "Nixie is reading your libraries" took minutes. On the owner's server (this
   PC's 1.6.1 log: 34,001 titles in 23 libraries) the index took 1,198 s, one page after another (pages sized for 2 s
@@ -182,7 +205,7 @@ runs post keys and cannot move the real cursor or hear sound).
 - **The server's check counts every film and show of the user**, in libraries the index skips too (BH-171-m5): Jellyfin's
   `/Items` takes one `ParentId`, so asking per indexed library would be one request per library (23 on the owner's
   server) instead of one. A change in a skipped library reads the titles of the indexed ones.
-- **For 1.7.2** (the 1.7.1 bug hunt, `BH-171-*`):
+- **For 1.7.3** (the 1.7.1 bug hunt, `BH-171-*`; 1.7.2 was a hotfix alone):
   - m3: the people pass runs with the Actors and Directors kinds off, and nothing turns the index off.
   - m4: when the reading line goes, every row moves up 40 px under the keyboard focus and the pointer (four themes).
   - m5: a library that changes every day (most big servers) still means a titles read about once a start; read only
@@ -193,6 +216,12 @@ runs post keys and cannot move the real cursor or hear sound).
     collections tile; eed7bc12's code): `TakeArrivalFocus` tried 1 ms after the rows, before Loaded, and returned
     through its `!IsLoaded` branch with neither the Loaded retry nor the timer running after it. The log says "the
     section's first tile could not take the keyboard on arrival (it was on Button PART_BackButton)" with no retry.
+  - A title the server lists in two libraries counts under the first one only (1.7.1's read keeps each id once; 1.7.0
+    kept one entry per library). On the server the owner uses, 3,167 of 34,006 titles sit in more than one library, so
+    a library's own presets can miss titles it shares with another. An entry with all its libraries fixes it; whole-index
+    builders then count each title once.
+  - Drive-in's Libraries page: a library tile whose server artwork is a logo on a dark card shows only the card's top
+    strip (the crop is anchored to the top). Seen on the owner's 1.7.1 test copy; 1.7.1 didn't change that page.
 - **Fixed before the build (1.7.1 blocker, review and bug hunt, 2026-11-22):** the Collections page's first read was over
   before its Made by Nixie rows were in (a race a cold start lost; the rows came a moment later); rows that stayed kept
   their first page's collections through the whole read (M1); a read again was saved only after its people, so closing

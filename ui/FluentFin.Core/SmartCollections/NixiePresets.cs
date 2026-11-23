@@ -262,7 +262,7 @@ public sealed class NixieLibraryPresets
 					var boxed = (await _client.GetBoxSets())?.Items?.Select(x => IndexEntry.ProviderId(x, "Tmdb")).OfType<string>().ToHashSet() ?? [];
 					var off = CollectionSettings.KindsOff(_settings);
 					var now = SmartCollectionCatalog.Now();
-					var presets = snapshot.Libraries.ToDictionary(l => l.Id, l => NixiePresets.For(snapshot, l.Id, now, boxed, off));
+					var presets = snapshot.Libraries.DistinctBy(l => l.Id).ToDictionary(l => l.Id, l => NixiePresets.For(snapshot, l.Id, now, boxed, off)); // 1.7.2: a library listed twice is one
 					bool current;
 					lock (_lock)
 					{

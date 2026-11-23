@@ -785,7 +785,7 @@ public sealed class LibraryIndex : IDisposable
 				}
 			}
 
-			return new IndexSnapshot(saved.Libraries ?? [], saved.Entries ?? [], saved.SeriesPlays ?? [], saved.HasPeople,
+			return new IndexSnapshot(saved.Libraries ?? [], Once(saved.Entries ?? []), saved.SeriesPlays ?? [], saved.HasPeople,
 				DateTimeOffset.Parse(saved.ReadAt, System.Globalization.CultureInfo.InvariantCulture))
 			{ Check = saved.Check, PeopleDue = saved.PeopleDue, Key = key };
 		}
@@ -795,6 +795,31 @@ public sealed class LibraryIndex : IDisposable
 			return null;
 		}
 	}
+
+	// 1.7.2: a saved index keeps each title once (the first). 1.7.0 saved an index with a title twice (its read kept repeats),
+	// and a builder keyed on the id threw on it, which took the Collections page down; every read since keeps each title once
+	private List<IndexEntry> Once(List<IndexEntry> entries)
+	{
+		var seen = new HashSet<Guid>(entries.Count);
+		var once = entries.Where(x => seen.Add(x.Id)).ToList();
+		var repeated = entries.Count - once.Count;
+		if (repeated == 0)
+		{
+			return entries;
+		}
+
+		if (repeated == 1)
+		{
+			_logger.LogInformation("Library index: the saved one had 1 repeated title; each is kept once");
+		}
+		else
+		{
+			_logger.LogInformation("Library index: the saved one had {Repeated} repeated titles; each is kept once", repeated);
+		}
+
+		return once;
+	}
+	// end 1.7.2
 
 	public void Dispose()
 	{

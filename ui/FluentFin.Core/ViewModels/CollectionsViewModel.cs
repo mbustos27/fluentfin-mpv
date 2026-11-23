@@ -261,7 +261,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 
 	public static string SectionTitle(CollectionsSection section) => section switch
 	{
-		CollectionsSection.Server => "Your server's collections",
+		CollectionsSection.Server => "The server's collections", // 1.7.2: "the server" (the user may not be its admin)
 		CollectionsSection.Playlists => "Playlists",
 		CollectionsSection.MadeByNixie => "Made by Nixie",
 		CollectionsSection.Saved => "Saved",
@@ -310,7 +310,17 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 			ReadingText = Reading_(progress);
 		}
 
-		await ShowAsync(latest, ReferenceEquals(latest, current) ? building.Result : null);
+		try
+		{
+			await ShowAsync(latest, ReferenceEquals(latest, current) ? building.Result : null);
+		}
+		catch (Exception ex) when (latest is not null)
+		{
+			// 1.7.2: a failed Made by Nixie never fails the load: the server's rows without it (as 1.7.0 showed them)
+			MadeByNixieFailed(ex);
+			await ShowAsync(null);
+		}
+
 		_loaded = true;
 		// 1.7.1: how long the page took to its rows, and from what (durations and counts only)
 		_log.LogInformation("Collections: {Rows} rows in {Ms} ms ({From})", Rows.Count + (GridTiles.Count > 0 ? 1 : 0), _opened.ElapsedMilliseconds,
@@ -450,9 +460,30 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		return boxed.Count == 0 ? made : [.. made.Where(x => !(x.Kind == SmartCollectionKind.Franchise && x.TmdbCollection is { } id && boxed.Contains(id)))];
 	}
 
-	// 1.7.1: the saved index's collections, made as soon as it is read from this PC; none without one
-	private async Task<IReadOnlyList<SmartCollection>?> BuildSoon(Task<IndexSnapshot?> known) =>
-		await known is { } snapshot ? await Build(snapshot) : null;
+	// 1.7.1: the saved index's collections, made as soon as it is read from this PC; none without one. 1.7.2: none when they
+	// couldn't be made (the load awaits this beside the server's sets: a throw here failed the whole page)
+	private async Task<IReadOnlyList<SmartCollection>?> BuildSoon(Task<IndexSnapshot?> known)
+	{
+		if (await known is not { } snapshot)
+		{
+			return null;
+		}
+
+		try
+		{
+			return await Build(snapshot);
+		}
+		catch (Exception ex)
+		{
+			MadeByNixieFailed(ex);
+			return [];
+		}
+	}
+
+	// 1.7.2: Made by Nixie couldn't be made: the page shows the server's collections and playlists without it (the exception's
+	// type only)
+	private void MadeByNixieFailed(Exception ex) =>
+		_log.LogWarning("Collections: Made by Nixie couldn't be made ({Error}); the server's collections and playlists show without it", ex.GetType().Name);
 
 	// 1.7 trending: the lists change (a refresh came in, a source was turned on or off): the page shows its rows again
 	private Outside.TrendingCollections? _trending;

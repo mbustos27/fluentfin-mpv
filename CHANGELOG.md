@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.2
+
+A fix release: the Collections page.
+
+- **Collections show again on a server whose saved index from 1.7.0 listed a title twice.** There 1.7.1 showed
+  "Couldn't load your collections" at once, Try again kept failing, and Home had no Made by Nixie rows. Nixie now keeps
+  each title once when it reads the index it saved, and a title listed twice no longer stops the genre mixes. A kind of
+  collection Nixie can't make leaves out only that kind, and when Made by Nixie can't be made at all, the page still
+  shows the server's collections and playlists.
+- **The error card says what you can do on this PC:** "Nixie couldn't get it from <server> just now. Check this PC's
+  connection, then select Try again." It said to check that the server is running.
+- **The Collections page's first section is "The server's collections".**
+
 ## 1.7.1
 
 A fix release: Nixie's collections on a big server.
@@ -38,7 +51,7 @@ A fix release: Nixie's collections on a big server.
   105 s and the actors and directors after 213 s; a restart asked no library pages.
 - The upgrade, in Windows Sandbox as a standard user, right after publishing: 1.7.0 to 1.7.1 by the installer, 1.7.1's
   own Restart to update, and 1.7.0's Restart to update installing 1.7.1, which opens again and says "Updated".
-- Not checked on your own server: a first read with full metadata over the internet.
+- Not checked on the server you use: a first read with full metadata over the internet.
 
 **Known issues in 1.7.1** (queued for 1.7.2, with 1.7.0's)
 
