@@ -47,7 +47,10 @@ A basics release: what a friend found in one evening of using Nixie, and the way
   Quick Connect remembered across a restart and forgotten at Sign out; a saved server's "…" by click, Enter, Space,
   gamepad A and the menu key; the Collections page in Drive-in; and a close from Home in each theme, a film's page, and
   the player page with and without mpv, each in under half a second with no crash.
-- The test suites: 5,619 core and 1,695 UI tests.
+- The release build ran every test (5,633 core, 1,740 UI, 569 bridge) and the package's 142 checks; Microsoft Defender
+  found nothing.
+- The upgrade, in Windows Sandbox as a standard user, right after publishing: 1.7.3 to 1.7.4 by the installer, 1.7.4's
+  own Restart to update, and 1.7.3's Restart to update installing 1.7.4, which opens again and says "Updated".
 
 **For a hand check** (off-screen runs can't do these): a real mouse drag on a row opening nothing, a precision
 touchpad's sideways swipe, a real Shift+wheel, and a real tap on a saved server's "…".
