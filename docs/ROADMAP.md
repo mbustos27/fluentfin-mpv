@@ -634,14 +634,14 @@ its test fake, and Nixie's own message when it refuses.
   queries a minute. Wikidata's old service runs through June 2027, with no shutdown date.
 
 ## 1.8: Collections, better (its own release)
-- **Collections P1** (the owner, 2026-11-22: "Yes, with P1", then "Yes, on its own"): from `docseportsSEFUL MADE BY
-  NIXIE COLLECTIONS.MD` (LOCAL), ON TOP OF 1.7.3'S P0 WORK. SIZES IN `BRIEFS{-PLAN.MD`: THE LINEUP ASSEMBLER (7 H),
-  ANCHORS WITH "NEXT IN" AND "MORE FROM" (6 H; THE PEOPLE PASS COMES BACK, THE TOP 3 BILLED ONLY), THE WEEKLY SPOTLIGHT
-  (3.5 H), AND TITLES WITH REASON LINES AND AWARD BADGES IN FOUR THEMES (4.5 H). P2 AND P3 AREN'T APPROVED.
-- **VERSION NUMBERS:** 1.8 IS THIS RELEASE, 1.9 THE PLAYER, 1.10 SOCIAL. THE UPDATER AND THE INSTALLER COMPARE
-  VERSIONS AS NUMBERS (`UPDATEVERSION.CS`), SO 1.10 COMES AFTER 1.9. IF THE PLAYER IS READY FIRST, THE NUMBERS SWAP.
+- **Collections P1** (the owner, 2026-11-22: "Yes, with P1", then "Yes, on its own"): from `docs\reports\Useful Made by
+  Nixie collections.md` (local), on top of 1.7.3's P0 work. Sizes in `briefs\173-plan.md`: the lineup assembler (7 h),
+  anchors with "Next in" and "More from" (6 h; the people pass comes back, the top 3 billed only), the weekly Spotlight
+  (3.5 h), and titles with reason lines and award badges in four themes (4.5 h). P2 and P3 aren't approved.
+- **Version numbers:** 1.8 is this release, 1.9 the player, 1.10 Social. The updater and the installer compare
+  versions as numbers (`UpdateVersion.cs`), so 1.10 comes after 1.9. If the player is ready first, the numbers swap.
 
-## 1.9: PLAYER (FROM THE BACKBURNER; PLANNED AS 1.8 UNTIL 2026-11-22)
+## 1.9: Player (from the backburner; planned as 1.8 until 2026-11-22)
 - **A floating picture-in-picture player** (the owner, 2026-11-22: "Yes, floating PiP"): a small always-on-top player
   window you can move and resize, while the rest of Nixie, or other apps, stays usable.
   - **The plan** (`briefs\180-plan.md`, 2026-11-22, from the player code):
@@ -1003,7 +1003,7 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
 - **Save as playlist (1.6):** yes, as an explicit button that copies a Nixie collection to the server as the user's own
   playlist (an ordinary user can). Nothing is written to the server otherwise.
 
-- **TV Home (TV 1.0):** the owner, 2026-11-22: "the goal of home tv loading should be continue watching then up next and then that on one page basically and then an easier way to access collections". Home shows Continue watching, then Up next, on one screen and nothing else; Favorites, each library, Music and Live TV stay in the top bar, and **Collections** gets its own top-bar entry (every collection on the server, A to Z). Home asks the server for those two rows only. Stream T (`briefs	v-home-two-rows.md`, branch `tv-home-two-rows`).
+- **TV Home (TV 1.0):** the owner, 2026-11-22: "the goal of home tv loading should be continue watching then up next and then that on one page basically and then an easier way to access collections". Home shows Continue watching, then Up next, on one screen and nothing else; Favorites, each library, Music and Live TV stay in the top bar, and **Collections** gets its own top-bar entry (every collection on the server, A to Z). Home asks the server for those two rows only. Stream T (`briefs\tv-home-two-rows.md`, branch `tv-home-two-rows`).
 
 ## Decided for Social, 1.10 (2026-11-22, the owner: "Yes, all ten"; planned as 1.9 then)
 From `docs\reports\Nixie 1.9 social research.md` (local), each the recommended answer:
