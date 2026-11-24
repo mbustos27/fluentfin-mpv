@@ -812,6 +812,13 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
     to Home; it works from a cold start and while open; Settings keeps its parental PIN and nothing skips sign-in. Static
     app shortcuts (Resume, Search, Favorites, Movies, Shows) so mappers and launchers can pick them from a list. Until
     then the buttons open plain Nixie (box setup: `Dev\tv-research\docs\LAUNCHER-SETUP.md`).
+  - **Media keys in the video player** (found 2026-11-23 on the owner's box: "CH+/CH− did nothing"; not scheduled,
+    after TV 1.0 unless the owner moves it). The owner maps the remote's channel buttons to fast-forward and rewind
+    with tvQuickActions, which sends media keys. While Nixie plays a video, Android reports "Media button session is
+    null": the video player has no active `MediaSession` (only `music/MusicService.kt` has one), so play/pause,
+    fast-forward, rewind, next and previous from any remote, phone or mapper go nowhere. Plan: a Media3
+    `MediaSession` for the video player while it plays (released on exit), with fast-forward/rewind mapped to the
+    player's own seek steps, plus a check that a media key reaches it.
   - **Fire TV, planned 2026-11-21** (the owner: "also plan amazon fire tv release"; `Dev\nixie-tv\docs\FIRE-TV-PLAN.md`):
     - **One codebase and one repository.** Fire OS 7, 8, 14 and 16 only; Amazon's Vega OS sticks run no APKs and allow
       no sideloading, and Amazon says future sticks will be Vega.
