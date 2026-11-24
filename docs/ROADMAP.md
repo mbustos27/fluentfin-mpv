@@ -803,6 +803,15 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
     QR beside the log-download QR. It opens the TV repository's issue form, filled in with the device model, Android
     version, app version, theme and server version, and never a server address. `mbustos27/nixie-tv` gets its own issue
     forms when it's created at 1.0.
+  - **Open a section from outside: remote buttons and launchers** (the owner, 2026-11-23: "lets put that on the
+    roadmap"; not scheduled, after TV 1.0 unless the owner moves it). Today another app can only open Nixie's Home or one
+    title (`OPEN_TITLE`, used by the Watch Next cards). The owner maps the onn remote's spare buttons with tvQuickActions
+    Pro and wants them to land in Nixie sections. Plan: an `OPEN_SECTION` action on the exported `MainActivity` with a
+    `section` extra for the existing top-bar targets (home, search, movies, shows, libraries, favorites, collections,
+    livetv, settings) plus **resume** (play the first Continue watching item, Home when there is none); unknown values go
+    to Home; it works from a cold start and while open; Settings keeps its parental PIN and nothing skips sign-in. Static
+    app shortcuts (Resume, Search, Favorites, Movies, Shows) so mappers and launchers can pick them from a list. Until
+    then the buttons open plain Nixie (box setup: `Dev\tv-research\docs\LAUNCHER-SETUP.md`).
   - **Fire TV, planned 2026-11-21** (the owner: "also plan amazon fire tv release"; `Dev\nixie-tv\docs\FIRE-TV-PLAN.md`):
     - **One codebase and one repository.** Fire OS 7, 8, 14 and 16 only; Amazon's Vega OS sticks run no APKs and allow
       no sideloading, and Amazon says future sticks will be Vega.
