@@ -95,6 +95,15 @@
                     PasswordChanged="PasswordBox_PasswordChanged" />
                 <CheckBox Content="Remember me" IsChecked="{x:Bind ViewModel.KeepMeLoggedIn, Mode=TwoWay}" />
 
+                <!--  174-signin: a line the page opens with that is no sign-in error (Switch user: the saved sign-in stayed on this PC)  -->
+                <InfoBar
+                    x:Name="NoticeBar"
+                    CornerRadius="{StaticResource GlassCardCornerRadius}"
+                    IsClosable="False"
+                    IsOpen="{x:Bind ViewModel.HasNotice, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.Notice, Mode=OneWay}"
+                    Severity="Warning" />
+
                 <!--  why the last attempt did not work and what to do (InfoBar announces itself when it opens)  -->
                 <InfoBar
                     x:Name="ErrorBar"

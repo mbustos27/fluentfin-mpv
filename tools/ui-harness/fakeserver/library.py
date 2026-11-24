@@ -607,8 +607,34 @@ class Library:
             self._series(vid, "Shows", self.BIG_SERIES_NAME, self.now - datetime.timedelta(days=3000), 2010, "big_series",
                          seasons=seasons, episodes=episodes, episode_name=unique)
             self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
+            # Nixie 1.7.4 (the rows stream): the series and its seasons have a long cast of long names, so Cast & crew runs
+            # past the window's edge at 2560 wide and a name must wrap or trim within its photo
+            sid = _id("series", "Shows", self.BIG_SERIES_NAME)
+            cast = self._long_cast()
+            for item_id in [sid] + list(self.children[sid]):
+                self.items[item_id]["people"] = [dict(p) for p in cast]
         finally:
             self.rng = saved
+
+    # Nixie 1.7.4: made-up names of the lengths a real server has ("Thomas McDonell" and "Christopher Larkin" ran together
+    # under their photos in 1.7.x); the first two as long as those (one line each, wider than the photo), the rest longer,
+    # two with no space to break at
+    LONG_CAST = ["Thomas McDowell", "Christopher Lorkin", "Maximiliano Bartholomew-Featherstone",
+                 "Anneliese van der Westhuizen", "Oluwaseun Adebayo-Richardson", "Siobhan Fitzgerald-Donnellan",
+                 "Jean-Baptiste Delacroix-Moreau", "Wilhelmina Hargreaves-Pemberton", "Bartholomew Fairweather",
+                 "Konstantinos Papadopoulos", "Guadalupe Hernandez de la Fuente", "Alexandria Montgomery-Whitfield",
+                 "Rhiannon Llewellyn-Bowen", "Sebastianvanderbiltashworth", "Priyanka Venkataraman",
+                 "Kalanikupuapaikalaninui"]
+    LONG_ROLES = ["Commander Evangeline Ashcroft-Reyes", "Dr. Montgomery", "The Lighthouse Keeper's Apprentice"]
+
+    def _long_cast(self):
+        cast = []
+        for i, name in enumerate(self.LONG_CAST):
+            person = self._person_named(name)
+            kind = "Actor" if i < 13 else ["Director", "Writer", "Producer"][i - 13]
+            cast.append({"Name": name, "Id": person["Id"], "Type": kind, "PrimaryImageTag": person["PrimaryImageTag"],
+                         "Role": self.LONG_ROLES[i % len(self.LONG_ROLES)] if kind == "Actor" else ""})
+        return cast
 
     def big_series_fixture(self):
         """The big series for GET /__harness/fixture: its seasons in order, each with its episodes' ids and names; None
@@ -620,7 +646,10 @@ class Library:
                 "seasons": [{"id": s, "name": self.items[s]["Name"], "index": self.items[s]["index"],
                              "episodes": [{"id": e, "name": self.items[e]["Name"], "index": self.items[e]["index"]}
                                           for e in self.children[s]]}
-                            for s in self.children[sid]]}
+                            for s in self.children[sid]],
+                # Nixie 1.7.4: its seasons' cast in order (the long names), with the role the app shows under each
+                "cast": [{"name": p["Name"], "role": p["Role"] or ("" if p["Type"] == "Actor" else p["Type"])}
+                         for p in self.items[sid]["people"]]}
 
     def _series(self, vid, view_name, name, created, year, showcase, seasons=None, episodes=None, episode_name=None):
         rng = self.rng

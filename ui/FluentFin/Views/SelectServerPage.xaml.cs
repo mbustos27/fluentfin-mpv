@@ -20,9 +20,33 @@ public sealed partial class SelectServerPage : Page
 		// 1.1.4 (states): the keyboard starts in the address box (the saved servers are one Shift+Tab away)
 		Loaded += async (_, _) =>
 		{
+			SavedServersView.ItemsSource ??= ViewModel.Servers; // 174-signin: back on a page that was shown before (Unloaded below)
 			TxtUrl.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+			SayOpeningLine();
 			await ViewModel.OnShown();
 		};
+
+		// 174-signin: the list lets go of the saved servers when the page goes. The collection is the settings' and outlives
+		// the page: a server page left for the sign-in page kept listening, and Remove on the next one threw in that old
+		// list's handler (COMException, "Unspecified error") after the file was saved and before this page's list heard of
+		// it, so the removed server stayed on the list.
+		Unloaded += (_, _) => SavedServersView.ItemsSource = null;
+	}
+
+	/// <summary>
+	/// 174-sessions (BS-M3): the line the page opens with (why the start didn't sign in) is said to Narrator too: an InfoBar
+	/// open from the start announces nothing, and the keyboard is in the address box.
+	/// </summary>
+	private void SayOpeningLine()
+	{
+		if (!ViewModel.HasError)
+		{
+			return;
+		}
+
+		var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(ErrorBar) ?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(ErrorBar);
+		peer?.RaiseNotificationEvent(Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationKind.Other,
+			Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationProcessing.ImportantMostRecent, ViewModel.ErrorMessage, "NixieServerPageLine");
 	}
 
 	private void InputFieldKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
@@ -82,6 +106,15 @@ public sealed partial class SelectServerPage : Page
 			}
 		});
 	}
+
+	/// <summary>
+	/// 174-signin (a friend's report): a press on a row's More options opens its menu and nothing else. The button takes
+	/// the press as its click, but not the tap that comes with it, and the row (ItemContainer) invokes on a tap: the
+	/// server's sign-in opened over the menu, so Remove could not be pressed. A double click the same.
+	/// </summary>
+	private void MoreOptions_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e) => e.Handled = true;
+
+	private void MoreOptions_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e) => e.Handled = true;
 
 	private void ServerSelected(ItemsView sender, ItemsViewItemInvokedEventArgs args)
 	{

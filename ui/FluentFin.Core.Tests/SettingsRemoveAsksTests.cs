@@ -82,6 +82,37 @@ public sealed class SettingsRemoveAsksTests : IDisposable
 		Assert.Empty(_servers);
 	}
 
+	/// <summary>
+	/// 174-sessions (BS-m2): Remove server on the server signed in to signs out of it (Nixie stayed signed in to a server it no
+	/// longer listed, and the next start showed none), and the prompt says so first. Another server's Remove signs nobody out.
+	/// </summary>
+	[Theory]
+	[InlineData(true, true)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	public async Task RemoveServer_TheOneSignedInTo_SignsOutOfItFirst(bool inUse, bool yes)
+	{
+		var titleBar = new Mock<ITitleBarViewModel>();
+		titleBar.SetupGet(x => x.User).Returns(new Jellyfin.Sdk.Generated.Models.UserDto { Name = "alice" });
+		// the session's server as the start finds it: the list's own, or (signed in through the server page) one with its id
+		titleBar.SetupGet(x => x.CurrentServer).Returns(inUse ? new SavedServer { Id = _server.Id, DisplayName = "Living room" } : new SavedServer { Id = "another" });
+		titleBar.Setup(x => x.Logout()).Returns(Task.CompletedTask);
+		var settings = new Mock<ISettings>();
+		settings.SetupGet(x => x.Servers).Returns(_servers);
+		var backend = new Mock<IMpvBackend>();
+		backend.SetupGet(x => x.StatusChanged).Returns(Observable.Never<MpvBackendStatus>());
+		var vm = new SettingsViewModel(settings.Object, backend.Object, Mock.Of<IJellyfinClient>(), _cache, titleBar: titleBar.Object);
+		ConfirmPrompt? asked = null;
+		vm.Confirm = prompt => { asked = prompt; return Task.FromResult(yes); };
+
+		await vm.DeleteServerCommand.ExecuteAsync(_server);
+
+		Assert.NotNull(asked);
+		Assert.Equal(inUse, asked.Message.StartsWith($"{AppIdentity.Name} signs you out of it, then forgets this server and its 2 saved sign-ins", StringComparison.Ordinal));
+		titleBar.Verify(x => x.Logout(), inUse && yes ? Times.Once() : Times.Never());
+		Assert.Equal(yes ? 0 : 1, _servers.Count);
+	}
+
 	[Fact]
 	public async Task RemoveUser_AsksNamingTheUserAndTheServer_AndANo_KeepsThem()
 	{
@@ -103,6 +134,25 @@ public sealed class SettingsRemoveAsksTests : IDisposable
 		Assert.True(await _settings.RemoveSavedUser(_server, _server.Users[0]));
 
 		Assert.Equal(["bob"], _server.Users.Select(x => x.Username));
+	}
+
+	/// <summary>
+	/// 174-sessions (the review's m3): a removed saved sign-in takes its name too: the server's sign-in page opened with it,
+	/// "Remember me" ticked. Another user's name stays.
+	/// </summary>
+	[Fact]
+	public async Task RemoveUser_ForgetsItsName_ForTheSignInPage()
+	{
+		Answer(yes: true);
+		_server.LastUser = "Alice";
+
+		Assert.True(await _settings.RemoveSavedUser(_server, _server.Users[1])); // bob
+		Assert.Equal("Alice", _server.LastUser);
+		Assert.True(await _settings.RemoveSavedUser(_server, _server.Users[0])); // alice
+
+		Assert.Equal("", _server.LastUser);
+		Assert.Equal("", SavedSignIns.UsernameFor(_server));
+		Assert.False(SavedSignIns.WasRemembered(_server, "alice"));
 	}
 
 	[Fact]

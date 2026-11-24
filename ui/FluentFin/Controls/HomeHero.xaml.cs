@@ -345,11 +345,15 @@ public sealed partial class HomeHero : UserControl
 /// <summary>1.2.0: whether a click on the hero landed on one of its controls (a button: Play, More info, the dots, pause, the arrows).</summary>
 internal static class HeroClick
 {
-	public static bool OnAControl(DependencyObject? source, DependencyObject hero)
+	public static bool OnAControl(DependencyObject? source, DependencyObject hero) =>
+		OnAControl(source, hero, VisualTreeHelper.GetParent, node => node is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase);
+
+	/// <summary>174-sessions (BS-m4): the walk on any tree (the tests walk one of their own: a real pointer's click can't be made off-screen).</summary>
+	internal static bool OnAControl<T>(T? source, T hero, Func<T, T?> parent, Func<T, bool> isButton) where T : class
 	{
-		for (var node = source; node is not null && !ReferenceEquals(node, hero); node = VisualTreeHelper.GetParent(node))
+		for (var node = source; node is not null && !ReferenceEquals(node, hero); node = parent(node))
 		{
-			if (node is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase)
+			if (isButton(node))
 			{
 				return true;
 			}

@@ -23,7 +23,8 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   instead of the generated one: its films, series and collections with their own files for pictures, nothing generated;
   GET /__harness/showcase lists its credits and problems. Off by default.
 - FAKESERVER_BIG_SERIES=<seasons>x<episodes> (e.g. 10x20): a second showcase series in Shows, "A Tide of Seasons", every
-  episode named uniquely in it; the fixture's "big_series" lists its seasons and episodes (null when off).
+  episode named uniquely in it; the fixture's "big_series" lists its seasons and episodes (null when off). Nixie 1.7.4: the
+  series and its seasons have a cast of 16 with long names (library.py's LONG_CAST; the fixture's "big_series"."cast").
 - Segments: POST /__harness/segments {"outro_seconds": N}: the end credits (Outro) run the last N seconds (40).
 - Streams: POST /__harness/streams {"encode_subtitle": true} serves the last embedded subtitle as burnt in
   ("Encode"), so picking it renegotiates the stream (a track change that can fail, with a PlaybackInfo rule).

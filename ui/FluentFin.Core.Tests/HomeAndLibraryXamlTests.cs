@@ -181,14 +181,19 @@ public sealed class HomeAndLibraryXamlTests
 		Assert.Equal("", (string?)FindByName(doc, "ScrollLeftBtn").Descendants(Presentation + "FontIcon").Single().Attribute("Glyph"));
 		Assert.Equal("", (string?)FindByName(doc, "ScrollRightBtn").Descendants(Presentation + "FontIcon").Single().Attribute("Glyph"));
 		Assert.DoesNotContain(doc.Descendants(Presentation + "FontIcon"), i => (string?)i.Attribute("Glyph") is "" or "");
-		// still a real target (WCAG 2.5.8: at least 24 px); quiet is half strength, never hidden. The keyboard moves the row
-		// with its own keys (Left, Right, Home, End), as in 1.1.3: the arrows are pointer targets
+		// still a real target (WCAG 2.5.8: at least 24 px). The keyboard moves the row with its own keys (Left, Right, Home,
+		// End), as in 1.1.3: the arrows are pointer targets. Nixie 1.7.4: at the row's ends, shown while the pointer is over the
+		// row, each only while the row goes further its way
 		foreach (var arrow in new[] { FindByName(doc, "ScrollLeftBtn"), FindByName(doc, "ScrollRightBtn") })
 		{
 			Assert.True(double.Parse((string)arrow.Attribute("Width")!) >= 24 && double.Parse((string)arrow.Attribute("Height")!) >= 24);
 		}
-		Assert.Contains("ScrollLeftBtn.Opacity = ScrollRightBtn.Opacity = RowPaging.ArrowOpacity(_pointerOver, _focusInside)",
-			File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/ShelfRow.xaml.cs")));
+		Assert.Contains("RowPaging.EdgeArrows(_pointerOver, _scroller.HorizontalOffset, _scroller.ExtentWidth, _scroller.ViewportWidth)",
+			File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/EdgeScroller.cs")));
+		// one behaviour for every row and strip (the brief: "not a copy per page")
+		Assert.Contains("new EdgeScroller(RowRoot, Scroller, List, ScrollLeftBtn, ScrollRightBtn,", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/ShelfRow.xaml.cs")));
+		Assert.Contains("EdgeScroller.Wrap(", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Themes/Cinematic/Controls/CinematicTabStrip.cs")));
+		Assert.Contains("EdgeScroller.Wrap(", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/LibraryPresetStrip.xaml.cs")));
 	}
 
 	[Fact]

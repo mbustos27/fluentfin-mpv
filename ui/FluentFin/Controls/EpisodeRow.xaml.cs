@@ -298,11 +298,15 @@ internal enum RowClickAction
 /// <summary>1.2.0: a click on the row plays, unless it was on one of the row's buttons or on the title (the link to the page).</summary>
 internal static class RowClick
 {
-	public static RowClickAction For(DependencyObject? source, DependencyObject row, DependencyObject title)
+	public static RowClickAction For(DependencyObject? source, DependencyObject row, DependencyObject title) =>
+		For(source, row, title, VisualTreeHelper.GetParent, node => node is ButtonBase);
+
+	/// <summary>174-sessions (BS-m4): the walk on any tree (the tests walk one of their own: a real pointer's click can't be made off-screen).</summary>
+	internal static RowClickAction For<T>(T? source, T row, T title, Func<T, T?> parent, Func<T, bool> isButton) where T : class
 	{
-		for (var node = source; node is not null && !ReferenceEquals(node, row); node = VisualTreeHelper.GetParent(node))
+		for (var node = source; node is not null && !ReferenceEquals(node, row); node = parent(node))
 		{
-			if (node is ButtonBase || ReferenceEquals(node, title))
+			if (isButton(node) || ReferenceEquals(node, title))
 			{
 				return RowClickAction.None;
 			}

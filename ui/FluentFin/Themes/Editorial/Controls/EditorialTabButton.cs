@@ -177,24 +177,20 @@ public sealed partial class EditorialTabList : ContentControl
 	private void OnKeyDown(object sender, KeyRoutedEventArgs e)
 	{
 		var tabs = Tabs();
-		var at = tabs.FindIndex(t => ReferenceEquals(t, e.OriginalSource));
+		// Nixie 1.7.4: the tab the key came from, or holds it (the source may be a part of the tab)
+		var at = -1;
+		for (var node = e.OriginalSource as DependencyObject; node is not null && !ReferenceEquals(node, this) && at < 0; node = VisualTreeHelper.GetParent(node))
+		{
+			at = tabs.FindIndex(t => ReferenceEquals(t, node));
+		}
+
 		if (at < 0)
 		{
 			return;
 		}
 
 		var horizontal = Orientation == Orientation.Horizontal;
-		int? target = e.Key switch
-		{
-			VirtualKey.Left when horizontal => at - 1,
-			VirtualKey.Right when horizontal => at + 1,
-			VirtualKey.Up when !horizontal => at - 1,
-			VirtualKey.Down when !horizontal => at + 1,
-			VirtualKey.Home => 0,
-			VirtualKey.End => tabs.Count - 1,
-			_ => null,
-		};
-		if (target is not { } next)
+		if (KeyTarget(e.Key, at, [.. tabs.Select(t => t.IsEnabled)], horizontal) is not { } next)
 		{
 			return;
 		}
@@ -203,8 +199,70 @@ public sealed partial class EditorialTabList : ContentControl
 		if (next >= 0 && next < tabs.Count && next != at)
 		{
 			tabs[next].Focus(FocusState.Keyboard);
-			tabs[next].StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+			// Nixie 1.7.4 (the rows gate: "End doesn't reach the last genre"): the first and the last tab take the strip to its
+			// very start or end, so the last clears what lies over the strip's end (the Library's fade and its chevron, which
+			// the strip's trailing room is for); the others are just brought into view
+			// (a strip's own sideways scroller only: a vertical strip, or one in the page's scroller, is brought into view)
+			if (horizontal && FindScroller() is { HorizontalScrollMode: not ScrollMode.Disabled, ScrollableWidth: > 0 } scroller
+				&& EdgeOffset(next, tabs.Count, scroller.ScrollableWidth) is { } edge)
+			{
+				scroller.ChangeView(edge, null, null, true);
+			}
+			else
+			{
+				tabs[next].StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+			}
 		}
+	}
+
+	/// <summary>
+	/// Where a key takes the keyboard in a strip of tabs (<paramref name="enabled"/>: which take it): one along, no wrap; Home
+	/// and End to the first and the last that can take it (Nixie 1.7.4: End went to the last even when it was off, and so
+	/// nowhere). Null for a key the strip leaves alone.
+	/// </summary>
+	internal static int? KeyTarget(VirtualKey key, int at, IReadOnlyList<bool> enabled, bool horizontal)
+	{
+		var count = enabled.Count;
+		int Step(int from, int by)
+		{
+			for (var i = from + by; i >= 0 && i < count; i += by)
+			{
+				if (enabled[i])
+				{
+					return i;
+				}
+			}
+
+			return from;
+		}
+
+		return key switch
+		{
+			VirtualKey.Left when horizontal => Step(at, -1),
+			VirtualKey.Right when horizontal => Step(at, 1),
+			VirtualKey.Up when !horizontal => Step(at, -1),
+			VirtualKey.Down when !horizontal => Step(at, 1),
+			VirtualKey.Home => Step(-1, 1) is var first && first >= 0 ? first : at,
+			VirtualKey.End => Step(count, -1) is var last && last < count ? last : at,
+			_ => null,
+		};
+	}
+
+	/// <summary>Nixie 1.7.4: the strip's offset for tab <paramref name="target"/> of <paramref name="count"/>: its start for the first, its end for the last, null otherwise.</summary>
+	internal static double? EdgeOffset(int target, int count, double scrollable) =>
+		count <= 0 ? null : target == 0 ? 0 : target == count - 1 ? Math.Max(0, scrollable) : null;
+
+	private ScrollViewer? FindScroller()
+	{
+		for (var node = VisualTreeHelper.GetParent(this); node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is ScrollViewer viewer)
+			{
+				return viewer;
+			}
+		}
+
+		return null;
 	}
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new EditorialTabListAutomationPeer(this);

@@ -13,10 +13,12 @@
         Seaglass scrolling: the one row control of every shelf (Home's Continue Watching, Next Up and Recently Added, the
         item pages' rows). One axis per input: the plain wheel scrolls the page (the row routes it, WinUI's horizontal
         scroll viewer would swallow it: microsoft-ui-xaml #10172), the tilt wheel, Shift+wheel and a swipe move the row.
-        Always-visible arrows and "See all" in the header; one Tab stop (TabFocusNavigation Once), Left/Right/Home/End along
-        the row, Up/Down between rows; the title is a heading and the row a list for Narrator. Seaglass 1.1.4 (layout audit,
-        item 2): the arrows are plain chevrons (the filled triangles read
-        as Play), quiet (half strength) until the pointer is over the row or the keyboard is in it, never hidden.
+        "See all" in the header; one Tab stop (TabFocusNavigation Once), Left/Right/Home/End along the row, Up/Down between
+        rows; the title is a heading and the row a list for Narrator. Nixie 1.7.4 (the rows stream: a season's episodes past
+        the window's edge could not be reached, and its row had no arrows because the theme hid the header they were in): the
+        arrows are at the row's ends, over its cards, in every theme. They show while the pointer is over the row, each only
+        while the row goes further its way; the keys move the row, so they are no Tab stop. The plain wheel scrolls the
+        page while the page can move, else the row; a mouse drag moves the row too (RowPaging, RowDrag).
     -->
     <Grid x:Name="RowRoot" RowSpacing="8">
         <Grid.RowDefinitions>
@@ -24,11 +26,13 @@
             <RowDefinition />
         </Grid.RowDefinitions>
 
-        <Grid Margin="0,0,12,0" ColumnSpacing="8">
+        <!--  1.7.4: as tall as with the arrows that were here (44), so no row moves  -->
+        <Grid
+            MinHeight="44"
+            Margin="0,0,12,0"
+            ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
@@ -56,15 +60,42 @@
                 Style="{StaticResource NixieLinkButtonStyle}"
                 Visibility="Collapsed" />
 
+        </Grid>
+
+        <Grid x:Name="RowArea" Grid.Row="1">
+            <ScrollViewer
+                x:Name="Scroller"
+                HorizontalScrollBarVisibility="Hidden"
+                HorizontalScrollMode="Enabled"
+                IsTabStop="False"
+                TabFocusNavigation="Once"
+                VerticalScrollBarVisibility="Disabled"
+                VerticalScrollMode="Disabled">
+                <local:RowList x:Name="List" IsTabStop="False">
+                    <ItemsRepeater
+                        x:Name="Repeater"
+                        ItemTemplate="{x:Bind ItemTemplate, Mode=OneWay}"
+                        ItemsSource="{x:Bind ItemsSource, Mode=OneWay}">
+                        <ItemsRepeater.Layout>
+                            <StackLayout Orientation="Horizontal" Spacing="0" />
+                        </ItemsRepeater.Layout>
+                    </ItemsRepeater>
+                </local:RowList>
+            </ScrollViewer>
+
+            <!--
+                Nixie 1.7.4: the row's ends, over its cards: shown while the pointer is over the row, each only while the row goes
+                further its way; no Tab stop (Left, Right, Home and End move the row). EdgeScroller shows them and pages the row
+            -->
             <Button
                 x:Name="ScrollLeftBtn"
-                Grid.Column="2"
                 Width="44"
                 Height="44"
+                Margin="8,0,0,0"
+                HorizontalAlignment="Left"
                 VerticalAlignment="Center"
+                AutomationProperties.AutomationId="RowBackButton"
                 AutomationProperties.Name="Scroll left"
-                Click="ScrollLeftBtn_Click"
-                IsEnabled="False"
                 IsTabStop="False"
                 Style="{StaticResource NixieIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll left"
@@ -73,12 +104,13 @@
             </Button>
             <Button
                 x:Name="ScrollRightBtn"
-                Grid.Column="3"
                 Width="44"
                 Height="44"
+                Margin="0,0,8,0"
+                HorizontalAlignment="Right"
                 VerticalAlignment="Center"
+                AutomationProperties.AutomationId="RowNextButton"
                 AutomationProperties.Name="Scroll right"
-                Click="ScrollRightBtn_Click"
                 IsTabStop="False"
                 Style="{StaticResource NixieIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll right"
@@ -86,26 +118,5 @@
                 <FontIcon FontSize="20" Glyph="&#xE76C;" />
             </Button>
         </Grid>
-
-        <ScrollViewer
-            x:Name="Scroller"
-            Grid.Row="1"
-            HorizontalScrollBarVisibility="Hidden"
-            HorizontalScrollMode="Enabled"
-            IsTabStop="False"
-            TabFocusNavigation="Once"
-            VerticalScrollBarVisibility="Disabled"
-            VerticalScrollMode="Disabled">
-            <local:RowList x:Name="List" IsTabStop="False">
-                <ItemsRepeater
-                    x:Name="Repeater"
-                    ItemTemplate="{x:Bind ItemTemplate, Mode=OneWay}"
-                    ItemsSource="{x:Bind ItemsSource, Mode=OneWay}">
-                    <ItemsRepeater.Layout>
-                        <StackLayout Orientation="Horizontal" Spacing="0" />
-                    </ItemsRepeater.Layout>
-                </ItemsRepeater>
-            </local:RowList>
-        </ScrollViewer>
     </Grid>
 </UserControl>

@@ -44,7 +44,7 @@ public sealed class QuickConnectTests
 	{
 		Approve();
 		var signingIn = new TaskCompletionSource<bool>();
-		_auth.Setup(x => x.Authenticate(_server, It.Is<QuickConnectResult>(r => r.Authenticated == true))).Returns(signingIn.Task);
+		_auth.Setup(x => x.Authenticate(_server, It.Is<QuickConnectResult>(r => r.Authenticated == true), It.IsAny<bool>())).Returns(signingIn.Task);
 		var vm = await SignInPage();
 		vm.Username = "alice";
 		var failed = 0;
@@ -70,13 +70,29 @@ public sealed class QuickConnectTests
 	public async Task AnApprovedCode_ThatSignsIn_SaysNothing()
 	{
 		Approve();
-		_auth.Setup(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>())).ReturnsAsync(true);
+		_auth.Setup(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>(), It.IsAny<bool>())).ReturnsAsync(true);
 		var vm = await SignInPage();
 
 		await vm.QuickConnectCommand.ExecuteAsync(null).WaitAsync(TimeSpan.FromSeconds(5));
 
 		Assert.False(vm.HasError);
-		_auth.Verify(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>()), Times.Once);
+		_auth.Verify(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>(), It.IsAny<bool>()), Times.Once);
+	}
+
+	/// <summary>174-signin: "Remember me" counts for Quick Connect too (a Quick Connect sign-in was never kept).</summary>
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task AnApprovedCode_SignsIn_RememberedAsRememberMeSays(bool remember)
+	{
+		Approve();
+		_auth.Setup(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>(), It.IsAny<bool>())).ReturnsAsync(true);
+		var vm = await SignInPage();
+		vm.KeepMeLoggedIn = remember;
+
+		await vm.QuickConnectCommand.ExecuteAsync(null).WaitAsync(TimeSpan.FromSeconds(5));
+
+		_auth.Verify(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>(), remember), Times.Once);
 	}
 
 	[Fact]
@@ -94,7 +110,7 @@ public sealed class QuickConnectTests
 		Assert.Equal("This code expired. Try again.", vm.ErrorMessage);
 		Assert.Equal(1, failed);
 		_auth.Verify(x => x.CheckQuickConnectStatus(_server, _code), Times.Exactly(LoginViewModel.QuickConnectFailuresAllowed));
-		_auth.Verify(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>()), Times.Never);
+		_auth.Verify(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>(), It.IsAny<bool>()), Times.Never);
 	}
 
 	[Fact]
@@ -137,7 +153,7 @@ public sealed class QuickConnectTests
 
 		Assert.InRange(checks, atCancel, atCancel + 1); // at most the one already on its way
 		Assert.False(vm.HasError);
-		_auth.Verify(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>()), Times.Never);
+		_auth.Verify(x => x.Authenticate(_server, It.IsAny<QuickConnectResult>(), It.IsAny<bool>()), Times.Never);
 	}
 
 	[Fact]

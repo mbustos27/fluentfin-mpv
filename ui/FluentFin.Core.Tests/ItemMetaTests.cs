@@ -80,6 +80,17 @@ public sealed class ItemMetaTests
 		Assert.Equal("", ItemMeta.PersonRole(null));
 	}
 
+	// Nixie 1.7.4: a cast photo's tooltip and Narrator name: the whole name and role (the name under it may be trimmed)
+	[Fact]
+	public void ACastCard_SpeaksTheWholeNameAndRole()
+	{
+		Assert.Equal("Thomas McDowell, Commander Evangeline Ashcroft-Reyes", ItemMeta.PersonSpoken(new BaseItemPerson { Name = " Thomas McDowell ", Type = BaseItemPerson_Type.Actor, Role = "Commander Evangeline Ashcroft-Reyes" }));
+		Assert.Equal("Priyanka Venkataraman, Writer", ItemMeta.PersonSpoken(new BaseItemPerson { Name = "Priyanka Venkataraman", Type = BaseItemPerson_Type.Writer }));
+		Assert.Equal("Kalanikupuapaikalaninui", ItemMeta.PersonSpoken(new BaseItemPerson { Name = "Kalanikupuapaikalaninui", Type = BaseItemPerson_Type.Actor }));
+		Assert.Equal("Director", ItemMeta.PersonSpoken(new BaseItemPerson { Type = BaseItemPerson_Type.Director }));
+		Assert.Equal("", ItemMeta.PersonSpoken(null));
+	}
+
 	[Fact]
 	public void TheMetadataRows_JoinEachListAndSkipTheEmptyOnes()
 	{

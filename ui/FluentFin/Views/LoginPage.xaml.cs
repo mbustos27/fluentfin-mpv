@@ -71,6 +71,15 @@ public sealed partial class LoginPage
 
 		// 1.1.4 (states): the keyboard starts where there is something to type
 		FieldToFocus(ViewModel.Username).Focus(FocusState.Programmatic);
+
+		// 174-sessions (BS-M4): the line the page opens with ("The saved sign-in to Den no longer works.") is said to Narrator
+		// too: an InfoBar open from the start announces nothing
+		if (ViewModel.HasNotice)
+		{
+			var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(NoticeBar) ?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(NoticeBar);
+			peer?.RaiseNotificationEvent(Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationKind.Other,
+				Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationProcessing.ImportantMostRecent, ViewModel.Notice, "NixieSignInPageLine");
+		}
 	}
 
 	/// <summary>The username box when it is empty, else the password box.</summary>

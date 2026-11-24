@@ -351,7 +351,8 @@ public class AccessibilityXamlTests
 		Assert.Equal("Level2", (string?)title.Attribute("AutomationProperties.HeadingLevel"));
 		Assert.DoesNotContain(doc.Descendants(), e => e.Attribute("PointerReleased") is not null);
 
-		// the arrows: always there (no Opacity="0" hover reveal), moved by the row's keys, so no Tab stop of their own; 32 px (WCAG 2.5.8)
+		// the arrows: no Tab stop of their own (the row's keys move it); 32 px (WCAG 2.5.8). Nixie 1.7.4: shown on hover at the
+		// row's ends by their Visibility (RowPaging.EdgeArrows), never an Opacity="0" target that a click could still hit
 		foreach (var name in new[] { "ScrollLeftBtn", "ScrollRightBtn" })
 		{
 			var arrow = FindByName(doc, name);
@@ -366,6 +367,32 @@ public class AccessibilityXamlTests
 		Assert.Equal("Once", (string?)scroller.Attribute("TabFocusNavigation"));
 		Assert.Equal("Enabled", (string?)scroller.Attribute("HorizontalScrollMode"));
 		Assert.Equal("Disabled", (string?)scroller.Attribute("VerticalScrollMode"));
+	}
+
+	// Nixie 1.7.4 (the rows stream): "Thomas McDonell" and "Christopher Larkin" ran together under their photos (names 120 wide
+	// beside each other, the photo 104), and the keyboard never reached the people past the window's edge (no stop at all)
+	[Fact]
+	public void CastNames_StayWithinTheirPhoto_AndEachPersonIsAKeyboardStopWithTheirWholeName()
+	{
+		var doc = Load("FluentFin/Controls/CastRow.xaml");
+		var card = doc.Descendants().Single(e => e.Name.LocalName == "CastCard");
+		var photo = card.Descendants(Presentation + "PersonPicture").Single();
+		var photoWidth = double.Parse((string)photo.Attribute("Width")!);
+		Assert.True(double.Parse((string)card.Attribute("Width")!) >= photoWidth + 12, "room between one person's name and the next");
+		Assert.Equal("{x:Bind core:ItemMeta.PersonSpoken((jm:BaseItemPerson))}", (string?)card.Attribute("AutomationProperties.Name"));
+		Assert.Equal("{x:Bind core:ItemMeta.PersonSpoken((jm:BaseItemPerson))}", (string?)card.Attribute("ToolTipService.ToolTip"));
+		var texts = card.Descendants(Presentation + "TextBlock").ToList();
+		Assert.Equal(2, texts.Count); // the name and the role
+		Assert.All(texts, t =>
+		{
+			Assert.True(double.Parse((string)t.Attribute("Width")!) <= photoWidth, "within the photo's width");
+			Assert.Equal("2", (string?)t.Attribute("MaxLines"));
+			Assert.Equal("CharacterEllipsis", (string?)t.Attribute("TextTrimming"));
+			Assert.Equal("WrapWholeWords", (string?)t.Attribute("TextWrapping"));
+		});
+		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/CastCard.cs"));
+		Assert.Contains("IsTabStop = true;", code);
+		Assert.Contains("AutomationControlType.ListItem", code);
 	}
 
 	[Fact]

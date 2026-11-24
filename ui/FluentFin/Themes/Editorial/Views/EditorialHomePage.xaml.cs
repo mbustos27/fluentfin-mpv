@@ -45,6 +45,16 @@ public sealed partial class EditorialHomePage : Page
 	public EditorialHomePage()
 	{
 		InitializeComponent();
+		// Nixie 1.7.4 (the rows stream): the genre tabs are fitted to the strip's width whenever it changes (a window made
+		// narrower, or genres that came before the strip had a width, left every tab there, the last ones cut off at the
+		// strip's edge where the keyboard still went)
+		GenreTabs.SizeChanged += (_, e) =>
+		{
+			if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) >= 1)
+			{
+				FitGenres();
+			}
+		};
 		ShowNotice(ViewModel.Notice);
 		_noticeTimer = DispatcherQueue.CreateTimer();
 		_noticeTimer.IsRepeating = false;

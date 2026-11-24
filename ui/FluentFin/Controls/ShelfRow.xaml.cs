@@ -69,6 +69,9 @@ public sealed partial class ShelfRow : UserControl
 	private bool _directed;
 	private ScrollViewer? _pageScroller;
 
+	/// <summary>Nixie 1.7.4: the row's pointer behaviour (its end arrows on hover, the wheel, a drag), shared with every strip.</summary>
+	private readonly EdgeScroller _edge;
+
 	public ShelfRow()
 	{
 		InitializeComponent();
@@ -81,28 +84,14 @@ public sealed partial class ShelfRow : UserControl
 			}
 
 			UpdateNames();
-			UpdateArrows();
 		};
 		Unloaded += (_, _) => s_rows.Remove(this);
 
-		// Seaglass 1.1.4: the arrows are quiet until the pointer is over the row or the keyboard is in it
-		RowRoot.PointerEntered += (_, _) => { _pointerOver = true; UpdateQuiet(); };
-		RowRoot.PointerExited += (_, _) => { _pointerOver = false; UpdateQuiet(); };
-		RowRoot.PointerCanceled += (_, _) => { _pointerOver = false; UpdateQuiet(); };
-		GotFocus += (_, _) => { _focusInside = true; UpdateQuiet(); };
-		LostFocus += (_, _) => { _focusInside = false; UpdateQuiet(); };
-		UpdateQuiet();
+		// Nixie 1.7.4: the arrows at the row's ends on hover, the wheel (the page's while it can move, else the row's) and a
+		// mouse drag: the one behaviour of every row and strip (EdgeScroller)
+		_edge = new EdgeScroller(RowRoot, Scroller, List, ScrollLeftBtn, ScrollRightBtn, () => Stride);
+		Scroller.SizeChanged += (_, _) => List.MinWidth = Scroller.ViewportWidth;
 
-		Scroller.ViewChanged += (_, _) => UpdateArrows();
-		Scroller.SizeChanged += (_, _) =>
-		{
-			List.MinWidth = Scroller.ViewportWidth;
-			UpdateArrows();
-		};
-		List.SizeChanged += (_, _) => UpdateArrows();
-
-		// the wheel: on the row's content, which the event reaches before the scroll viewer's own handling; handled events too
-		List.AddHandler(PointerWheelChangedEvent, new PointerEventHandler(List_PointerWheelChanged), true);
 		// on the row's content, below the scroll viewer: its own Home/End/arrow handling would take the keys first
 		List.AddHandler(KeyDownEvent, new KeyEventHandler(Scroller_KeyDown), false);
 		Scroller.GettingFocus += Scroller_GettingFocus;
@@ -126,7 +115,7 @@ public sealed partial class ShelfRow : UserControl
 		Repeater.Loaded += (_, _) => UpdateNames();
 		RegisterPropertyChangedCallback(HeaderProperty, (_, _) => UpdateNames());
 		RegisterPropertyChangedCallback(HasSeeAllProperty, (_, _) => UpdateNames());
-		RegisterPropertyChangedCallback(ItemsSourceProperty, (_, _) => { _lastIndex = -1; WatchSource(); DispatcherQueue.TryEnqueue(() => { UpdateNames(); UpdateArrows(); }); });
+		RegisterPropertyChangedCallback(ItemsSourceProperty, (_, _) => { _lastIndex = -1; WatchSource(); DispatcherQueue.TryEnqueue(() => { UpdateNames(); _edge.UpdateArrows(); }); });
 	}
 
 	private System.Collections.Specialized.INotifyCollectionChanged? _source;
@@ -202,6 +191,9 @@ public sealed partial class ShelfRow : UserControl
 		timer.Start();
 	}
 
+	/// <summary>Nixie 1.7.4: the row's scroll viewer (Editorial's shelf gives its cards room for their focus ring in it).</summary>
+	internal ScrollViewer RowScroller => Scroller;
+
 	/// <summary>The cards in the row (what the repeater has).</summary>
 	internal int Count => Repeater.ItemsSourceView?.Count ?? 0;
 
@@ -233,8 +225,8 @@ public sealed partial class ShelfRow : UserControl
 	private void UpdateNames()
 	{
 		AutomationProperties.SetName(List, Header);
-		ToolTipService.SetToolTip(ScrollLeftBtn, "Scroll left (Shift+wheel, tilt wheel or Left key)");
-		ToolTipService.SetToolTip(ScrollRightBtn, "Scroll right (Shift+wheel, tilt wheel or Right key)");
+		ToolTipService.SetToolTip(ScrollLeftBtn, "Scroll left (or Shift+wheel, drag, Left key)");
+		ToolTipService.SetToolTip(ScrollRightBtn, "Scroll right (or Shift+wheel, drag, Right key)");
 		AutomationProperties.SetName(ScrollLeftBtn, RowPaging.ArrowName(Header, forward: false));
 		AutomationProperties.SetName(ScrollRightBtn, RowPaging.ArrowName(Header, forward: true));
 		AutomationProperties.SetName(SeeAllButton, RowPaging.SeeAllName(Header));
@@ -250,70 +242,13 @@ public sealed partial class ShelfRow : UserControl
 		}
 	}
 
-	private bool _pointerOver;
-	private bool _focusInside;
-
-	private void UpdateQuiet() => ScrollLeftBtn.Opacity = ScrollRightBtn.Opacity = RowPaging.ArrowOpacity(_pointerOver, _focusInside);
-
-	/// <summary>The arrows show whenever the row overflows, and are disabled (not hidden) at the ends.</summary>
-	private void UpdateArrows()
-	{
-		var overflow = Scroller.ScrollableWidth > RowPaging.EndTolerance;
-		var visibility = overflow ? Visibility.Visible : Visibility.Collapsed;
-		ScrollLeftBtn.Visibility = ScrollRightBtn.Visibility = visibility;
-		ScrollLeftBtn.IsEnabled = RowPaging.CanScrollBack(Scroller.HorizontalOffset);
-		ScrollRightBtn.IsEnabled = RowPaging.CanScrollForward(Scroller.HorizontalOffset, Scroller.ExtentWidth, Scroller.ViewportWidth);
-	}
-
 	private void SeeAllButton_Click(object sender, RoutedEventArgs e) => SeeAll?.Invoke(this, EventArgs.Empty);
-
-	private void ScrollLeftBtn_Click(object sender, RoutedEventArgs e) => PageRow(forward: false);
-
-	private void ScrollRightBtn_Click(object sender, RoutedEventArgs e) => PageRow(forward: true);
 
 	private double Stride => Repeater.TryGetElement(0) is FrameworkElement first ? first.ActualWidth : 0;
 
-	private void PageRow(bool forward) =>
-		RowScrollTo(RowPaging.Page(Scroller.HorizontalOffset, Scroller.ViewportWidth, Scroller.ExtentWidth, Stride, forward));
+	private void PageRow(bool forward) => _edge.Page(forward);
 
 	private void RowScrollTo(double offset) => SmoothScroll.To(Scroller, horizontal: true, offset);
-
-	// ---- the wheel: one axis per input --------------------------------------------------------------------------------
-
-	private void List_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
-	{
-		if (e.Pointer.PointerDeviceType == PointerDeviceType.Touch)
-		{
-			return;
-		}
-
-		var properties = e.GetCurrentPoint(Scroller).Properties;
-		var delta = properties.MouseWheelDelta;
-		if (delta == 0)
-		{
-			return;
-		}
-
-		var shift = (e.KeyModifiers & VirtualKeyModifiers.Shift) != 0;
-		if (RowPaging.TargetOf(properties.IsHorizontalMouseWheel, shift) == WheelTarget.Row)
-		{
-			if (Scroller.ScrollableWidth > 0)
-			{
-				SmoothScroll.By(Scroller, horizontal: true, RowPaging.RowPixels(delta, properties.IsHorizontalMouseWheel));
-			}
-		}
-		else if (PageScroller is { } page)
-		{
-			SmoothScroll.By(page, horizontal: false, RowPaging.Pixels(delta));
-		}
-		else
-		{
-			return;
-		}
-
-		// the row's own scroll viewer never sees it: it would take a vertical wheel for the row (#10172)
-		e.Handled = true;
-	}
 
 	/// <summary>The scroll viewer that scrolls the page the row is on: the nearest one above that scrolls vertically.</summary>
 	private ScrollViewer? PageScroller
@@ -325,15 +260,7 @@ public sealed partial class ShelfRow : UserControl
 				return known;
 			}
 
-			for (var parent = VisualTreeHelper.GetParent(this); parent is not null; parent = VisualTreeHelper.GetParent(parent))
-			{
-				if (parent is ScrollViewer { VerticalScrollMode: ScrollMode.Enabled or ScrollMode.Auto } viewer && viewer.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled)
-				{
-					return _pageScroller = viewer;
-				}
-			}
-
-			return null;
+			return _pageScroller = EdgeScroller.PageScroller(this);
 		}
 	}
 
@@ -576,7 +503,9 @@ public sealed partial class ShelfRow : UserControl
 		}
 
 		var left = card.TransformToVisual(List).TransformPoint(new Point(0, 0)).X;
-		if (RowScroll.OffsetToShow(Scroller.HorizontalOffset, Scroller.ViewportWidth, left, card.ActualWidth) is { } offset)
+		// Nixie 1.7.4: from where the row is going, not where it is: a card focused while the row still glides back (Home,
+		// then Right pressed quickly) showed at the start of the glide, which then left it cut off at the row's edge
+		if (RowScroll.OffsetToShow(SmoothScroll.Current(Scroller, horizontal: true), Scroller.ViewportWidth, left, card.ActualWidth) is { } offset)
 		{
 			// to a card edge when that still shows the card, else just far enough
 			var snapped = RowPaging.Snap(offset, Stride, Scroller.ExtentWidth, Scroller.ViewportWidth);
@@ -628,11 +557,13 @@ internal static class SmoothScroll
 	private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ScrollViewer, Pending> s_vertical = new();
 	private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ScrollViewer, Pending> s_horizontal = new();
 
-	public static void By(ScrollViewer viewer, bool horizontal, double pixels)
+	public static void By(ScrollViewer viewer, bool horizontal, double pixels) => To(viewer, horizontal, Current(viewer, horizontal) + pixels);
+
+	/// <summary>Nixie 1.7.4: where the viewer is going: the animation's target while one runs, else where it is.</summary>
+	public static double Current(ScrollViewer viewer, bool horizontal)
 	{
 		var state = StateOf(viewer, horizontal);
-		var current = state.Moving ? state.Target : (horizontal ? viewer.HorizontalOffset : viewer.VerticalOffset);
-		To(viewer, horizontal, current + pixels);
+		return state.Moving ? state.Target : (horizontal ? viewer.HorizontalOffset : viewer.VerticalOffset);
 	}
 
 	public static void To(ScrollViewer viewer, bool horizontal, double offset)

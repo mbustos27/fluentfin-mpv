@@ -36,6 +36,23 @@ public static class HarnessPointer
 		/// overlay's state is logged ("[harness] overlay ..."): the overlay stress of tools\ui-harness\offscreen\then-keys-matrix.ps1.
 		/// </summary>
 		Move = 4,
+		/// <summary>
+		/// Nixie 1.7.4: Windows' glass settings changed (<see cref="GlassMode.Changed"/>, as transparency effects, Energy saver or
+		/// high contrast raise it) while the player shows: tools\ui-harness\offscreen\then-174-hud.ps1's theme part.
+		/// </summary>
+		GlassChanged = 5,
+		/// <summary>Nixie 1.7.4: the next layout theme chosen in place while the player shows (what Settings' choice does).</summary>
+		NextTheme = 6,
+		/// <summary>
+		/// Nixie 1.7.4: the player's bars' fades stopped where they are, as the compositor stops one short (the player at the
+		/// point; MpvPlayerControls.HarnessCutFades), then the overlay's state logged.
+		/// </summary>
+		CutFades = 7,
+		/// <summary>
+		/// Nixie 1.7.4: the player at the point hidden for the high word's milliseconds and shown again, as the page hides and
+		/// shows it with its video (the video gone after a crash, or at the end, and back with the next playback).
+		/// </summary>
+		HidePlayer = 8,
 	}
 
 	/// <summary>Whether the hook listens: never in a release package, otherwise only with <see cref="Variable"/> exactly 1.</summary>
@@ -82,19 +99,33 @@ public static class HarnessPointer
 			var toPoint = new POINT { X = toX, Y = point.Y };
 			ScreenToClient(hwnd, ref point);
 			ScreenToClient(hwnd, ref toPoint);
-			window.DispatcherQueue.TryEnqueue(() => Run(window, kind, point, toPoint));
+			window.DispatcherQueue.TryEnqueue(() => Run(window, kind, point, toPoint, toX));
 		};
 		Log().LogInformation("[harness] the pointer hook listens ({Variable}=1, a dev build)", Variable);
 	}
 
 	private static ILogger Log() => App.GetService<ILogger<MainWindow>>();
 
-	private static async void Run(Window window, Kind kind, POINT client, POINT clientTo)
+	private static async void Run(Window window, Kind kind, POINT client, POINT clientTo, int high)
 	{
 		try
 		{
 			if (window.Content is not UIElement content || content.XamlRoot is not { } root)
 			{
+				return;
+			}
+
+			if (kind is Kind.GlassChanged)
+			{
+				GlassMode.RaiseChanged();
+				Log().LogInformation("[harness] the glass mode changed (raised)");
+				return;
+			}
+
+			if (kind is Kind.NextTheme && App.GetService<ThemeService>() is { } themes)
+			{
+				var next = (Themes.LayoutThemeId)(((int)(themes.ActiveId ?? Themes.LayoutThemeId.DriveIn) + 1) % Enum.GetValues<Themes.LayoutThemeId>().Length);
+				Log().LogInformation("[harness] the layout theme chosen: {Theme} ({Changed})", next, themes.Choose(next) ? "shown" : "not shown");
 				return;
 			}
 
@@ -104,6 +135,21 @@ public static class HarnessPointer
 			Log().LogInformation("[harness] {Kind} at {X},{Y}: {Hit}", kind, (int)at.X, (int)at.Y, Describe(hit));
 			if (hit is null)
 			{
+				return;
+			}
+
+			// Nixie 1.7.4 (the rows stream): a move hovers the row under it (its end arrows show) and leaves every other row; a
+			// drag that starts on a row moves the row through its own drag steps
+			if (kind == Kind.Move)
+			{
+				EdgeScroller.HarnessHover(hit);
+			}
+
+			if (kind == Kind.Drag && EdgeScroller.At(hit) is { } row)
+			{
+				var toRow = content.TransformToVisual(row.Area);
+				await row.HarnessDrag(toRow.TransformPoint(at).X, toRow.TransformPoint(new Windows.Foundation.Point(clientTo.X / scale, clientTo.Y / scale)).X);
+				Log().LogInformation("[harness] the row dragged");
 				return;
 			}
 
@@ -123,6 +169,16 @@ public static class HarnessPointer
 				case Kind.Move when Ancestor<MpvPlayerControls>(hit) is { } player:
 					player.HarnessPointerMoved();
 					Log().LogInformation("[harness] overlay {State}", player.OverlayState());
+					break;
+				case Kind.CutFades when Ancestor<MpvPlayerControls>(hit) is { } player:
+					player.HarnessCutFades();
+					Log().LogInformation("[harness] the bars' fades cut: overlay {State}", player.OverlayState());
+					break;
+				case Kind.HidePlayer when Ancestor<MpvPlayerControls>(hit) is { } player:
+					player.Visibility = Visibility.Collapsed;
+					await Task.Delay(Math.Max(0, high));
+					player.Visibility = Visibility.Visible;
+					Log().LogInformation("[harness] the player hidden for {Ms} ms and shown again: overlay {State}", high, player.OverlayState());
 					break;
 			}
 		}

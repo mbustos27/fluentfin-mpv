@@ -78,9 +78,16 @@ public class LoginPageAccessibilityTests
 		// 1.1.4 (states): the error in an InfoBar on the card (it announces itself when it opens), not a dialog;
 		// "Signing in to …" a polite live region; the app's name the page's heading
 		var doc = Load();
-		var bar = Assert.Single(doc.Descendants(Presentation + "InfoBar"));
+		XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+		var bars = doc.Descendants(Presentation + "InfoBar").ToList();
+		var bar = Assert.Single(bars, b => (string?)b.Attribute(x + "Name") == "ErrorBar");
 		Assert.Equal("{x:Bind ViewModel.HasError, Mode=OneWay}", (string?)bar.Attribute("IsOpen"));
 		Assert.Equal("{x:Bind ViewModel.ErrorMessage, Mode=OneWay}", (string?)bar.Attribute("Message"));
+		// 174-signin: a line the page opens with that is no sign-in error (Switch user) has a bar of its own
+		var notice = Assert.Single(bars, b => (string?)b.Attribute(x + "Name") == "NoticeBar");
+		Assert.Equal("{x:Bind ViewModel.HasNotice, Mode=OneWay}", (string?)notice.Attribute("IsOpen"));
+		Assert.Equal("{x:Bind ViewModel.Notice, Mode=OneWay}", (string?)notice.Attribute("Message"));
+		Assert.Equal(2, bars.Count);
 		var status = doc.Descendants(Presentation + "TextBlock").Single(t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.StatusText, Mode=OneWay}");
 		Assert.Equal("Polite", (string?)status.Attribute("AutomationProperties.LiveSetting"));
 		// (the 1.2.0 merge: the glass stream's lit wordmark at 64, which gives its heading level to its text)

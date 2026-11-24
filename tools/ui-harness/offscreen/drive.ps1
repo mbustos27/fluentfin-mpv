@@ -410,18 +410,23 @@ function Send-PlayerKey([int]$Vk, [char]$Char) {
 }
 
 # --- steps ------------------------------------------------------------------------------------------------------------
-function Step-SignIn([bool]$Capture) {
-    $url = Wait-Ui -Id 'TxtUrl' -Type 'Edit' -Seconds 30
-    $timings.server_page_ms = Ms $script:launchedAt (Get-Epoch)
-    if (-not $url) { throw "no server page (TxtUrl) within 30 s" }
-    # let the page's entrance and the backdrop's 600 ms fade finish first (a shot taken at once caught the title at 4.2:1)
-    if ($Capture) { Start-Sleep -Milliseconds 1200; Capture-Page 'server' }
-    # 1.5 qacheck: the address as a user types it (a -Before script sets $script:signInAddress: one ending in "/")
-    Set-ElementValue $url $(if ($script:signInAddress) { $script:signInAddress } else { $script:serverUrl })
-    # the server page's "Connect" (1.2.0, the button review's S13; "Next" before)
-    $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Connect'); if (-not $next) { $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Next') }
+# -OnSignInPage (174-sessions): the start already opened the server's sign-in page (a saved sign-in the server refused), so
+# the server page's address and Connect are skipped
+function Step-SignIn([bool]$Capture, [switch]$OnSignInPage) {
     $nextAt = Get-Epoch
-    [void](Invoke-Element $next)
+    if (-not $OnSignInPage) {
+        $url = Wait-Ui -Id 'TxtUrl' -Type 'Edit' -Seconds 30
+        $timings.server_page_ms = Ms $script:launchedAt (Get-Epoch)
+        if (-not $url) { throw "no server page (TxtUrl) within 30 s" }
+        # let the page's entrance and the backdrop's 600 ms fade finish first (a shot taken at once caught the title at 4.2:1)
+        if ($Capture) { Start-Sleep -Milliseconds 1200; Capture-Page 'server' }
+        # 1.5 qacheck: the address as a user types it (a -Before script sets $script:signInAddress: one ending in "/")
+        Set-ElementValue $url $(if ($script:signInAddress) { $script:signInAddress } else { $script:serverUrl })
+        # the server page's "Connect" (1.2.0, the button review's S13; "Next" before)
+        $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Connect'); if (-not $next) { $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Next') }
+        $nextAt = Get-Epoch
+        [void](Invoke-Element $next)
+    }
     # the sign-in page: "Use Quick Connect" (1.1.4; "Quick Connect" before)
     $quick = Wait-Until { $q = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Use Quick Connect'); if (-not $q) { $q = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Quick Connect') }; $q } -Seconds 20 -PollMs 150
     if (-not $quick) { throw "no sign-in page (no Quick Connect button) within 20 s" }
@@ -739,7 +744,8 @@ function Start-App([string]$Timing) {
 # a user saved with the run's one saved server, as "Remember me" saves one, so that the next start signs itself in
 # (DefaultActivationHandler). No password: an empty one, protected as FluentFin protects one (DPAPI, the settings'
 # Entropy). Quick Connect saves the server only. The fake server refuses the empty password: the start-up sign-in runs
-# ("Signing in to ..." in the window) and ends, as a real one does, then FluentFin shows the server page.
+# ("Signing in to ..." in the window) and ends, as a real one does, then FluentFin shows the server page (174-sessions:
+# the server's sign-in page, saying the saved sign-in no longer works, with the name; the refused password is forgotten).
 function Add-AutoSignInUser {
     Add-Type -AssemblyName System.Security
     $file = Join-Path $DataDir 'LocalSettings.json'
@@ -753,6 +759,9 @@ function Add-AutoSignInUser {
     }
     $none = [Security.Cryptography.ProtectedData]::Protect([byte[]]@(), [Convert]::FromBase64String($settings.Entropy), 'CurrentUser')
     $servers[0].Users = @([pscustomobject]@{ Username = 'harness-start-up'; Password = [Convert]::ToBase64String($none) })
+    # 1.7.4 (174-sessions, BS-M2): the start signs in only as the server's last remembered user, and the run's own sign-in
+    # just made that its Quick Connect user; the injected user is the last one now, as a real remembered sign-in would be
+    $servers[0] | Add-Member -NotePropertyName LastUser -NotePropertyValue 'harness-start-up' -Force
     $settings.Servers = $servers
     [IO.File]::WriteAllText($file, ($settings | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
 }
@@ -770,10 +779,21 @@ function Step-Relaunch {
     Check 'relaunch: FluentFin signed itself in at start-up (the remembered login)' ([bool]$auth) $(if ($auth) { "the server answered $($auth.status)" } else { 'no sign-in at the server' })
     $page = Wait-Until {
         if (Find-Ui -Id 'TxtUrl' -Type 'Edit') { 'server' }
+        elseif ([OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Use Quick Connect')) { 'signin' }
         else { $p = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id); if ($p -and ([OffscreenUi]::NavItem($p, 'Home') -or (Find-Ui -Id 'TopTabsMenu'))) { 'home' } }
     } -Seconds 30 -PollMs 150
     if ($page -eq 'server') { Step-SignIn $false }
-    elseif ($page -ne 'home') { throw "relaunch: neither the server page nor Home within 30 s" }
+    elseif ($page -eq 'signin') {
+        # 174-sessions (the basics sweep's BS-M3, BS-M4): the refused saved password opens the sign-in page, which says so,
+        # with the name; it is forgotten, so the next start doesn't send it again (Jellyfin disables an account after 3)
+        Start-Sleep -Milliseconds 800
+        $said = Find-Ui -Name 'no longer works. Sign in again.' -Contains -Type 'Text'
+        $box = @([OffscreenUi]::All($script:hwnd, $script:ui.Id) | Where-Object { try { $_.Cached.ControlType.ProgrammaticName -eq 'ControlType.Edit' -and $_.Cached.ClassName -ne 'PasswordBox' -and -not $_.Cached.IsOffscreen } catch { $false } }) | Select-Object -First 1
+        $value = $null; $name = if ($box -and $box.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$value)) { $value.Current.Value } else { '' }
+        Check 'relaunch: a refused saved sign-in opens the sign-in page, which says so, with the name' ([bool]$said -and $name -eq 'harness-start-up') "said: $([bool]$said); username '$name'"
+        Step-SignIn $false -OnSignInPage
+    }
+    elseif ($page -ne 'home') { throw "relaunch: neither the server page, the sign-in page nor Home within 30 s" }
     $script:page = 'home'
     Start-Sleep -Seconds 1
     Shot 'relaunched'

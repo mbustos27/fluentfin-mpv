@@ -110,11 +110,14 @@
                                             Text="{x:Bind local:SelectServerPage.AddressOf(LocalUrl, PublicUrl)}"
                                             TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
+                                    <!--  174-signin: the button keeps its tap (and double tap) from the row: it opened the server's sign-in over the menu  -->
                                     <Button
                                         Grid.Column="2"
                                         AutomationProperties.Name="{x:Bind local:SelectServerPage.MoreOptionsName(DisplayName)}"
                                         Content="{ui:FontIcon Glyph=&#xE712;, FontSize=16}"
+                                        DoubleTapped="MoreOptions_DoubleTapped"
                                         Style="{StaticResource NixieIconButtonStyle}"
+                                        Tapped="MoreOptions_Tapped"
                                         ToolTipService.ToolTip="More options">
                                         <Button.Flyout>
                                             <MenuFlyout>

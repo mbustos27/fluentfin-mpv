@@ -117,11 +117,13 @@
                             x:Name="EpisodesBlock"
                             Padding="0,0,0,24"
                             Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.HasEpisodeSection), Mode=OneWay, FallbackValue=Collapsed}">
-                            <!--  the season tabs, the season's count, and the link to the season's own page  -->
-                            <StackPanel
+                            <!--
+                                the season tabs, the season's count, and the link to the season's own page. 1.7.4: the tabs get what
+                                the count and the link leave of the width, and scroll in it (a long show's last seasons ran off the window)
+                            -->
+                            <lc:LeadPanel
                                 x:Name="TabsRow"
                                 Margin="88,0,48,6"
-                                Orientation="Horizontal"
                                 Spacing="18">
                                 <cc:CinematicTabStrip x:Name="SeasonTabs" AutomationProperties.Name="Seasons" TabInvoked="SeasonTabs_TabInvoked" />
                                 <TextBlock
@@ -136,7 +138,7 @@
                                     CommandParameter="{x:Bind ViewModel.SelectedSeason, Mode=OneWay}"
                                     Content="{x:Bind ViewModel.SeasonDetailsText, Mode=OneWay}"
                                     Foreground="{ThemeResource GlassTextPrimaryBrush}" />
-                            </StackPanel>
+                            </lc:LeadPanel>
                             <!--  the season's episodes: a shelf of stills (one Tab stop, Left/Right; Narrator's list "Episodes")  -->
                             <lc:ShelfRow
                                 x:Name="EpisodeShelf"

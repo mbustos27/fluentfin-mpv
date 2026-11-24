@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.7.4
+
+A basics release: what a friend found in one evening of using Nixie, and the ways in and back around it.
+
+- **Quick Connect is remembered** with "Remember me", like a password sign-in, so the next start opens Home. Sign out
+  forgets it. A saved sign-in the server no longer accepts says so: "The saved sign-in to <server> no longer works.
+  Sign in again."
+  - "Alice" and "alice" are one saved user, whichever way each sign-in typed the name.
+  - Sign out always finishes, even when Nixie can't save its settings at that moment, and says so in one line.
+  - Going back to 1.7.3 after a Quick Connect sign-in no longer stops it at its start.
+- **Signing in and out, as it should be** (a sweep of the basics found these):
+  - **Sign out stays signed out.** The saved password or Quick Connect sign-in is forgotten; the username is kept.
+  - **Nixie signs in by itself as the last remembered account,** also with two users or two servers saved, and never
+    as anyone else.
+  - **A failed sign-in at start says why:** no connection, no answer within 10 seconds, or the server's refusal.
+  - **A saved password the server refuses is tried once, never again by itself** (Jellyfin locks an account after a few
+    refused sign-ins). The sign-in page asks for it, with the username filled in. If the server says the account can't
+    sign in right now, the password is kept.
+  - Picking a remembered account ticks "Remember me"; with it unticked, a sign-in isn't saved and nothing saved is lost.
+  - Removing the server you're signed in to signs out first, and signing in again saves it. Removing a saved user
+    forgets their name too.
+  - The sign-in page opens with the username filled in.
+- **A saved server's "…" menu opens on its own** (it opened the server's sign-in under it), and Remove takes the server
+  off the list at once.
+- **The player's controls never stay faint.** If a fade of the player's controls is cut short, they now return to full
+  strength within half a second, instead of staying almost invisible but clickable. The Next episode button too.
+- **Every row reaches its last card:**
+  - arrows at its ends on hover;
+  - the wheel, Shift+wheel, tilt wheel, touchpad swipe and drag move it. At the bottom of a page the plain wheel moves
+    the row once you pause, so a fast spin doesn't slide it sideways;
+  - long shows' seasons scroll;
+  - cast names stay within their photo, with the whole name and role in the tooltip and for Narrator, and the keyboard
+    reaches every person;
+  - a page opened from Home lights its library in the top bar, not Home;
+  - Editorial's genre tabs fit again when the window gets narrower.
+- **Closing Nixie from Classic's or Cinematic's Home, or from an item page, no longer crashes.**
+
+**Verified**
+
+- Three fixes, each reviewed before it merged; every review Minor fixed at the integration. Each fix has a test that
+  fails without it.
+- Off-screen in all four themes, on the final build: the rows of nine kinds of page (every row of a film's, a show's and a
+  season's) at 1920 x 1080 and 1280 x 720, and at 2560 x 1392 in two themes, with each input (824 of 831 checks; the
+  rest in docs\KNOWN-ISSUES.md); the player's controls through every interrupt we could make (600 checks);
+  Quick Connect remembered across a restart and forgotten at Sign out; a saved server's "…" by click, Enter, Space,
+  gamepad A and the menu key; the Collections page in Drive-in; and a close from Home in each theme, a film's page, and
+  the player page with and without mpv, each in under half a second with no crash.
+- The test suites: 5,619 core and 1,695 UI tests.
+
+**For a hand check** (off-screen runs can't do these): a real mouse drag on a row opening nothing, a precision
+touchpad's sideways swipe, a real Shift+wheel, and a real tap on a saved server's "…".
+
 ## 1.7.3
 
 A fix release: Made by Nixie, fewer and better.

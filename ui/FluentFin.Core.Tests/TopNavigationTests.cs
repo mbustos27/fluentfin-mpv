@@ -794,16 +794,20 @@ public sealed class TopNavigationTests
 		top.OnPageShown(Movie, null);
 		Assert.True(top.IsSearchLit);
 
+		// Nixie 1.7.4: an item page from Home lights its library or nothing, never Home (and not the search box any more)
 		top.OnPageShown(TopTabs.HomeKey, null);
 		top.OnPageShown(Movie, null);
-		Assert.Equal("Home", top.SelectedTab?.Title);
+		Assert.False(top.IsSearchLit);
+		Assert.Null(top.SelectedTab);
 
 		var now = 1000L;
 		top.Clock = () => now;
+		top.OnPageShown(TopTabs.HomeKey, null);
 		top.ChooseSearch();
 		now += 10_000;
 		top.OnPageShown(Movie, null);
-		Assert.Equal("Home", top.SelectedTab?.Title);
+		Assert.False(top.IsSearchLit);
+		Assert.Null(top.SelectedTab);
 	}
 
 	[Fact]
@@ -815,12 +819,12 @@ public sealed class TopNavigationTests
 
 		top.OnPageShown(TopTabs.HomeKey, null, depth: 0);
 		top.OnPageShown(Movie, null, depth: 1);
-		Assert.Equal("Home", top.SelectedTab?.Title);
+		Assert.Null(top.SelectedTab); // Nixie 1.7.4: an item page from Home lights its library (unknown here) or nothing
 		top.OnPageShown(TopTabs.LibraryKey, movies, depth: 2);
 		Assert.Equal("Movies", top.SelectedTab?.Title);
 
 		top.OnPageShown(Movie, null, depth: 1, returning: true);
-		Assert.Equal("Home", top.SelectedTab?.Title);
+		Assert.Null(top.SelectedTab);
 
 		top.OnPageShown(TopTabs.LibraryKey, movies, depth: 2, returning: true);
 		Assert.Equal("Movies", top.SelectedTab?.Title);
@@ -829,6 +833,8 @@ public sealed class TopNavigationTests
 		top.OnPageShown(Settings, null, depth: 2);
 		Assert.True(top.IsSettingsLit);
 		top.OnPageShown(Movie, null, depth: 1, returning: true);
+		Assert.Null(top.SelectedTab);
+		top.OnPageShown(TopTabs.HomeKey, null, depth: 0, returning: true);
 		Assert.Equal("Home", top.SelectedTab?.Title);
 	}
 
@@ -895,12 +901,14 @@ public sealed class TopNavigationTests
 		var series = new BaseItemDto { Id = Guid.NewGuid(), Name = "Lantern", Type = BaseItemDto_Type.Series };
 		top.LibraryOf = item => Task.FromResult<Guid?>(item.Id == film.Id ? movies.Id : item.Id == series.Id ? anime.Id : null);
 
+		// Nixie 1.7.4: from Home the bar lights the film's library (it has a tab): no eyebrow is needed
 		top.OnPageShown(TopTabs.HomeKey, null);
 		top.OnPageShown(Movie, film);
 		await top.EyebrowLookup;
-		Assert.Equal("Movies", top.Eyebrow?.Title);
+		Assert.Equal("Movies", top.SelectedTab?.Title);
+		Assert.Null(top.Eyebrow);
 
-		// a library that is not a favourite names itself too
+		// from another section (Movies, lit), a library that is not a favourite names itself
 		top.OnPageShown(typeof(SeriesViewModel).FullName!, series);
 		await top.EyebrowLookup;
 		Assert.Equal("Anime", top.Eyebrow?.Title);
@@ -917,6 +925,129 @@ public sealed class TopNavigationTests
 		Assert.Equal("Movies", top.Eyebrow?.Title);
 		top.OnPageShown(Settings, null);
 		Assert.Null(top.Eyebrow);
+	}
+
+	// Nixie 1.7.4 (the rows stream): the friend's season page reached from Home lit "Home" in the bar. It lights the season's
+	// library (its tab), or nothing while that is not known or has no tab in the bar; never Home
+	[Fact]
+	public async Task AnItemPageFromHome_LightsItsLibrary_OrNothing_NeverHome()
+	{
+		var top = Create();
+		var movies = Library("Movies", BaseItemDto_CollectionType.Movies);
+		var shows = Library("Shows", BaseItemDto_CollectionType.Tvshows);
+		top.SetLibraries([movies, shows]);
+		var season = new BaseItemDto { Id = Guid.NewGuid(), Name = "Season 1", Type = BaseItemDto_Type.Season };
+		var seasonPage = typeof(SeasonViewModel).FullName!;
+		var slow = new TaskCompletionSource<Guid?>();
+		top.LibraryOf = _ => slow.Task;
+		var home = new TopMark(TopTabs.HomeKey);
+		var showsMark = new TopMark(TopTabs.LibraryKey, shows.Id);
+
+		top.OnPageShown(TopTabs.HomeKey, null, depth: 0);
+		Assert.Equal(home, top.Lit);
+		// 1.7.4 integration (the rows review's m5): Home is held while the library is asked, then the bar changes once, to
+		// Shows: Home, nothing, then Shows moved the bar twice
+		var lit = new List<TopMark?>();
+		var selected = new List<int>();
+		top.PropertyChanged += (_, e) =>
+		{
+			if (e.PropertyName == nameof(TopNavigation.Lit))
+			{
+				lit.Add(top.Lit);
+			}
+			else if (e.PropertyName == nameof(TopNavigation.SelectedIndex))
+			{
+				selected.Add(top.SelectedIndex);
+			}
+		};
+		top.OnPageShown(seasonPage, season, depth: 1);
+		Assert.Equal(home, top.Lit); // held while its library is asked
+		Assert.Equal("Home", top.SelectedTab?.Title);
+		Assert.Empty(lit);
+		slow.SetResult(shows.Id);
+		await top.EyebrowLookup;
+		Assert.Equal(showsMark, top.Lit);
+		Assert.Equal("Shows", top.SelectedTab?.Title);
+		Assert.Null(top.Eyebrow); // the bar says it
+		Assert.Equal([showsMark], lit); // one change, no blank step
+		Assert.DoesNotContain(-1, selected);
+
+		// an episode from it keeps Shows (the trail), and Back to the season page gets Shows again
+		top.LibraryOf = _ => Task.FromResult<Guid?>(shows.Id);
+		top.OnPageShown(typeof(EpisodeViewModel).FullName!, new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.Episode }, depth: 2);
+		Assert.Equal(showsMark, top.Lit);
+		top.OnPageShown(seasonPage, season, depth: 1, returning: true);
+		Assert.Equal(showsMark, top.Lit);
+
+		// Home again, then the season with no tab for Shows in the bar (folded away): nothing lit, the eyebrow names Shows
+		top.OnPageShown(TopTabs.HomeKey, null, depth: 0, returning: true);
+		Assert.Equal(home, top.Lit);
+		top.Fold(0);
+		top.OnPageShown(seasonPage, season, depth: 1);
+		await top.EyebrowLookup;
+		Assert.Null(top.Lit);
+		Assert.Equal(-1, top.SelectedIndex);
+		Assert.Equal("Shows", top.Eyebrow?.Title);
+
+		// from the search box it is still the search box's
+		top.ChooseSearch();
+		top.OnPageShown(seasonPage, season, depth: 2);
+		Assert.Equal(TopMark.Search, top.Lit);
+	}
+
+	// 1.7.4 integration (the rows review's m5): the held Home always lets go, once, and is never left over an item page
+	[Fact]
+	public async Task TheHeldHome_LetsGoOnce_WhenTheLookupFails_OrIsLeft_AndHoldsAgainOnAReturnBeforeItEnded()
+	{
+		var top = Create();
+		var shows = Library("Shows", BaseItemDto_CollectionType.Tvshows);
+		top.SetLibraries([Library("Movies", BaseItemDto_CollectionType.Movies), shows]);
+		var season = new BaseItemDto { Id = Guid.NewGuid(), Name = "Season 1", Type = BaseItemDto_Type.Season };
+		var seasonPage = typeof(SeasonViewModel).FullName!;
+		var home = new TopMark(TopTabs.HomeKey);
+		var showsMark = new TopMark(TopTabs.LibraryKey, shows.Id);
+
+		// the server doesn't answer the lookup: nothing lit (not Home), in one change
+		top.LibraryOf = _ => Task.FromException<Guid?>(new HttpRequestException("no answer"));
+		top.OnPageShown(TopTabs.HomeKey, null, depth: 0);
+		var lit = new List<TopMark?>();
+		top.PropertyChanged += (_, e) =>
+		{
+			if (e.PropertyName == nameof(TopNavigation.Lit))
+			{
+				lit.Add(top.Lit);
+			}
+		};
+		top.OnPageShown(seasonPage, season, depth: 1);
+		await top.EyebrowLookup;
+		Assert.Null(top.Lit);
+		Assert.Equal(-1, top.SelectedIndex);
+		Assert.Equal([(TopMark?)null], lit);
+
+		// left for Home before the lookup ended, then returned to: held again, and the late answer for the old visit changes nothing
+		var slow = new TaskCompletionSource<Guid?>();
+		top.LibraryOf = _ => slow.Task;
+		top.OnPageShown(TopTabs.HomeKey, null, depth: 0, returning: true);
+		top.OnPageShown(seasonPage, season, depth: 1);
+		Assert.Equal(home, top.Lit);
+		var first = top.EyebrowLookup;
+		top.OnPageShown(TopTabs.HomeKey, null, depth: 0, returning: true);
+		Assert.Equal(home, top.Lit);
+		var again = new TaskCompletionSource<Guid?>();
+		top.LibraryOf = _ => again.Task;
+		top.OnPageShown(seasonPage, season, depth: 1, returning: true);
+		Assert.Equal(home, top.Lit); // its mark was the held Home: held again while it is asked again
+		slow.SetResult(shows.Id);
+		await first;
+		Assert.Equal(home, top.Lit); // the old visit's answer: not this visit's
+		again.SetResult(shows.Id);
+		await top.EyebrowLookup;
+		Assert.Equal(showsMark, top.Lit);
+
+		// an item page with no lookup to wait for (no item): nothing lit at once
+		top.OnPageShown(TopTabs.HomeKey, null, depth: 0, returning: true);
+		top.OnPageShown(Movie, null, depth: 1);
+		Assert.Null(top.Lit);
 	}
 
 	[Fact]

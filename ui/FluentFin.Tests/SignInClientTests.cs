@@ -21,7 +21,8 @@ namespace FluentFin.Tests;
 /// sign-in of a saved user at every start; all through JellyfinAuthenticationService's one client) tells the server
 /// Client="Nixie", with the same device id Seaglass sent (the Windows device's). A saved sign-in is the user name and a
 /// DPAPI-protected password, not a token: the automatic sign-in sends them again, so the server sees the same device sign in
-/// as Nixie and gives it a new token. A fake server on localhost records the requests; no real server is ever asked.
+/// as Nixie and gives it a new token. (174-signin: a Quick Connect sign-in has no password; its protected token is kept
+/// instead, QuickConnectRememberedTests.) A fake server on localhost records the requests; no real server is ever asked.
 /// </summary>
 [Collection(SavedSignInCollection.Name)] // 1.6.1: SessionInfo's saved sign-in (and InstallDeviceId's data folder) are static
 public sealed class SignInClientTests : IDisposable

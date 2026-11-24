@@ -115,7 +115,9 @@ public sealed class ItemButtonsXamlTests
 		Assert.Contains("Play();", tapped);
 		Assert.DoesNotContain("OpenDetails", tapped);
 		// a click on the title, a button or the title's link is not the row's
-		Assert.Contains("if (node is ButtonBase || ReferenceEquals(node, title))", code);
+		// (174-sessions: the walk takes the tree and the button test, ClickGuardTests walks one of its own)
+		Assert.Contains("For(source, row, title, VisualTreeHelper.GetParent, node => node is ButtonBase);", code);
+		Assert.Contains("if (isButton(node) || ReferenceEquals(node, title))", code);
 		// the title is a neutral link to the episode's page with no Tab stop (Nixie button review, I9; the menu is the keyboard's)
 		var link = FindByName(row, "TitleLink");
 		Assert.Equal("HyperlinkButton", link.Name.LocalName);

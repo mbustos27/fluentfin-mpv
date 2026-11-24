@@ -53,7 +53,9 @@ public sealed class TitleBarSignInAgainTests : IDisposable
 
 	private void SignInPageNever() => _setup.Verify(x => x.NavigateTo(It.IsAny<string>(), It.IsAny<object?>(), It.IsAny<bool>()), Times.Never);
 
-	private void SignInPageOnce() => _setup.Verify(x => x.NavigateTo("FluentFin.ViewModels.LoginViewModel", _server, It.IsAny<bool>()), Times.Once);
+	// 174-sessions: the sign-in page of this server, opening with this user's name (the server's last remembered one could be another's)
+	private void SignInPageOnce() => _setup.Verify(x => x.NavigateTo("FluentFin.ViewModels.LoginViewModel",
+		It.Is<SetupNotice>(n => n.Server == _server && n.Username == "alice" && n.Message == ""), It.IsAny<bool>()), Times.Once);
 
 	[Fact]
 	public async Task ASavedPassword_SignsInAgainInPlace_SayingSoMeanwhile()

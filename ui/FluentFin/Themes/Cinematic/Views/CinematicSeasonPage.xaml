@@ -93,17 +93,17 @@
                     </cc:CinematicItemStage.PrimaryActions>
                     <cc:CinematicItemStage.BottomContent>
                         <StackPanel x:Name="EpisodesBlock" Padding="0,0,0,24">
-                            <StackPanel
+                            <!--  1.7.4: the tabs get what the summary leaves of the width, and scroll in it (a long show's last seasons ran off the window)  -->
+                            <lc:LeadPanel
                                 x:Name="TabsRow"
                                 Margin="88,0,48,6"
-                                Orientation="Horizontal"
                                 Spacing="18">
                                 <cc:CinematicTabStrip x:Name="SeasonTabs" AutomationProperties.Name="Seasons" TabInvoked="SeasonTabs_TabInvoked" />
                                 <TextBlock
                                     VerticalAlignment="Center"
                                     Style="{StaticResource CinematicShelfCountTextBlockStyle}"
                                     Text="{x:Bind local:CinematicSeriesSupport.Summary(ViewModel.Episodes), Mode=OneWay}" />
-                            </StackPanel>
+                            </lc:LeadPanel>
                             <lc:ShelfRow
                                 x:Name="EpisodeShelf"
                                 controls:UpNextMark.EpisodeId="{x:Bind ViewModel.PlayTarget.EpisodeId, Mode=OneWay}"

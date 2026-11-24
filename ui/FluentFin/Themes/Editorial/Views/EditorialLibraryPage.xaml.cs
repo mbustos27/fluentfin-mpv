@@ -137,6 +137,9 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			}
 		};
 		GridScroller.SizeChanged += (_, e) => Fit(e.NewSize.Width - GridScroller.Padding.Left - GridScroller.Padding.Right);
+		// Nixie 1.7.4: the rows' wheel (the page's while it can move, else the strip's) and a mouse drag; the chips keep their
+		// own fade and chevron for the pointer (EdgeScroller.WheelAndDrag)
+		EdgeScroller.WheelAndDrag(ChipScroller, ChipScroller, ChipList);
 		ChipScroller.ViewChanged += (_, _) => ShowChipCue();
 		ChipScroller.SizeChanged += (_, _) => ShowChipCue();
 		ChipStack.SizeChanged += (_, _) => DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ShowChipCue);

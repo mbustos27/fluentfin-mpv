@@ -16,6 +16,14 @@ public static class AmbientBackdrop
 
 	public static void Set(Uri? image, string? blurHash = null)
 	{
+		// 1.7.4 integration (1.7.3's close crash class): nothing changes the backdrop once the app is closing. A page's Unloaded
+		// in the window's teardown (Home's hero, an item page's hero or stage) cleared it, the window read its SystemBackdrop
+		// there (MainWindow.UpdateBackdrop) and the app ended in an access violation (0xc0000005) at the close
+		if (App.IsClosing)
+		{
+			return;
+		}
+
 		if (image == Current && blurHash == BlurHash)
 		{
 			return;

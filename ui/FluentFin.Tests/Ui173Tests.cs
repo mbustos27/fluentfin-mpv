@@ -45,10 +45,39 @@ public sealed class Ui173Tests
 	[InlineData("Views/VideoPlayerPage.xaml.cs", "private void OnUnloaded(object sender, RoutedEventArgs e)\n\t{\n\t\t// 1.7.3 fix round (the close crash)")]
 	[InlineData("Views/TitleBarControl.xaml.cs", "private void Relayout()\n\t{\n\t\tif (App.IsClosing)")]
 	[InlineData("Controls/TrailerTheater.cs", "if (App.IsClosing || App.MainWindow.AppWindow is null)")]
+	// 1.7.4: the player's bars' settle (MpvPlayerControls.Bars.cs), its one new timer: never started once closing, and its
+	// tick through UiDispatch.Tick. The rows (EdgeScroller, LeadPanel, CastCard) add no timer; the scan below covers any later
+	[InlineData("Controls/MpvPlayerControls.Bars.cs", "private void SettleBarsLater()\n\t{\n\t\t// 1.7.4 integration (1.7.3's close crash class, the review's m2): nothing once the app is closing or the player has gone.")]
+	[InlineData("Controls/MpvPlayerControls.Bars.cs", "\t\tif (App.IsClosing || !IsLoaded)\n\t\t{\n\t\t\treturn;\n\t\t}\n\n\t\t_barsChangedAt = Environment.TickCount64;")]
+	[InlineData("Controls/MpvPlayerControls.Bars.cs", "_barsSettle.Tick += UiDispatch.Tick(\"the player's bars' settle\", OnBarsSettle);")]
 	public void TheClose_NothingOfThePlayerPageReadsXamlInTheWindowsTeardown(string file, string guard)
 	{
 		var code = Code([.. file.Split('/')]).Replace("\r\n", "\n", StringComparison.Ordinal);
 		Assert.Contains(guard, code);
+	}
+
+	[Fact]
+	public void TheClose_NothingChangesTheBackdrop_InTheWindowsTeardown()
+	{
+		// 1.7.4 integration: closing from Classic's or Cinematic's Home or an item page ended in 0xc0000005: the hero's (or the
+		// item stage's) Unloaded cleared the backdrop in the window's teardown, and MainWindow read its SystemBackdrop there
+		// (then-173-close.ps1 from those pages). Set is the one way in for every page; UpdateBackdrop the one read
+		var set = Code("Services", "AmbientBackdrop.cs").Replace("\r\n", "\n", StringComparison.Ordinal);
+		set = set[set.IndexOf("public static void Set(Uri? image, string? blurHash = null)", StringComparison.Ordinal)..];
+		Assert.StartsWith("if (App.IsClosing)\n\t\t{\n\t\t\treturn;\n\t\t}", Body(set));
+		var window = Code("MainWindow.xaml.cs").Replace("\r\n", "\n", StringComparison.Ordinal);
+		window = window[window.IndexOf("private void UpdateBackdrop()", StringComparison.Ordinal)..];
+		Assert.StartsWith("if (App.IsClosing)\n\t\t{\n\t\t\treturn;\n\t\t}", Body(window));
+		// the window follows the backdrop through UpdateBackdrop only
+		Assert.Contains("AmbientBackdrop.Changed += (_, _) => RunOnUi(UpdateBackdrop);", Code("MainWindow.xaml.cs"));
+
+		// the statements after the method's opening brace, comments skipped
+		static string Body(string method)
+		{
+			var lines = method[(method.IndexOf("\n\t{\n", StringComparison.Ordinal) + 4)..].Split('\n')
+				.SkipWhile(l => l.TrimStart().StartsWith("//", StringComparison.Ordinal));
+			return string.Join("\n", lines).TrimStart('\t');
+		}
 	}
 
 	[Fact]
@@ -96,7 +125,7 @@ public sealed class Ui173Tests
 			}
 		}
 
-		Assert.True(sites >= 28, $"{sites} Tick handlers found");
+		Assert.True(sites >= 30, $"{sites} Tick handlers found"); // 1.7.3: 29; 1.7.4: the bars' settle
 		Assert.Empty(unguarded);
 	}
 

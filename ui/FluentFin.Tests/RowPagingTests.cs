@@ -131,13 +131,137 @@ public sealed class RowPagingTests
 	public void AfterACardLeaves_TheFocusStaysInTheRow(int focused, int removed, int count, int expected) =>
 		Assert.Equal(expected, RowPaging.FocusAfterRemoval(focused, removed, count));
 
-	// never hidden (the 1.1.4 layout audit, item 2); 1.2.0 (the button review, L7 and L8): at full strength at rest too
+	// ---- Nixie 1.7.4 (the rows stream): a season's episodes past the window's edge could not be reached ----------------
+
+	// the plain wheel over a row: the page's while the page can move that way, the row's when it can't
 	[Theory]
-	[InlineData(false, false, 1.0)]
-	[InlineData(true, false, 1.0)]
-	[InlineData(false, true, 1.0)]
-	public void TheArrows_AreAtFullStrength_WhereverThePointerOrTheKeyboardIs(bool pointer, bool focus, double opacity) =>
-		Assert.Equal(opacity, RowPaging.ArrowOpacity(pointer, focus));
+	[InlineData(false, false, true, WheelTarget.Page)]
+	[InlineData(false, false, false, WheelTarget.Row)]  // the page at its end, or a page that does not scroll
+	[InlineData(true, false, true, WheelTarget.Row)]
+	[InlineData(false, true, true, WheelTarget.Row)]
+	public void ThePlainWheel_MovesTheRow_WhenThePageCannotUseIt(bool tilt, bool shift, bool pageCanUse, WheelTarget expected) =>
+		Assert.Equal(expected, RowPaging.TargetOf(tilt, shift, pageCanUse));
+
+	[Theory]
+	[InlineData(0, 500, 96, true)]      // down, from the top
+	[InlineData(0, 500, -96, false)]    // up, at the top
+	[InlineData(500, 500, 96, false)]   // down, at the end
+	[InlineData(499.5, 500, 96, false)] // within the end's tolerance
+	[InlineData(500, 500, -96, true)]
+	[InlineData(0, 0, 96, false)]       // a page that does not scroll (Cinematic's season page at some sizes)
+	[InlineData(0, 0.5, 96, false)]
+	public void ThePageCanUseTheWheel_OnlyAwayFromItsEndThatWay(double offset, double scrollable, double pixels, bool expected) =>
+		Assert.Equal(expected, RowPaging.PageCanScroll(offset, scrollable, pixels));
+
+	// the arrows at the row's ends: only while the pointer is over the row, each only while the row goes further its way
+	[Theory]
+	[InlineData(false, 0, false, false)]
+	[InlineData(false, 600, false, false)]
+	[InlineData(true, 0, false, true)]     // at the start: Next only
+	[InlineData(true, 600, true, true)]
+	[InlineData(true, 3000, true, false)]  // at the end (4000 - 1000): Back only
+	[InlineData(true, 2999.5, true, false)]
+	public void TheEndArrows_ShowOnHover_OnlyTheWayTheRowGoes(bool pointerOver, double offset, bool back, bool forward) =>
+		Assert.Equal((back, forward), RowPaging.EdgeArrows(pointerOver, offset, 4000, 1000));
+
+	[Fact]
+	public void TheEndArrows_NeverShow_ForARowThatFits() =>
+		Assert.Equal((false, false), RowPaging.EdgeArrows(true, 0, 900, 1000));
+
+	[Fact]
+	public void ADrag_FollowsThePointer_OnceItIsNotAClick()
+	{
+		var drag = new RowDrag();
+		Assert.Null(drag.Move(500, 3000)); // nothing pressed
+		drag.Press(500, 200);
+		Assert.Null(drag.Move(505, 3000)); // a click that wobbles
+		Assert.False(drag.Dragging);
+		Assert.Equal(500, drag.Move(200, 3000)); // 300 px left: the row 300 px on
+		Assert.Equal(195, drag.Move(505, 3000)); // dragging now: even 5 px back counts
+		Assert.Equal(0, drag.Move(2000, 3000));  // kept within the row
+		Assert.Equal(3000, drag.Move(-9000, 3000));
+		Assert.True(drag.Release());            // it was a drag: the release opens nothing
+		Assert.False(drag.Pressed);
+		drag.Press(100, 0);
+		Assert.False(drag.Release());           // a click
+	}
+
+	// ---- 1.7.4 integration: the rows review's Minors ----------------------------------------------------------------------
+
+	[Fact]
+	public void APress_ThatLeavesTheRowBeforeItIsADrag_IsForgotten()
+	{
+		// m2: press a card, leave the row vertically, let go outside it (the row never hears that): a left button held over the
+		// row later started a drag from the old press, and the row jumped
+		var drag = new RowDrag();
+		drag.Press(500, 200);
+		drag.Left();
+		Assert.False(drag.Pressed);
+		Assert.Null(drag.Move(100, 3000));    // no jump from the old press
+		Assert.False(drag.Release());          // and nothing to swallow on a later release
+
+		// a drag goes on when the pointer leaves (the row holds it)
+		drag.Press(500, 200);
+		Assert.Equal(500, drag.Move(200, 3000));
+		drag.Left();
+		Assert.True(drag.Pressed);
+		Assert.Equal(600, drag.Move(100, 3000));
+		Assert.True(drag.Release());
+
+		var code = File.ReadAllText(Source("EdgeScroller.cs")).Replace("\r\n", "\n", StringComparison.Ordinal);
+		var exited = code[code.IndexOf("area.PointerExited += (_, _) =>", StringComparison.Ordinal)..];
+		Assert.Contains("_drag.Left();", exited[..exited.IndexOf("};", StringComparison.Ordinal)]);
+		var canceled = code[code.IndexOf("area.PointerCanceled += (_, _) =>", StringComparison.Ordinal)..];
+		Assert.Contains("_drag.Left();", canceled[..canceled.IndexOf("};", StringComparison.Ordinal)]);
+	}
+
+	[Theory]
+	[InlineData(true, false, 5000L, true)]                         // the page still moving to its end: the page's
+	[InlineData(true, true, 40L, true)]                            // a fast spin goes on past the end: still the page's
+	[InlineData(true, true, RowPaging.WheelHandOverMs - 1, true)]
+	[InlineData(true, true, RowPaging.WheelHandOverMs, false)]     // the wheel rested: the row's
+	[InlineData(true, true, 5000L, false)]
+	[InlineData(false, true, 0L, false)]                           // a page that doesn't scroll never keeps it
+	[InlineData(false, false, 0L, false)]
+	public void AtThePagesEnd_TheRowTakesThePlainWheel_OnlyOnceThePageStoppedAndTheWheelRested(bool pageScrolls, bool settled, long since, bool staysWithPage) =>
+		Assert.Equal(staysWithPage, RowPaging.WheelStaysWithPage(pageScrolls, settled, since));
+
+	[Fact]
+	public void TheRowsWheel_AsksThePause_AndAPagesNotchIsTimed()
+	{
+		// m3: the notches after the page's target reached its end slid the row while the page still moved
+		var code = File.ReadAllText(Source("EdgeScroller.cs")).Replace("\r\n", "\n", StringComparison.Ordinal);
+		var wheel = code[code.IndexOf("private void Content_PointerWheelChanged(", StringComparison.Ordinal)..];
+		wheel = wheel[..wheel.IndexOf("internal static ScrollViewer? PageScroller(", StringComparison.Ordinal)];
+		Assert.Contains("var pageKeeps = pageCanUse || RowPaging.WheelStaysWithPage(scrollable > RowPaging.EndTolerance, settled, now - s_pageTookTheWheelAt);", wheel);
+		Assert.Contains("RowPaging.TargetOf(properties.IsHorizontalMouseWheel, shift, pageKeeps) == WheelTarget.Row", wheel);
+		// settled: where the page is, not where it is going
+		Assert.Contains("var settled = !RowPaging.PageCanScroll(page?.VerticalOffset ?? view?.VerticalOffset ?? 0, scrollable, pixels);", wheel);
+		Assert.Equal(2, wheel.Split("s_pageTookTheWheelAt = now;").Length - 1); // the page's two kinds
+		Assert.DoesNotContain("CreateTimer", code);
+		Assert.InRange(RowPaging.WheelHandOverMs, 150, 500);
+	}
+
+	[Fact]
+	public void ACastCardsTemplate_IsParsedOnce_ForEveryPerson()
+	{
+		// m4: XamlReader.Load ran for each person of the row
+		var code = File.ReadAllText(Source("CastCard.cs"));
+		Assert.Contains("private static ControlTemplate? s_template;", code);
+		Assert.Contains("Template = s_template ??= (ControlTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(", code);
+		Assert.Single(code.Split("XamlReader.Load(").Skip(1));
+	}
+
+	private static string Source(string file)
+	{
+		var dir = AppContext.BaseDirectory;
+		while (!File.Exists(Path.Combine(dir, "FluentFin.sln")))
+		{
+			dir = Path.GetDirectoryName(dir)!;
+		}
+
+		return Path.Combine(dir, "FluentFin", "Controls", file);
+	}
 }
 
 public sealed class HeroDotsTests

@@ -26,6 +26,17 @@ public static class ItemMeta
 	/// </summary>
 	public static string EpisodeTitle(BaseItemDto? episode) => ItemLabels.EpisodeTitle(episode);
 
+	/// <summary>
+	/// Nixie 1.7.4 (the rows stream): a cast photo's whole name and role, for its tooltip and Narrator ("Thomas McDonell,
+	/// Commander Evangeline Ashcroft-Reyes"), since the name under the photo may be trimmed to the photo's width.
+	/// </summary>
+	public static string PersonSpoken(BaseItemPerson? person)
+	{
+		var name = person?.Name?.Trim() ?? "";
+		var role = PersonRole(person);
+		return role.Length == 0 ? name : name.Length == 0 ? role : $"{name}, {role}";
+	}
+
 	/// <summary>Under a cast photo: the role ("Tony Stark") or, for the crew, what they did ("Director"); "" when neither is known.</summary>
 	public static string PersonRole(BaseItemPerson? person) =>
 		!string.IsNullOrWhiteSpace(person?.Role) ? person.Role.Trim()

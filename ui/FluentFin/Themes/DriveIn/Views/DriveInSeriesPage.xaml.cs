@@ -18,6 +18,9 @@ public sealed partial class DriveInSeriesPage : Page
 	public DriveInSeriesPage()
 	{
 		InitializeComponent();
+		// Nixie 1.7.4: the season tubes scroll as a row does (arrows at their ends on hover, the wheel, a drag)
+		_ = new FluentFin.Controls.EdgeScroller(SeasonTubesHost, SeasonTubesScroller, SeasonTubes, SeasonTubesBack, SeasonTubesNext, () => 0);
+		FluentFin.Controls.EdgeScroller.HomeEndKeys(SeasonTubes);
 		SizeChanged += (_, e) => Body.Padding = new Thickness(ItemStage.MarginFor(e.NewSize.Width), 8, ItemStage.MarginFor(e.NewSize.Width), 56);
 		// Nixie 1.4.1: the season tubes are made anew for each season shown: the current one gets the keyboard back (it fell
 		// to "Season N details")

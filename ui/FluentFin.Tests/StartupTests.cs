@@ -71,12 +71,12 @@ public sealed class StartupTests
 
 	private static (Handler Handler, Mock<INavigationService> Setup, Mock<IMainWindowViewModel> Window, TaskCompletionSource<bool> SignIn) SavedLogin(string serverName)
 	{
-		var server = new SavedServer { DisplayName = serverName, Users = [new SavedUser { Username = "alice" }] };
+		var server = new SavedServer { DisplayName = serverName, Users = [new SavedUser { Username = "alice", Password = [1, 2, 3] }] }; // 174-sessions: a saved password (only users that can sign in are used)
 		var settings = new Mock<ISettings>();
 		settings.SetupGet(x => x.Servers).Returns(new ObservableCollection<SavedServer> { server });
 		var signIn = new TaskCompletionSource<bool>();
 		var auth = new Mock<IJellyfinAuthenticationService>();
-		auth.Setup(x => x.Authenticate(server, server.Users[0])).Returns(signIn.Task);
+		auth.Setup(x => x.Authenticate(server, server.Users[0], It.IsAny<CancellationToken>())).Returns(signIn.Task);
 		var setup = new Mock<INavigationService>();
 		var window = new Mock<IMainWindowViewModel>();
 		window.SetupProperty(x => x.StartupStatus);
@@ -103,18 +103,22 @@ public sealed class StartupTests
 		setup.Verify(x => x.NavigateTo(next, It.IsAny<object?>(), It.IsAny<bool>()), Times.Once);
 	}
 
+	/// <summary>174-sessions: a sign-in that throws clears the status too, and the server list says so (it ended at "Startup failed").</summary>
 	[Fact]
 	public async Task ASignInThatThrows_StillClearsTheStatus()
 	{
-		var (handler, _, window, signIn) = SavedLogin("");
+		var (handler, setup, window, signIn) = SavedLogin("");
 
 		var running = handler.SignIn();
 		await Task.Delay(20);
 		Assert.Equal("Signing in to the server…", window.Object.StartupStatus);   // 1.7.3 (rule 11): not "your server"
 		signIn.SetException(new HttpRequestException("unreachable"));
 
-		await Assert.ThrowsAsync<HttpRequestException>(() => running);
+		await running.WaitAsync(TimeSpan.FromSeconds(5));
 		Assert.Null(window.Object.StartupStatus);
+		var opened = Assert.Single(setup.Invocations, i => i.Method.Name == "NavigateTo");
+		Assert.Equal("FluentFin.Core.ViewModels.SelectServerViewModel", opened.Arguments[0]);
+		Assert.Equal("Couldn't sign in to the server. Try again; if it keeps happening, the app's log has the details.", Assert.IsType<SetupNotice>(opened.Arguments[1]).Message);
 	}
 
 	/// <summary>

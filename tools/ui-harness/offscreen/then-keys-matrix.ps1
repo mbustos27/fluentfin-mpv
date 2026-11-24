@@ -1108,6 +1108,9 @@ function KM-EscOrderSection {
     KM-SetWindowed
 }
 
+# 1.7.4: the helpers alone (KM-*), for a script that dot-sources this one (offscreen\then-174-hud.ps1)
+if ($env:NIXIE_MATRIX_ONLY -eq 'helpers') { return }
+
 if ($env:NIXIE_MATRIX_ONLY -eq 'esc') {   # 1.6: section 11 alone
     KM-EscOrderSection
     [KeysMatrix]::Close()

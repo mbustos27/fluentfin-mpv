@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!--  Seaglass: round photos with the name and the role, in a row that scrolls sideways. Opaque: content, not chrome.  -->
+<!--
+    Seaglass: round photos with the name and the role, in a row that scrolls sideways. Opaque: content, not chrome.
+    Nixie 1.7.4 (the rows stream): each person is a keyboard stop of the row (CastCard: the row's keys reach every one and
+    bring it into view); the name and the role stay within the photo's width (104), on two lines at most, trimmed with "..."
+    (they were 120 wide with no gap, so "Thomas McDonell" and "Christopher Larkin" ran together), and the whole of both is
+    the card's tooltip and its name for Narrator.
+-->
 <UserControl
     x:Class="FluentFin.Controls.CastRow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -15,30 +21,42 @@
     <local:ShelfRow x:Name="Row">
         <local:ShelfRow.ItemTemplate>
                     <DataTemplate x:DataType="jm:BaseItemPerson">
-                        <StackPanel Width="120" Spacing="6">
-                            <PersonPicture
-                                Width="104"
-                                Height="104"
-                                DisplayName="{x:Bind Name}"
-                                ProfilePicture="{x:Bind c:ItemArtworkConverters.Person((jm:BaseItemPerson), 208)}" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontWeight="SemiBold"
-                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                MaxLines="2"
-                                Text="{x:Bind Name}"
-                                TextAlignment="Center"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                MaxLines="2"
-                                Text="{x:Bind core:ItemMeta.PersonRole((jm:BaseItemPerson))}"
-                                TextAlignment="Center"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="Wrap" />
-                        </StackPanel>
+                        <local:CastCard
+                            Width="120"
+                            AutomationProperties.Name="{x:Bind core:ItemMeta.PersonSpoken((jm:BaseItemPerson))}"
+                            ToolTipService.ToolTip="{x:Bind core:ItemMeta.PersonSpoken((jm:BaseItemPerson))}">
+                            <StackPanel Spacing="6">
+                                <PersonPicture
+                                    Width="104"
+                                    Height="104"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    DisplayName="{x:Bind Name}"
+                                    ProfilePicture="{x:Bind c:ItemArtworkConverters.Person((jm:BaseItemPerson), 208)}" />
+                                <!--  the card speaks for itself (its name and role): the texts are what the eye reads  -->
+                                <TextBlock
+                                    x:Name="PersonName"
+                                    Width="104"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    HorizontalAlignment="Center"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                    MaxLines="2"
+                                    Text="{x:Bind Name}"
+                                    TextAlignment="Center"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="WrapWholeWords" />
+                                <TextBlock
+                                    Width="104"
+                                    HorizontalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    MaxLines="2"
+                                    Text="{x:Bind core:ItemMeta.PersonRole((jm:BaseItemPerson))}"
+                                    TextAlignment="Center"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </local:CastCard>
                     </DataTemplate>
         </local:ShelfRow.ItemTemplate>
     </local:ShelfRow>

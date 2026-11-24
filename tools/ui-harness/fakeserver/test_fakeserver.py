@@ -885,6 +885,16 @@ class BigSeriesTests(unittest.TestCase):
         season2 = fx["seasons"][1]
         listed = big.query({"parentid": [season2["id"]], "sortby": ["SortName"]})["Items"]
         self.assertEqual([e["name"] for e in season2["episodes"]], [d["Name"] for d in listed])
+        # Nixie 1.7.4: the series and every season have the long cast (16, names as long as real ones and longer), and the
+        # fixture lists it with the role shown under each photo
+        names = [p["name"] for p in fx["cast"]]
+        self.assertEqual(16, len(names))
+        self.assertEqual(library.Library.LONG_CAST, names)
+        self.assertEqual("Commander Evangeline Ashcroft-Reyes", fx["cast"][0]["role"])
+        self.assertEqual("Producer", fx["cast"][-1]["role"])
+        for season in fx["seasons"]:
+            self.assertEqual(names, [p["Name"] for p in big.items[season["id"]]["people"]])
+        self.assertTrue(all(p.get("PrimaryImageTag") for p in big.items[fx["id"]]["people"]))
 
 
 class SearchTests(unittest.TestCase):

@@ -11,12 +11,14 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     IsTabStop="False">
     <!--
-        review Major 4: up to 12 Nixie collections after the four: the strip scrolls sideways (a thin bar under it for the
-        pointer), and the keyboard's preset is always brought into view
+        review Major 4: up to 12 Nixie collections after the four: the strip scrolls sideways, and the keyboard's preset is
+        always brought into view. Nixie 1.7.4: the pointer has the rows' arrows at its ends, a drag and the wheel
+        (EdgeScroller, LibraryPresetStrip.xaml.cs), so no bar under it
     -->
     <ScrollViewer
         x:Name="Scroller"
-        HorizontalScrollBarVisibility="Auto"
+        AutomationProperties.Name="Presets"
+        HorizontalScrollBarVisibility="Hidden"
         HorizontalScrollMode="Enabled"
         IsTabStop="False"
         VerticalScrollBarVisibility="Disabled"

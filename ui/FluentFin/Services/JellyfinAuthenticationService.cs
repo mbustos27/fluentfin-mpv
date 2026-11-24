@@ -22,7 +22,8 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 										   ITitleBarViewModel titleBarViewModel,
 										   ILocalSettingsService settingsService,
 										   [FromKeyedServices(NavigationRegions.InitialSetup)] INavigationService setupNavigationService,
-										   ILogger<JellyfinAuthenticationService> logger) : IJellyfinAuthenticationService
+										   ILogger<JellyfinAuthenticationService> logger,
+										   ISettings? settings = null) : IJellyfinAuthenticationService // 174-sessions: the saved servers (null: tests)
 {
 
 	public static Uri GetSplashScreen(string url)
@@ -200,7 +201,7 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		}
 	}
 
-	public async Task<bool> Authenticate(SavedServer server, QuickConnectResult result)
+	public async Task<bool> Authenticate(SavedServer server, QuickConnectResult result, bool remember)
 	{
 		var url = server.GetServerUrl();
 		var client = GetClient(url);
@@ -217,6 +218,21 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 				await FinishSignIn(url, auth);
 				// Seaglass 1.1.4: as the password sign-ins do: the Account menu and the messages name the server
 				titleBarViewModel.CurrentServer = server;
+				// 174-signin: "Remember me" keeps it, as a password sign-in's: nothing was saved, so every start asked again. Its
+				// password is an empty one, protected: 1.7.3 and earlier read it at the start (an empty array threw there).
+				// 174-sessions: off, the next start signs in as nobody (the sign-in page forgets a remembered one, BS-m1)
+				if (auth.User?.Name is { Length: > 0 } name)
+				{
+					SavedUser? keep = null;
+					if (remember && auth.AccessToken is { Length: > 0 } token)
+					{
+						var entropy = settingsService.GetEntropyBytes();
+						keep = new SavedUser { Username = name, Password = "".Protect(entropy), Token = token.Protect(entropy) };
+					}
+
+					SignedIn(server, name, keep);
+				}
+
 				setupNavigationService.NavigateTo<ShellViewModel>();
 			}
 
@@ -229,14 +245,51 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		}
 	}
 
-	public async Task<bool> Authenticate(SavedServer server, SavedUser user)
+	public string? SavedSignInProblem { get; private set; }
+
+	public bool SavedSignInRefused { get; private set; }
+
+	public Task<bool> Authenticate(SavedServer server, SavedUser user) => Authenticate(server, user, CancellationToken.None);
+
+	public async Task<bool> Authenticate(SavedServer server, SavedUser user, CancellationToken cancellationToken)
 	{
-		var success = await Authenticate(server.GetServerUrl(), user.Username, user.Password.Unprotect(settingsService.GetEntropyBytes())) is null;
+		SavedSignInProblem = null;
+		SavedSignInRefused = false;
+
+		// 174-signin: a saved Quick Connect sign-in goes on with its token (there is no password to send)
+		if (user.Token.Length > 0)
+		{
+			return await Resume(server, user, cancellationToken);
+		}
+
+		var (error, refusal) = await Authenticate(server.GetServerUrl(), user.Username, user.Password.Unprotect(settingsService.GetEntropyBytes()), cancellationToken);
+		var success = error is null;
 
 		if (success)
 		{
 			titleBarViewModel.CurrentServer = server;
 			SessionInfo.CurrentUserCrendentials = user;
+			SignedInAgain(server, user);
+		}
+		else if (refusal == 401)
+		{
+			// 174-sessions (BS-M4): a saved password the server refuses is never sent again by itself. Jellyfin disables an
+			// account after 3 failed sign-ins (5 for an administrator) and only the server's administrator can turn it on again;
+			// every start sent it once, and so did Sign in again. Forgotten, the name kept: the sign-in page asks once
+			Forget(server, user.Username);
+			SavedSignInRefused = true;
+			SavedSignInProblem = NoLongerWorks(server);
+		}
+		else if (refusal == 403)
+		{
+			// the review's m1: Jellyfin answers 403 (the account disabled, remote access off, outside its allowed hours) only
+			// once the password is right, and those don't count toward the lockout: the password stays, for the next start
+			SavedSignInProblem = NotNow(server);
+		}
+		else
+		{
+			// 174-sessions (BS-M3): the reason, naming the server (the server list opened without a word); kept for the next start
+			SavedSignInProblem = $"Couldn't sign in to {NameOf(server)}. {error}";
 		}
 
 		return success;
@@ -244,7 +297,7 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 
 	public async Task<string?> Authenticate(SavedServer server, string username, string password, bool remember)
 	{
-		var error = await Authenticate(server.GetServerUrl(), username, password);
+		var (error, _) = await Authenticate(server.GetServerUrl(), username, password, CancellationToken.None);
 
 		if (error is null)
 		{
@@ -257,19 +310,9 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 			};
 			SessionInfo.CurrentUserCrendentials = user;
 
-			if (remember)
-			{
-				// replace rather than mutate so the Users collection change gets saved
-				var existing = server.Users.FirstOrDefault(x => x.Username == username);
-				if (existing is null)
-				{
-					server.Users.Add(user);
-				}
-				else
-				{
-					server.Users[server.Users.IndexOf(existing)] = user;
-				}
-			}
+			// 174-signin: one saved user whatever the case of the name. 174-sessions: "Remember me" off, the next start signs in
+			// as nobody (the sign-in page forgets a remembered one when its box is unticked for it, BS-m1)
+			SignedIn(server, username, remember ? user : null);
 
 			setupNavigationService.NavigateTo<ShellViewModel>();
 		}
@@ -277,8 +320,8 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		return error;
 	}
 
-	/// <returns><c>null</c> on success, otherwise a message describing why sign-in failed.</returns>
-	private async Task<string?> Authenticate(string url, string username, string password)
+	/// <returns><c>null</c> on success, otherwise a message describing why sign-in failed; a refusal: the server said no (401, 403).</returns>
+	private async Task<(string? Error, int? Refusal)> Authenticate(string url, string username, string password, CancellationToken cancellationToken)
 	{
 		try
 		{
@@ -287,27 +330,201 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 			{
 				Username = username,
 				Pw = password
-			});
+			}, cancellationToken: cancellationToken);
 
 			if (auth is null)
 			{
-				return "The server returned no session.";
+				return ("The server returned no session.", null);
 			}
 
 			await FinishSignIn(url, auth);
-			return null;
+			return (null, null);
 		}
 		catch (Exception ex)
 		{
 			// 1.1.4 (states): the address as a log may show it (no user info, no query)
 			logger.LogError(ex, "Sign-in to {Url} failed", BridgeRedaction.ServerForLog(url));
-			HttpsProblem https;
-			using (var diagnosis = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+			return (await Describe(ex, url, cancellationToken), ex is ApiException { ResponseStatusCode: 401 or 403 } refused ? refused.ResponseStatusCode : null);
+		}
+	}
+
+	/// <summary>
+	/// Why a sign-in failed, in the page's words (<see cref="DescribeFailure"/>); an HTTPS failure is looked into first, for
+	/// up to 10 s and no longer than <paramref name="cancellationToken"/> allows (174-sessions: the start's bound).
+	/// </summary>
+	private static async Task<string> Describe(Exception ex, string url, CancellationToken cancellationToken)
+	{
+		HttpsProblem https;
+		using (var diagnosis = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+		{
+			diagnosis.CancelAfter(TimeSpan.FromSeconds(10));
+			https = IsSecureConnectionFailure(ex) ? await DiagnoseHttps(url, diagnosis.Token) : HttpsProblem.None;
+		}
+
+		return DescribeFailure(ex, url, https);
+	}
+
+	/// <summary>The server as the messages name it: its name, else its address's host (and port).</summary>
+	private static string NameOf(SavedServer server) => LoginViewModel.ServerNameOf(server) is { Length: > 0 } name ? name : "the server";
+
+	/// <summary>174-signin: a saved sign-in the server refused (a token, 174-sessions: or a password).</summary>
+	internal static string NoLongerWorks(SavedServer server) => $"The saved sign-in to {NameOf(server)} no longer works. Sign in again.";
+
+	/// <summary>
+	/// 174-sessions (the review's m1): a 403 to a saved sign-in: the server's own rule for the account (disabled, remote
+	/// access off, outside its allowed hours), nothing this PC can change.
+	/// </summary>
+	internal static string NotNow(SavedServer server) =>
+		$"{NameOf(server)} doesn't let this account sign in right now. Try again later; if it keeps happening, the server's owner may need to know.";
+
+	/// <summary>
+	/// 174-sessions: what a sign-in that worked leaves on this PC. <paramref name="keep"/> ("Remember me") is saved for the
+	/// next start, which signs in to the server signed in to last (BS-M2); none leaves the saved sign-ins as they are, and the
+	/// next start signs in as nobody (the review's Major and m2).
+	/// The server is saved again when it isn't (BS-m2: removed in Settings while signed in to it, "sign in to add it again"
+	/// left none). A settings file that can't be written doesn't undo the sign-in: it is logged.
+	/// </summary>
+	private void SignedIn(SavedServer server, string userName, SavedUser? keep)
+	{
+		try
+		{
+			if (settings is { } saved && !saved.Servers.Contains(server) && !saved.Servers.Any(x => x.Id.Length > 0 && x.Id == server.Id))
 			{
-				https = IsSecureConnectionFailure(ex) ? await DiagnoseHttps(url, diagnosis.Token) : HttpsProblem.None;
+				saved.Servers.Add(server);
 			}
 
-			return DescribeFailure(ex, url, https);
+			SavedSignIns.SignedIn(settings?.Servers ?? [server], server, userName, keep is not null);
+			if (keep is not null)
+			{
+				SavedSignIns.Remember(server, keep); // its change saves the server list, the last sign-in with it
+			}
+
+			settings?.SaveServerDetails();
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning(ex, "The sign-in could not be saved in the settings");
+		}
+	}
+
+	/// <summary>174-sessions (BS-M2): a saved sign-in used again (the start, Sign in again) is the last one, when it is saved.</summary>
+	private void SignedInAgain(SavedServer server, SavedUser user)
+	{
+		if (!server.Users.Any(x => SavedSignIns.CanSignIn(x) && string.Equals(x.Username.Trim(), user.Username.Trim(), StringComparison.OrdinalIgnoreCase)))
+		{
+			return; // a sign-in without "Remember me", signed in again: still not remembered
+		}
+
+		try
+		{
+			SavedSignIns.SignedIn(settings?.Servers ?? [server], server, user.Username, kept: true);
+			settings?.SaveServerDetails();
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning(ex, "The last sign-in could not be saved in the settings");
+		}
+	}
+
+	/// <summary>
+	/// 174-sessions (BS-M4): a saved sign-in the server refused goes (its password or its token; the name stays as the
+	/// server's last user, for the sign-in page), and the session's copy of it, so nothing sends it again.
+	/// </summary>
+	private void Forget(SavedServer server, string userName)
+	{
+		if (SessionInfo.CurrentUserCrendentials is { } current && string.Equals(current.Username.Trim(), userName.Trim(), StringComparison.OrdinalIgnoreCase))
+		{
+			SessionInfo.CurrentUserCrendentials = null!;
+		}
+
+		try
+		{
+			SavedSignIns.Forget(server, userName);
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning(ex, "The refused saved password could not be removed from the settings");
+		}
+	}
+
+	/// <summary>
+	/// 174-signin: a saved Quick Connect sign-in (<see cref="SavedUser.Token"/>), at a start: the server says whose the token
+	/// is (GET /Users/Me) and the session goes on with it, as a password sign-in's does. A token the server refuses (401:
+	/// signed out on another device, the device removed; 174-sessions: a 403 keeps it) is forgotten, and <see cref="SavedSignInProblem"/> says so
+	/// (the server list opened without a word, and every start tried the dead token again; 174-sessions: on the server's
+	/// sign-in page, <see cref="SavedSignInRefused"/>). No answer (the network, the server down) is no sign-in either, but the
+	/// token stays for the next start (174-sessions: and the server list says why).
+	/// </summary>
+	private async Task<bool> Resume(SavedServer server, SavedUser user, CancellationToken cancellationToken)
+	{
+		var url = server.GetServerUrl();
+		try
+		{
+			var token = user.Token.Unprotect(settingsService.GetEntropyBytes());
+			var me = await GetClient(url, token).Users.Me.GetAsync(cancellationToken: cancellationToken);
+			if (me?.Id is not { } userId)
+			{
+				SavedSignInProblem = $"Couldn't sign in to {NameOf(server)}. Try again; if it keeps happening, the app's log has the details."; // 174-sessions (BS-M3)
+				return false;
+			}
+
+			SessionInfo.CurrentUserCrendentials = null; // as after Quick Connect: no password (Jellyseerr, Sign in again)
+			await FinishSignIn(url, new AuthenticationResult { AccessToken = token, User = me, ServerId = me.ServerId ?? server.Id });
+			titleBarViewModel.CurrentServer = server;
+			SignedInAgain(server, user);
+			_ = FindSessionId(url, token, userId); // not waited for: the first screen does not show it
+			return true;
+		}
+		catch (ApiException notNow) when (notNow.ResponseStatusCode is 403)
+		{
+			// 174-sessions (the review's m1): the token is good, the account isn't let in now (disabled, remote access off,
+			// outside its hours): kept for the next start, as a password is
+			logger.LogWarning("The server at {Url} doesn't let the saved Quick Connect sign-in's account in now (403); it is kept", BridgeRedaction.ServerForLog(url));
+			SavedSignInProblem = NotNow(server);
+			return false;
+		}
+		catch (ApiException refused) when (refused.ResponseStatusCode is 401)
+		{
+			logger.LogWarning("The server at {Url} refused the saved Quick Connect sign-in ({Status}); it is forgotten", BridgeRedaction.ServerForLog(url), refused.ResponseStatusCode);
+			try
+			{
+				SavedSignIns.ForgetToken(server, user.Username);
+			}
+			catch (Exception ex)
+			{
+				logger.LogWarning(ex, "The refused saved sign-in could not be removed from the settings");
+			}
+
+			SavedSignInRefused = true; // 174-sessions: the sign-in page next, with the name
+			SavedSignInProblem = NoLongerWorks(server);
+			return false;
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning(ex, "The saved Quick Connect sign-in to {Url} didn't work; it is kept for the next start", BridgeRedaction.ServerForLog(url));
+			SavedSignInProblem = $"Couldn't sign in to {NameOf(server)}. {await Describe(ex, url, cancellationToken)}"; // 174-sessions (BS-M3): it said nothing
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// 174-signin: this device's session on the server, which a sign-in's answer carries and a resumed one's has none of (Play
+	/// On leaves it out of its list). Never throws; nothing when it can't be read or the sign-in changed meanwhile.
+	/// </summary>
+	private async Task FindSessionId(string url, string token, Guid userId)
+	{
+		try
+		{
+			var device = Core.InstallDeviceId.Current;
+			var sessions = await GetClient(url, token).Sessions.GetAsync(x => x.QueryParameters.DeviceId = device);
+			if (sessions?.FirstOrDefault(x => x.UserId == userId)?.Id is { Length: > 0 } id && SessionInfo.AccessToken == token)
+			{
+				SessionInfo.SessionId = id;
+			}
+		}
+		catch (Exception ex)
+		{
+			logger.LogDebug(ex, "This device's session on {Url} could not be read", BridgeRedaction.ServerForLog(url));
 		}
 	}
 
@@ -324,12 +541,16 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		titleBarViewModel.User = auth.User;
 	}
 
-	private static JellyfinApiClient GetClient(string url)
+	private static JellyfinApiClient GetClient(string url, string? token = null)
 	{
 		var id = Core.InstallDeviceId.Current; // 1.5.1 fixes (BH-150-M2): this copy's id, not the PC's (sign-in and the server page alike)
 		var settings = new JellyfinSdkSettings();
 		settings.SetServerUrl(url);
 		settings.Initialize(Core.AppIdentity.ClientName, Core.AppVersion.Current, Environment.MachineName, id);
+		if (token is not null)
+		{
+			settings.SetAccessToken(token); // 174-signin: a saved Quick Connect sign-in (Resume)
+		}
 		return new JellyfinApiClient(new JellyfinRequestAdapter(new JellyfinAuthenticationProvider(settings), settings));
 	}
 }

@@ -65,58 +65,108 @@
                         <Grid ColumnSpacing="28">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <dc:MarqueeSign VerticalAlignment="Center" Text="Showtimes" />
-                            <StackPanel
+                            <!--
+                                Nixie 1.7.4 (the rows stream): the tubes get what the summary leaves of the width and scroll in it, with the
+                                rows' arrows on hover (EdgeScroller): a long show's tubes ran off the window
+                            -->
+                            <controls:LeadPanel
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
-                                Orientation="Horizontal"
-                                Spacing="14"
-                                Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.SeasonPills.Count), Mode=OneWay}">
+                                Spacing="28">
+                                <Grid
+                                    VerticalAlignment="Center"
+                                    ColumnSpacing="14"
+                                    Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.SeasonPills.Count), Mode=OneWay}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw"
+                                        CharacterSpacing="140"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Foreground="{ThemeResource DriveInPageTextSecondaryBrush}"
+                                        Text="SEASON" />
+                                    <Grid x:Name="SeasonTubesHost" Grid.Column="1">
+                                        <ScrollViewer
+                                            x:Name="SeasonTubesScroller"
+                                            AutomationProperties.Name="Seasons"
+                                            HorizontalScrollBarVisibility="Hidden"
+                                            HorizontalScrollMode="Enabled"
+                                            IsTabStop="False"
+                                            VerticalScrollBarVisibility="Disabled"
+                                            VerticalScrollMode="Disabled">
+                                            <ItemsControl
+                                                x:Name="SeasonTubes"
+                                                AutomationProperties.Name="Seasons"
+                                                IsTabStop="False"
+                                                ItemsSource="{x:Bind ViewModel.SeasonPills, Mode=OneWay}"
+                                                TabFocusNavigation="Once"
+                                                XYFocusKeyboardNavigation="Enabled">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="core:SeasonPill">
+                                                        <Button
+                                                            AutomationProperties.Name="{x:Bind AutomationName}"
+                                                            Command="{x:Bind root:App.Commands.DisplayDtoCommand}"
+                                                            CommandParameter="{x:Bind Dto}"
+                                                            Style="{StaticResource DriveInSeasonTubeButtonStyle}"
+                                                            ToolTipService.ToolTip="{x:Bind Name}">
+                                                            <dc:SeasonTube Pill="{x:Bind}" />
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                        <!--  the rows' arrows at the tubes' ends (EdgeScroller: shown on hover, each only while there is more that way)  -->
+                                        <Button
+                                            x:Name="SeasonTubesBack"
+                                            Width="32"
+                                            Height="32"
+                                            Margin="4,0,0,0"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AutomationId="RowBackButton"
+                                            AutomationProperties.Name="Scroll Seasons left"
+                                            IsTabStop="False"
+                                            Style="{StaticResource NixieIconButtonStyle}"
+                                            ToolTipService.ToolTip="Scroll left (or Shift+wheel, drag, Left key)"
+                                            Visibility="Collapsed">
+                                            <FontIcon FontSize="14" Glyph="&#xE76B;" />
+                                        </Button>
+                                        <Button
+                                            x:Name="SeasonTubesNext"
+                                            Width="32"
+                                            Height="32"
+                                            Margin="0,0,4,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AutomationId="RowNextButton"
+                                            AutomationProperties.Name="Scroll Seasons right"
+                                            IsTabStop="False"
+                                            Style="{StaticResource NixieIconButtonStyle}"
+                                            ToolTipService.ToolTip="Scroll right (or Shift+wheel, drag, Right key)"
+                                            Visibility="Collapsed">
+                                            <FontIcon FontSize="14" Glyph="&#xE76C;" />
+                                        </Button>
+                                    </Grid>
+                                </Grid>
                                 <TextBlock
                                     VerticalAlignment="Center"
-                                    AutomationProperties.AccessibilityView="Raw"
-                                    CharacterSpacing="140"
-                                    FontSize="13"
-                                    FontWeight="SemiBold"
+                                    FontSize="14"
                                     Foreground="{ThemeResource DriveInPageTextSecondaryBrush}"
-                                    Text="SEASON" />
-                                <ItemsControl
-                                    x:Name="SeasonTubes"
-                                    AutomationProperties.Name="Seasons"
-                                    IsTabStop="False"
-                                    ItemsSource="{x:Bind ViewModel.SeasonPills, Mode=OneWay}"
-                                    TabFocusNavigation="Once"
-                                    XYFocusKeyboardNavigation="Enabled">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="core:SeasonPill">
-                                            <Button
-                                                AutomationProperties.Name="{x:Bind AutomationName}"
-                                                Command="{x:Bind root:App.Commands.DisplayDtoCommand}"
-                                                CommandParameter="{x:Bind Dto}"
-                                                Style="{StaticResource DriveInSeasonTubeButtonStyle}"
-                                                ToolTipService.ToolTip="{x:Bind Name}">
-                                                <dc:SeasonTube Pill="{x:Bind}" />
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Orientation="Horizontal" Spacing="6" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                </ItemsControl>
-                            </StackPanel>
-                            <TextBlock
-                                Grid.Column="2"
-                                VerticalAlignment="Center"
-                                FontSize="14"
-                                Foreground="{ThemeResource DriveInPageTextSecondaryBrush}"
-                                Text="{x:Bind vm:DriveInItems.SeasonSummary(ViewModel.Episodes), Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis" />
+                                    Text="{x:Bind vm:DriveInItems.SeasonSummary(ViewModel.Episodes), Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </controls:LeadPanel>
                         </Grid>
 
                         <!--  the board: the whole season, one Tab stop per episode  -->

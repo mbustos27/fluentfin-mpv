@@ -57,6 +57,13 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 
 	public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
+	/// <summary>174-signin: a line the page opens with that is no sign-in error (<see cref="SetupNotice"/>), in a bar of its own.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasNotice))]
+	public partial string Notice { get; set; } = "";
+
+	public bool HasNotice => !string.IsNullOrEmpty(Notice);
+
 	public bool IsIdle => !IsSigningIn;
 
 	/// <summary>The server as the user knows it: its name, else its address.</summary>
@@ -100,9 +107,58 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 	/// <summary>What Narrator reads for the code: digit by digit ("1 2 3 4 5 6"), not as a number.</summary>
 	public static string SpokenCode(string? code) => string.Join(' ', (code ?? "").Where(c => !char.IsWhiteSpace(c)));
 
-	partial void OnUsernameChanged(string value) => UpdateCanLogin();
+	partial void OnUsernameChanged(string value)
+	{
+		UpdateCanLogin();
+		TickIfRemembered();
+	}
 
-	partial void OnServerChanged(SavedServer? value) => UpdateCanLogin();
+	partial void OnServerChanged(SavedServer? value)
+	{
+		UpdateCanLogin();
+		TickIfRemembered();
+	}
+
+	/// <summary>
+	/// 174-sessions (the review's Major): a name that was remembered here (picked from the list, which fills in its saved
+	/// password, typed, or the one the page opens with) ticks "Remember me": unticked, the sign-in wasn't kept, and the next
+	/// start signed in as someone else, or nobody. Never unticks.
+	/// </summary>
+	private void TickIfRemembered()
+	{
+		if (!KeepMeLoggedIn && SavedSignIns.WasRemembered(Server, Username))
+		{
+			KeepMeLoggedIn = true;
+		}
+	}
+
+	/// <summary>The name "Remember me" was unticked for, by the user (the page only ever ticks it); null once ticked again.</summary>
+	private string? _untickedFor;
+
+	partial void OnKeepMeLoggedInChanged(bool value) => _untickedFor = value ? null : Username?.Trim();
+
+	/// <summary>
+	/// 174-sessions (BS-m1, the review's Major): after a sign-in as <paramref name="signedIn"/> with "Remember me" off, an
+	/// earlier saved sign-in of that user goes only when the box was unticked for that very name. An unticked box alone
+	/// means "don't keep this one", never "forget the one kept before".
+	/// </summary>
+	private void ForgetIfUnticked(SavedServer server, string? signedIn)
+	{
+		if (KeepMeLoggedIn || _untickedFor is not { Length: > 0 } name || !SavedSignIns.SameUserName(name, signedIn))
+		{
+			return;
+		}
+
+		try
+		{
+			SavedSignIns.ForgetName(server, name);
+			SavedSignIns.Forget(server, name); // its change saves the server list
+		}
+		catch (Exception ex)
+		{
+			Serilog.Log.Warning(ex, "The saved sign-in that \"Remember me\" was unticked for could not be removed from the settings");
+		}
+	}
 
 	partial void OnIsSigningInChanged(bool value) => UpdateCanLogin();
 
@@ -120,9 +176,14 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 		ErrorMessage = "";
 		IsSigningIn = true;
 		string? error;
+		var server = Server!;
 		try
 		{
-			error = await jellyfinAuthenticator.Authenticate(Server, Username.Trim(), Password, KeepMeLoggedIn);
+			error = await jellyfinAuthenticator.Authenticate(server, Username.Trim(), Password, KeepMeLoggedIn);
+			if (error is null)
+			{
+				ForgetIfUnticked(server, Username);
+			}
 		}
 		catch (Exception ex)
 		{
@@ -215,7 +276,11 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 		bool signedIn;
 		try
 		{
-			signedIn = await jellyfinAuthenticator.Authenticate(server, approved);
+			signedIn = await jellyfinAuthenticator.Authenticate(server, approved, KeepMeLoggedIn); // 174-signin: "Remember me" keeps it too
+			if (signedIn)
+			{
+				ForgetIfUnticked(server, SessionInfo.CurrentUser?.Name); // the user the code was approved for
+			}
 		}
 		catch (Exception ex)
 		{
@@ -352,7 +417,10 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 
 	public Task OnNavigatedTo(object parameter)
 	{
-		if (parameter is not SavedServer server)
+		// 174-signin: Switch user with a line to say (SetupNotice: the saved sign-in couldn't be removed from this PC)
+		Notice = parameter is SetupNotice { Message: var message } ? message : "";
+		var server = parameter switch { SetupNotice notice => notice.Server, SavedServer saved => saved, _ => null };
+		if (server is null)
 		{
 			return Task.CompletedTask;
 		}
@@ -361,8 +429,18 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 		Server = server;
 		SplashScreen = JellyfinAuthenticationService.GetSplashScreen(Server.GetServerUrl());
 
+		// 174-sessions (BS-m3): the page opens with the name it signs in (it opened empty, also with one saved user): the one
+		// it is given (a refused saved sign-in's, Sign in again's; none for Switch user), else the server's last remembered
+		// one (kept after Sign out), else its one saved user. Not over a name typed already. "Remember me" stays ticked for a
+		// name that was remembered: off, the sign-in would forget it (BS-m1)
+		if (string.IsNullOrWhiteSpace(Username))
+		{
+			Username = parameter is SetupNotice { Username: { } name } ? name.Trim() : SavedSignIns.UsernameFor(server); // ticks "Remember me" for a remembered name
+		}
+
 		return Task.CompletedTask;
 	}
 
-	public string Unprotect(byte[] protectedBytes) => protectedBytes.Unprotect(settingsService.GetEntropyBytes());
+	// 174-signin: a saved Quick Connect sign-in has no password (an empty one is no DPAPI blob: Unprotect threw)
+	public string Unprotect(byte[] protectedBytes) => protectedBytes.Length == 0 ? "" : protectedBytes.Unprotect(settingsService.GetEntropyBytes());
 }

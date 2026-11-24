@@ -83,6 +83,13 @@ public sealed partial class MainWindow : WindowEx
 
 	private void UpdateBackdrop()
 	{
+		// 1.7.4 integration (1.7.3's close crash class): the window's SystemBackdrop isn't read in its teardown (an access
+		// violation there ended the app at the close; AmbientBackdrop.Set and GlassMode.Changed both come here)
+		if (App.IsClosing)
+		{
+			return;
+		}
+
 		GlassModeKind mode;
 		try { mode = GlassMode.Current; }
 		catch (Exception) { mode = GlassModeKind.Solid; }

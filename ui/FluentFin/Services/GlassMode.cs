@@ -66,6 +66,9 @@ public static class GlassMode
 
 	public static event EventHandler? Changed;
 
+	/// <summary>Nixie 1.7.4: <see cref="Changed"/> raised as Windows raises it (the dev builds' harness hook, HarnessPointer).</summary>
+	internal static void RaiseChanged() => Changed?.Invoke(null, EventArgs.Empty);
+
 	/// <summary>The mode Settings forces, or null for automatic.</summary>
 	public static GlassModeKind? Override
 	{

@@ -17,6 +17,9 @@ public sealed partial class DriveInSeasonPage : Page
 	public DriveInSeasonPage()
 	{
 		InitializeComponent();
+		// Nixie 1.7.4: the season tubes scroll as a row does (arrows at their ends on hover, the wheel, a drag)
+		_ = new FluentFin.Controls.EdgeScroller(SeasonTubesHost, SeasonTubesScroller, SeasonTubes, SeasonTubesBack, SeasonTubesNext, () => 0);
+		FluentFin.Controls.EdgeScroller.HomeEndKeys(SeasonTubes);
 		SizeChanged += (_, e) => Body.Padding = new Thickness(ItemStage.MarginFor(e.NewSize.Width), 8, ItemStage.MarginFor(e.NewSize.Width), 56);
 		// Nixie 1.5: the seasons either side get their stills asked ahead, as the showtimes ask them
 		FluentFin.Services.StillsAhead.Follow(this, episode => FluentFin.Core.ItemArtwork.ThumbPath(episode, Showtime.ThumbWidth));

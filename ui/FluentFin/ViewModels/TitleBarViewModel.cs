@@ -205,11 +205,30 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 
 	private bool CanSignOut() => !IsSigningOut;
 
+	/// <summary>
+	/// Sign out: the server list next. 174-sessions (BS-M1): the saved sign-in of this user goes too (its password or token;
+	/// the name stays for the sign-in page): it stayed, and the next start signed in again with it.
+	/// </summary>
 	[RelayCommand(CanExecute = nameof(CanSignOut))]
-	public Task Logout() => SignOut(() => _setupNavigationService.NavigateTo<SelectServerViewModel>());
+	public Task Logout() => SignOut(notice => _setupNavigationService.NavigateTo<SelectServerViewModel>(notice), forgetPassword: true);
 
+	/// <summary>
+	/// Switch user: this server's sign-in page next. A saved password stays (a saved Quick Connect token goes with the session).
+	/// 174-sessions: the page opens with no name (it is for someone else; the saved ones are in its list).
+	/// </summary>
 	[RelayCommand(CanExecute = nameof(CanSignOut))]
-	public Task SwitchUser() => SignOut(() => _setupNavigationService.NavigateTo<LoginViewModel>(CurrentServer));
+	public Task SwitchUser() => SignOut(notice => _setupNavigationService.NavigateTo<LoginViewModel>((notice ?? new SetupNotice("")) with { Server = CurrentServer, Username = "" }));
+
+	/// <summary>174-signin: Sign out's one line when the saved Quick Connect sign-in couldn't be removed from this PC.</summary>
+	public static string ForgetFailedNotice =>
+		$"Signed out, but {AppIdentity.Name} couldn't remove the saved sign-in from this PC. It's removed at the next start.";
+
+	/// <summary>
+	/// 174-sessions: the same for a saved password (Sign out): the server still takes it, so the next start would sign in with
+	/// it again.
+	/// </summary>
+	public static string ForgetPasswordFailedNotice =>
+		$"Signed out, but {AppIdentity.Name} couldn't remove the saved password from this PC, so the next start may sign in with it again.";
 
 	/// <summary>
 	/// 1.5.1 fixes (BH-150-M2): every page's (and the player's) Sign in again, once the server no longer takes this sign-in
@@ -224,6 +243,8 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 			return false;
 		}
 
+		SetupNotice? why = null;
+		var name = User?.Name; // 174-sessions: the sign-in page opens with this user's name
 		if (CurrentServer is { } server && SessionInfo.CurrentUserCrendentials is { Password.Length: > 0 } saved)
 		{
 			IsSigningOut = true;
@@ -233,6 +254,13 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 				if (await authentication.Authenticate(server, saved))
 				{
 					return true;
+				}
+
+				// 174-sessions (BS-M3, BS-M4): the sign-in page says why, with the name (a refused password is forgotten, so this
+				// is its one try: the next press, or the next start, sends nothing)
+				if (authentication.SavedSignInProblem is { Length: > 0 } problem)
+				{
+					why = new SetupNotice(problem, server, saved.Username);
 				}
 			}
 			catch (Exception)
@@ -246,7 +274,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 			}
 		}
 
-		await SwitchUser();
+		await SignOut(notice => _setupNavigationService.NavigateTo<LoginViewModel>((notice ?? why ?? new SetupNotice("")) with { Server = CurrentServer, Username = why?.Username ?? name }));
 		return false;
 	}
 
@@ -255,7 +283,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	/// revoked (bounded, <see cref="MpvPlaybackService.StopForSignOutAsync"/>), which is shown meanwhile. One at a time: both
 	/// commands are disabled until it is done, and one invoked anyway (back to back, before the first got that far) does nothing.
 	/// </summary>
-	private async Task SignOut(Action navigate)
+	private async Task SignOut(Action<SetupNotice?> navigate, bool forgetPassword = false)
 	{
 		if (IsSigningOut)
 		{
@@ -268,8 +296,34 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 			SignOutStatus = _mpvPlayback.HasPlayback ? "Stopping playback…" : "Signing out…";
 			await _mpvPlayback.StopForSignOutAsync();
 			SignOutStatus = "Signing out…";
+			var signedOut = User?.Name;
 			User = null;
-			navigate();
+			// 174-signin: the token ends on the server next, so a saved Quick Connect sign-in goes with it (a password stays).
+			// A settings file that can't be written must not stop the sign-out halfway (no page change, the token alive on the
+			// server): the sign-out goes on and says it in one line; the next start removes the refused token.
+			// 174-sessions (BS-M1): Sign out forgets a saved password too (the name stays for the sign-in page)
+			SetupNotice? notice = null;
+			var password = forgetPassword && CurrentServer?.Users.Any(x => x.Token.Length == 0 && x.Password.Length > 0 &&
+				string.Equals(x.Username.Trim(), signedOut?.Trim(), StringComparison.OrdinalIgnoreCase)) == true;
+			try
+			{
+				if (forgetPassword)
+				{
+					SessionInfo.CurrentUserCrendentials = null!; // nothing of it in memory either (Sign in again, Jellyseerr)
+					SavedSignIns.Forget(CurrentServer, signedOut);
+				}
+				else
+				{
+					SavedSignIns.ForgetToken(CurrentServer, signedOut);
+				}
+			}
+			catch (Exception ex)
+			{
+				Serilog.Log.Warning(ex, "Sign out: the saved sign-in could not be removed from the settings");
+				notice = new SetupNotice(password ? ForgetPasswordFailedNotice : ForgetFailedNotice);
+			}
+
+			navigate(notice);
 			await _jellyfinClient.Logout();
 		}
 		finally

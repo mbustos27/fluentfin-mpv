@@ -110,6 +110,10 @@ changed in each version is in [CHANGELOG.md](../CHANGELOG.md); every key is in [
   - Rows, season pages' episode lists and library grids are one Tab stop each, and Tab comes back to the card or
     episode you left; the arrow keys, Home/End (and PageUp/PageDown in a grid) move inside them, and Up/Down leave
     them for what is above or below.
+  - 1.7.4: every row reaches its last card: with the mouse over a row, arrows show at its ends (each only while there
+    is more that way); Shift+wheel, a tilt wheel, a touchpad's sideways swipe and a drag move it, and so does the plain
+    wheel once the page can't scroll further. A gamepad's D-pad moves along it and its shoulder buttons page it. Cast &
+    crew is a row of keyboard stops too, each name kept within its photo (the whole of it in the tooltip and Narrator).
   - An episode is one stop: Enter plays it, and the Menu key or Shift+F10 opens its menu.
   - Narrator reads each card by name with its place ("12 of 320"), each episode as "S1 E4 Title, watched", every
     icon button has a name, and an item page's title logo is read as its heading.

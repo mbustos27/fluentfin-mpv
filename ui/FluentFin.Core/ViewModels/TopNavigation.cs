@@ -239,8 +239,27 @@ public static class TopTabs
 			return destination;
 		}
 
+		// Nixie 1.7.4 (the rows stream, from the friend's screenshot: "Home" lit over a season page): Home is no section an
+		// item belongs to, so an item page drilled into from it lights nothing; TopNavigation lights the item's library once
+		// that is known, when the bar has a tab for it (LibraryTab), holding Home until then (no blank step between)
+		if (DrilledFromHome(pageKey, current, fromSearch))
+		{
+			return null;
+		}
+
 		return fromSearch ? TopMark.Search : current;
 	}
+
+	/// <summary>Nixie 1.7.4: an item page drilled into from Home (not from the search box), which Home cannot stay lit over.</summary>
+	public static bool DrilledFromHome(string pageKey, TopMark? current, bool fromSearch) =>
+		!fromSearch && current is { } lit && lit.Key == HomeKey && TopNavigation.ItemPages.Contains(pageKey);
+
+	/// <summary>
+	/// Nixie 1.7.4: the destination of <paramref name="library"/>'s own tab in <paramref name="row"/> (the bar as shown); null
+	/// when it has none there (in "Libraries ▾"'s menu only: lighting it would rename that tab, and the bar would move).
+	/// </summary>
+	public static TopMark? LibraryTab(IReadOnlyList<TopTab> row, Guid? library) =>
+		library is null ? null : row.FirstOrDefault(t => t.Kind == TopTabKind.Library && t.LibraryId == library)?.Mark;
 
 	/// <summary>
 	/// Nixie 1.4.0: the eyebrow over an item page: the tab of the item's <paramref name="library"/>, unless that library is the
@@ -547,6 +566,7 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 		_marks.Clear();
 		_searchChosenAt = null;
 		_shownDepth = -1;
+		_holdingHome = false; // 1.7.4 integration
 		Lit = new TopMark(TopTabs.HomeKey);
 		ForgetTrails(); // 1.7 upnav
 		ReadFavourites(); // 1.6 topbar: this user's favourites on this server
@@ -604,9 +624,16 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 		CountOpen(pageKey, parameter, returning, before); // 1.6 topbar
 		var fromSearch = _searchChosenAt is { } at && Clock() - at <= SearchChoiceLasts.TotalMilliseconds;
 		_searchChosenAt = null;
-		Lit = returning && depth >= 0 && _marks.TryGetValue(depth, out var mark)
+		var lit = returning && depth >= 0 && _marks.TryGetValue(depth, out var mark)
 			? mark
 			: TopTabs.MarkFor(AllTabs, pageKey, parameter, Lit, fromSearch, Sections);
+		// 1.7.4 integration (the rows review's m5): an item page drilled into from Home keeps Home lit while its library is asked
+		// (ShowEyebrow), then lights that library's tab, or nothing, in one change: Home, nothing, then Shows moved the bar twice.
+		// Only while there is a lookup to wait for; a page returned to before its lookup ended holds again
+		var lookup = ItemPages.Contains(pageKey) && parameter is BaseItemDto && LibraryOf is not null;
+		var home = new TopMark(TopTabs.HomeKey);
+		_holdingHome = lookup && (lit is null && !returning && TopTabs.DrilledFromHome(pageKey, Lit, fromSearch) || returning && lit == home);
+		Lit = _holdingHome ? home : lit;
 		ShowRow();
 		ShowEyebrow(pageKey, parameter);
 		ShowTrail(pageKey, parameter); // 1.7 upnav: the series and season crumbs (TopNavigation.Trail.cs)
@@ -647,6 +674,26 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 
 	private int _eyebrowFor;
 
+	/// <summary>1.7.4 integration: Home is held lit over an item page drilled into from it until its library is known.</summary>
+	private bool _holdingHome;
+
+	/// <summary>The held Home lets go: the item's library's tab, or nothing (<paramref name="library"/> unknown, or no tab for it in the bar).</summary>
+	private void EndHomeHold(Guid? library)
+	{
+		if (!_holdingHome)
+		{
+			return;
+		}
+
+		_holdingHome = false;
+		Lit = TopTabs.LibraryTab(Tabs, library);
+		ShowRow();
+		if (_shownDepth >= 0)
+		{
+			_marks[_shownDepth] = Lit;
+		}
+	}
+
 	/// <summary>The eyebrow's last lookup (tests wait on it).</summary>
 	internal Task EyebrowLookup { get; private set; } = Task.CompletedTask;
 
@@ -672,12 +719,19 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 			catch (Exception ex)
 			{
 				logger.LogDebug("Top bar: no library for the eyebrow: {Error}", ex.Message);
+				if (version == _eyebrowFor)
+				{
+					EndHomeHold(null); // not known: nothing lit, never Home
+				}
+
 				return;
 			}
 
 			// a page shown since: its own lookup decides
 			if (version == _eyebrowFor)
 			{
+				// Nixie 1.7.4: an item page drilled into from Home lights its library, when it has a tab (else nothing)
+				EndHomeHold(library);
 				Eyebrow = TopTabs.EyebrowFor(AllTabs, library, Lit);
 			}
 		}

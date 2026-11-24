@@ -21,6 +21,7 @@ public sealed partial class CinematicTabStrip : UserControl
 {
 	private readonly StackPanel _panel = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
 	private readonly List<CinematicTabButton> _buttons = [];
+	private readonly EdgeScroller _edge;
 
 	public CinematicTabStrip()
 	{
@@ -28,15 +29,20 @@ public sealed partial class CinematicTabStrip : UserControl
 		_panel.TabFocusNavigation = KeyboardNavigationMode.Once;
 		// 1.6 colpage (review Major 4): many tabs (a library's presets and up to 12 Nixie collections) scroll sideways, the
 		// keyboard's tab brought into view; tabs that fit show as before
-		Content = new ScrollViewer
+		var scroller = new ScrollViewer
 		{
 			Content = _panel,
 			IsTabStop = false,
 			HorizontalScrollMode = ScrollMode.Enabled,
-			HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+			HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, // 1.7.4: the arrows, a drag and the wheel, as on a row
 			VerticalScrollMode = ScrollMode.Disabled,
 			VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
 		};
+		// Nixie 1.7.4 (the rows stream): the rows' pointer behaviour (EdgeScroller: arrows at its ends on hover, the wheel once
+		// the page can't move, a drag), so a long show's seasons are in the mouse's reach as a row's cards are
+		(var host, _edge) = EdgeScroller.Wrap(scroller, _panel, "tabs");
+		Content = host;
+		Loaded += (_, _) => _edge.Name(AutomationProperties.GetName(this) is { Length: > 0 } name ? name : "tabs");
 		_panel.AddHandler(KeyDownEvent, new KeyEventHandler(Panel_KeyDown), true);
 	}
 

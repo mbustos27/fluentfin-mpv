@@ -136,11 +136,18 @@ public sealed partial class BaseItemDtoCard : UserControl, ICaptionPrefixed
 		e.Handled = true;
 	}
 
-	private bool OnAButton(DependencyObject? source)
+	private bool OnAButton(DependencyObject? source) => OnAButton(source, this, VisualTreeHelper.GetParent, node => node is ButtonBase);
+
+	/// <summary>
+	/// Whether a click's <paramref name="source"/> is on one of the card's buttons: walked up to the card through
+	/// <paramref name="parent"/>. 174-sessions (BS-m4): on any tree, so the tests walk one of their own (a real pointer's click
+	/// can't be made off-screen).
+	/// </summary>
+	internal static bool OnAButton<T>(T? source, T card, Func<T, T?> parent, Func<T, bool> isButton) where T : class
 	{
-		for (var node = source; node is not null && !ReferenceEquals(node, this); node = VisualTreeHelper.GetParent(node))
+		for (var node = source; node is not null && !ReferenceEquals(node, card); node = parent(node))
 		{
-			if (node is ButtonBase)
+			if (isButton(node))
 			{
 				return true;
 			}

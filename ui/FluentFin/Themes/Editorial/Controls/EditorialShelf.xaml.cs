@@ -94,10 +94,6 @@ public sealed partial class EditorialShelf : UserControl, IEditorialDetailsHost
 		TitleText.Text = Title;
 		Row.Header = Title;
 		Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SeeAllButton, $"See all {Title}");
-		Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(BackButton, $"Scroll {Title} left");
-		Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(ForwardButton, $"Scroll {Title} right");
-		ToolTipService.SetToolTip(BackButton, "Scroll left");
-		ToolTipService.SetToolTip(ForwardButton, "Scroll right");
 	}
 
 	private void UpdateSeeAll() => SeeAllButton.Visibility = HasSeeAll ? Visibility.Visible : Visibility.Collapsed;
@@ -108,10 +104,12 @@ public sealed partial class EditorialShelf : UserControl, IEditorialDetailsHost
 	{
 		CloseDetails(returnFocus: false);
 		Row.ItemsSource = ItemsSource;
-		DispatcherQueue.TryEnqueue(UpdateArrows);
 	}
 
-	/// <summary>The shared row's own header gives way to this one; its scroller drives the arrows here.</summary>
+	/// <summary>
+	/// The shared row's own header gives way to this one. Nixie 1.7.4: the row's arrows are the shared row's, at its ends (this
+	/// header's pair went: one behaviour in every theme).
+	/// </summary>
 	private void AdoptRow()
 	{
 		if (_scroller is not null || Row.Content is not Grid root || root.Children.Count < 2)
@@ -121,52 +119,11 @@ public sealed partial class EditorialShelf : UserControl, IEditorialDetailsHost
 
 		root.RowSpacing = 0;
 		root.Children[0].Visibility = Visibility.Collapsed;
-		_scroller = root.Children[1] as ScrollViewer;
-		if (_scroller is not null)
-		{
-			// room inside the row's clip for a poster's focus ring and glow; the row moves out by as much, so the posters stay aligned
-			Row.Margin = new Thickness(-RingRoom, -RingRoom, -RingRoom, 0);
-			_scroller.Padding = new Thickness(RingRoom, RingRoom, RingRoom, 0);
-			_scroller.ViewChanged += (_, _) => UpdateArrows();
-			_scroller.SizeChanged += (_, _) => UpdateArrows();
-			_scroller.LayoutUpdated += (_, _) => UpdateArrows();
-		}
-
-		UpdateArrows();
+		_scroller = Row.RowScroller;
+		// room inside the row's clip for a poster's focus ring and glow; the row moves out by as much, so the posters stay aligned
+		Row.Margin = new Thickness(-RingRoom, -RingRoom, -RingRoom, 0);
+		_scroller.Padding = new Thickness(RingRoom, RingRoom, RingRoom, 0);
 	}
-
-	private void UpdateArrows()
-	{
-		if (_scroller is not { } s)
-		{
-			return;
-		}
-
-		var overflow = s.ScrollableWidth > 1;
-		var visibility = overflow ? Visibility.Visible : Visibility.Collapsed;
-		if (BackButton.Visibility != visibility)
-		{
-			BackButton.Visibility = ForwardButton.Visibility = visibility;
-		}
-
-		BackButton.IsEnabled = RowPaging.CanScrollBack(s.HorizontalOffset);
-		ForwardButton.IsEnabled = RowPaging.CanScrollForward(s.HorizontalOffset, s.ExtentWidth, s.ViewportWidth);
-	}
-
-	private void Page(bool forward)
-	{
-		if (_scroller is not { } s)
-		{
-			return;
-		}
-
-		var stride = (IsNarrow ? 122 : 144) + (IsNarrow ? 16 : 18);
-		SmoothScroll.To(s, horizontal: true, RowPaging.Page(s.HorizontalOffset, s.ViewportWidth, s.ExtentWidth, stride, forward));
-	}
-
-	private void BackButton_Click(object sender, RoutedEventArgs e) => Page(forward: false);
-
-	private void ForwardButton_Click(object sender, RoutedEventArgs e) => Page(forward: true);
 
 	private void SeeAllButton_Click(object sender, RoutedEventArgs e) => SeeAll?.Invoke(this, EventArgs.Empty);
 

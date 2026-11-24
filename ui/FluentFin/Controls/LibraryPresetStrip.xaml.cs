@@ -24,6 +24,10 @@ public sealed partial class LibraryPresetStrip : UserControl
 	public LibraryPresetStrip()
 	{
 		InitializeComponent();
+		// Nixie 1.7.4 (the rows stream): the rows' pointer behaviour (EdgeScroller: arrows at its ends on hover, the wheel once
+		// the page can't move, a drag), as for every horizontal row
+		Content = null;
+		Content = EdgeScroller.Wrap(Scroller, Strip, "Presets").Host;
 		// Left, Right, Home and End along the strip, here rather than by the scroller (which would scroll instead of moving)
 		Strip.AddHandler(KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler(Strip_KeyDown), true);
 		Loaded += (_, _) => Watch(ViewModel);

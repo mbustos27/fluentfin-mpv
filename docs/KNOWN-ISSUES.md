@@ -6,8 +6,9 @@ below is low severity, an accepted cost of the contract, or not verified yet. Ea
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Fix queue (next fix release)
-For 1.7.4 now: 1.7.3 took Made by Nixie's four P0s, 1.7.1's queue, the rule 11 sweep and the rename's code constants
-(its section), so 1.7.0's queue below waits for 1.7.4, with what 1.7.3 left (just below).
+For 1.7.5 now (every remaining fix and the basics gate): 1.7.4 was the basics release (its section) and took none of
+this queue. 1.7.3 took Made by Nixie's four P0s, 1.7.1's queue, the rule 11 sweep and the rename's code constants
+(its section), so 1.7.0's queue below waits for 1.7.5, with what 1.7.3 left (just below).
 1.6.1 took what it could of the queue it was given, and what is left of it stays below, after 1.7.0's own.
 
 From 1.7.3 (its streams, their reviews and the integration, 2026-11-22; no Blocker, and M1's one Major was fixed before
@@ -198,6 +199,126 @@ runs post keys and cannot move the real cursor or hear sound).
   - Sign in again mid-playback on the owner's server: never tested by us (the server isn't ours, and ending a sign-in
     there is the owner's to do); not run, for the owner.
 
+- **1.7.4** (each is what an off-screen run can't press; the harness drives the code behind it):
+  - A real mouse drag along a row (press a card, move more than 10 px sideways, let go): the row follows, and the card
+    under the press doesn't open. Off-screen the pointer hook moves the row through its drag steps without pressing a
+    card (`HarnessPointer`), and a posted press never reaches WinUI there, so the capture that keeps the card's click
+    away (`EdgeScroller.Content_PointerMoved`) is untested (the rows review's m1): not run, for the owner.
+  - A precision touchpad's two-finger sideways swipe on a row (DirectManipulation's pan; the harness posts a tilt wheel,
+    as a legacy touchpad sends it): not run, for the owner.
+  - A real Shift+wheel over a row (a posted Shift never reaches WinUI off-screen, so `rows-gate.ps1` records n/t): not
+    run, for the owner.
+  - A real tap and a double tap on a saved server's "…" (More options) on the server list: the menu opens with Remove
+    and nothing else, and the server's sign-in doesn't open under it (the hook clicks through the automation peer, not
+    WinUI's tap; `RowButtonTapTests` checks the button keeps both): not run, for the owner.
+
+## Nixie 1.7.4: the basics
+- **Merged** (2026-11-23, `wip/rel-1.7.4` from main's `2075a75e`, 1.7.3 as released): `wip/174-signin`, `wip/174-hud`
+  and `wip/174-rows`, in that order. The three were cut from `5a064051`, 1.7.3's head before its two fix rounds, and
+  main has 1.7.3 squashed (`30630d72`, the same code as `wip/rel-1.7.3`'s `7341e732`), so their merge base here was
+  `fb5e2daf` and every 1.7.3 change would have merged against itself. `f1977959` records `7341e732` as an ancestor with
+  no file changes (`-s ours`); each branch then merged against `5a064051`, and only its own changes met the fix rounds'.
+  - Conflicts: one, `tools\README.md` (both new rows kept). `HarnessPointer.cs` merged by itself (the hud's kinds 5 to
+    8 beside the rows' hover and drag), as did `ShelfRow.xaml.cs` and `EditorialHomePage.xaml.cs` (1.7.3's closing
+    guards kept in their timers). `CinematicTabStrip.cs`, `HarnessPresetSource.cs`, the Collections page, the Settings
+    page and `then-160-collections.ps1` didn't conflict: the 1.7.4 branches don't touch the last four, and only the
+    rows touch the tab strip, which the fix rounds didn't.
+  - One test met 1.7.3's fix round: `BarsSettleTests` read `OnTick` up to its first `}`, which is now the closing guard's
+    block; it reads the whole method.
+- **1.7.3's closing guard on every new timer** (`UiDispatch.Tick`, `App.IsClosing`): 1.7.4 adds one timer, the bars'
+  settle (`MpvPlayerControls.Bars.cs`). `SettleBarsLater` does nothing once the app is closing or the player has gone,
+  and `OnBarsSettle` ticks through `UiDispatch.Tick`. `EdgeScroller`, `LeadPanel` and `CastCard` have no timer (a drag's
+  steps in the harness only). `Ui173Tests` lists the settle beside 1.7.3's player-page guards, and its scan finds 30
+  `Tick` handlers (1.7.3: 29).
+- **The reviews' Minors, fixed at the integration** (no Blocker or Major in either review; each with a test that fails
+  with its fix reverted):
+  - The hud's m1: the Next episode button has the bars' fade and takes clicks, so left faint a click meant for the video
+    started the next episode. The settle takes it, each element only while it shows.
+  - The hud's m2: the settle under the closing guard (above).
+  - The hud's m4, for 1.9's picture in picture: an `Unloaded` that comes after the player's new `Loaded` (a move) no
+    longer stops its heartbeat and settle.
+  - The rows' m2: a press that leaves the row before it is a drag is forgotten (`RowDrag.Left`): released outside the
+    row, a left button held over it later started a drag from the old press, and the row jumped.
+  - The rows' m3: at a page's end the plain wheel goes to the row only once the page has stopped and the wheel has
+    rested 300 ms (`RowPaging.WheelStaysWithPage`, a timestamp): a fast spin or a touchpad's coasting slid the row while
+    the page still moved.
+  - The rows' m4: `CastCard`'s template is parsed once.
+  - The rows' m5: an item page opened from Home keeps Home lit while its library is asked, then lights the library's tab
+    or nothing, in one change (it went Home, nothing, then Shows); a failed lookup lights nothing, never Home.
+  - The rows' m1 (drag versus click) stays a hand check (above).
+- **A crash at the close from an item page (and Home's heroes), found at the integration:** closing from a film's page in
+  Classic or Cinematic ended in `0xc0000005` with 4.5 to 5 s to exit (`then-173-close.ps1`, 2 of 2 runs each on the
+  merged build). The page's hero (`ItemHero`) or stage (`CinematicItemStage`) cleared the window's backdrop in its
+  `Unloaded`, which runs in the window's teardown; `MainWindow.UpdateBackdrop` then read `Window.SystemBackdrop` from the
+  gone window (the .NET stack in the Application log). Home's heroes (`HomeHero`, `CinematicHero`) clear it the same way:
+  1.7.3's fix round guarded their timers, not their `Unloaded`. The Application log holds 129 such crashes in two days,
+  from the streams' builds and from 1.7.3's own package in the bug hunt's Classic runs (which reported every check
+  passed: `drive.ps1`'s end-of-run close in its `finally` doesn't check the exit code). Fixed: `AmbientBackdrop.Set` and
+  `MainWindow.UpdateBackdrop` do nothing once `App.IsClosing`; `Ui173Tests.TheClose_NothingChangesTheBackdrop_InTheWindowsTeardown`
+  fails with either guard removed. Off-screen (`then-173-close.ps1`), without the guards: a film's page in Classic
+  `0xC0000005` 2 of 2, in Cinematic 2 of 2, Classic's Home reached from a season page (the bug hunt's order)
+  `0xC0000005` (HomeHero's stack); Home as the first page closed cleanly in Classic and Cinematic (2 of 2 each: the
+  timing decides). With them: each of those exits 0 in 0.2 to 0.3 s.
+- **Drive-in's library crash under fast scrolling: not reproduced.** The one crash was the rows stream's run
+  `g1-pre-DriveIn` on 1.7.3's `5a064051` (2026-11-23 00:16): `0xc000027b` in `Microsoft.UI.Xaml.dll`, a stowed
+  `E_UNEXPECTED`, no managed frame and no line in the app's log, mid-session, as `then-174-rows.ps1` began the Movies
+  library's "Jump to a letter" row and stepped the page's scroll through UI Automation. No other run of any stream
+  crashed there. `then-174-scrollstress.ps1` (new: 30 parts of wheel bursts, UI Automation jumps 20 ms apart, page keys,
+  tilt bursts and overlapping drags on the A to Z strip and a 24-season show's rows, the season tubes switched in a
+  glide, at 2560 x 1392) ran clean on the merged build and on that same `5a064051` exe: alive throughout, no first-chance
+  line, no `[ui]` failure, a close in 0.35 to 0.45 s with exit code 0. The rows gate's Drive-in run repeats the crashed
+  run's steps (below). The backdrop guard above doesn't explain it: that crash is an access violation in `coreclr.dll` at
+  a close, this one a stowed exception in XAML with the window still in use. If it comes again, the first-chance trail
+  logs only exceptions with a FluentFin frame outside the close, so the next one may say no more.
+- **Off-screen, through `run-offscreen.ps1`'s lock, on the final build** (Debug, libmpv beside it):
+  - `rows-gate.ps1`, four themes, at "max", 1920 x 1080 and 1280 x 720: 824 of 831. Classic 156 of 156 and Drive-in 207
+    of 207, whose "max" was 2576 x 1408; Cinematic 266 of 269 and Editorial 195 of 199, whose "max" was 1936 x 1048 (the
+    2560 x 1440 monitor had dropped off the bus by 09:02, so those two weren't run at 2560). Drive-in's run went through
+    the Movies library's "Jump to a letter" row at each size with no crash. Cinematic's three were Home at 1280 x 720
+    ("Up next" keys and D-pad, "New in Movies" D-pad: the focus short of the last of 36 within the gate's 4 s, as in the
+    rows stream's first gate run); the page alone again, 19 of 19. Editorial's four are one fault, open (Left).
+  - `then-174-hud.ps1`: 600 of 600 (as on the merged build before the backdrop guard).
+  - `before-174-servermenu.ps1`: 33 of 33 (as before the backdrop guard). Its first run on the final build, beside two
+    rows-gate runs, had 15 of 25: once the first menu had closed with Escape, UI Automation found no menu after any later
+    press (the shot shows the list, the keyboard on the "…"). A flake to watch in 1.7.5's gate.
+  - `then-174-qc-remember.ps1` (fake server): 23 of 23.
+  - The close checks, each exit code 0: Drive-in's Home (`then-173-close-home.ps1`) 282 ms; Home in Classic, Cinematic and
+    Editorial; Classic's Home reached from a season page; a film's page in Classic, Cinematic and Drive-in; the player page
+    with Nixie's controls and with mpv's, and with no mpv (`then-173-close-nompv.ps1`); 0.19 to 0.32 s each.
+  - `then-160-collections.ps1` in Drive-in: 34 of 34.
+  - `then-174-scrollstress.ps1` (above): 14 of 14 on the merged build and on 1.7.3's base.
+- **Suites:** Core 5,619 passed, 2 skipped. UI 1,695 passed, 10 skipped; of four full runs, one had
+  `DashboardPowerTests.ANo_CancelOrEscape_SendsNothing("shutdown")` fail and two had three failures
+  (`QuickConnectTests.AnApprovedCode_SignsInWithProgress_AndAFailedSignIn_IsSaidOnThePage`,
+  `MpvBackendHostPrewarmTests.APlayAfterThePrewarm_StartsAndConnectsNothing` and one more), with harness runs or another
+  stream's builds beside them; each passes alone (three times), and the fourth run passed whole.
+- **Left:**
+  - `drive.ps1`'s end-of-run close (its `finally`, for a run whose steps have no `close`) doesn't check the exit code, so
+    a crash at that close passes the run (the bug hunt's Classic runs above). For 1.7.5's gate: the same check as
+    `Step-Close`.
+  - Drive-in's library crash (above): not reproduced, nothing to fix yet.
+  - The four hand checks (Hand checks, 1.7.4).
+  - The hud's picture-in-picture note (m4) is in the code; 1.9 should move the player once in the harness and check the
+    bars still settle.
+  - 1.7.3's `CompositionTarget.Rendering` handlers outside the player page are still unguarded at the close (1.7.3's
+    Left); none was seen to fire there.
+
+- **Signing in and out** (`wip/174-sessions`, `8dc66022`, `e5444ef4`, `ed13f521`; the basics sweep of 1.7.3, its four
+  Majors and three Minors, then its review's Major and three Minors): Sign out forgets the saved password or token;
+  the start signs in as the last remembered user only; a failed start says why within 10 s; a refused password (a 401)
+  is forgotten and never sent again by itself, while a 403 keeps it; picking a remembered name ticks Remember me, and an
+  unticked box never deletes a saved sign-in; removing the server in use signs out first; the username is filled in.
+  `then-174-sessions.ps1` 97/97. Left as they are:
+  - Going back to 1.7.3 uses its old rule for the automatic sign-in (one server, one saved user).
+  - A 401 from a proxy in front of Jellyfin also forgets the saved password (Jellyfin's own 401 can't be told apart).
+- **Fixed at the integration, after the pause:** Editorial's library genre strip took End to the last tab without bringing the
+  strip to its end, and to a tab that can't take the keyboard (`EditorialTabButton.cs`: `KeyTarget`, `EdgeOffset`). 10 tests in
+  `EditorialTabKeysTests`; the revert check fails 3 of them.
+- **Open, for 1.7.5:**
+  - 1.7.3 crashed once on Drive-in's library while a script scrolled the page fast: 0xc000027b in XAML, mid-session, not
+    at a close. `then-174-scrollstress.ps1` didn't reproduce it on the merged build, nor on the exact 1.7.3 exe that
+    crashed. The backdrop guard doesn't explain it. Kept as a stress check in the gate.
+  - Cinematic and Editorial weren't run at 2560 × 1392 at the integration (the large display went away mid-run).
 ## Nixie 1.7.3: Made by Nixie, fewer and better
 - **Merged** (2026-11-22, `wip/rel-1.7.3` from main's `fb5e2daf`): streams I (index), B (copy and rename), M1 (builders)
   and M2 (surfaces), with no textual conflicts; stream C (UI) merged after them (`eda146e5`): the close crash from the player page (since 1.6.1, `0xc000027b` after a NullReferenceException in `TitleBarControl.ApplyCaptionHeight`; Windows Error Reporting made the close 3 to 20 s), the Collections arrival focus, the reading line's space, Drive-in's Up next, the library art's crop. At the integration M2's stand-in for M1's API

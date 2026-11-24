@@ -22,9 +22,31 @@ internal static class RowPaging
 	/// <summary>An end is reached within this many pixels (fractional offsets at high DPI).</summary>
 	public const double EndTolerance = 1;
 
-	/// <summary>The vertical wheel owns the page; a tilt wheel or Shift+wheel owns the row.</summary>
-	public static WheelTarget TargetOf(bool isHorizontalWheel, bool shift) =>
-		isHorizontalWheel || shift ? WheelTarget.Row : WheelTarget.Page;
+	/// <summary>
+	/// The vertical wheel owns the page; a tilt wheel or Shift+wheel owns the row. Nixie 1.7.4 (the rows stream): so does the
+	/// vertical wheel when the page cannot use it (<paramref name="pageCanUse"/> false: no page scroll, or the page at its
+	/// end that way), so the wheel over a row always moves something.
+	/// </summary>
+	public static WheelTarget TargetOf(bool isHorizontalWheel, bool shift, bool pageCanUse = true) =>
+		isHorizontalWheel || shift || !pageCanUse ? WheelTarget.Row : WheelTarget.Page;
+
+	/// <summary>Nixie 1.7.4: whether a page at <paramref name="offset"/> (of <paramref name="scrollable"/>) can move by <paramref name="pixels"/>' way.</summary>
+	public static bool PageCanScroll(double offset, double scrollable, double pixels) =>
+		scrollable > EndTolerance && (pixels > 0 ? offset < scrollable - EndTolerance : pixels < 0 && offset > EndTolerance);
+
+	/// <summary>How long the plain wheel must rest before the page's end hands it to the row under the pointer.</summary>
+	public const long WheelHandOverMs = 300;
+
+	/// <summary>
+	/// Nixie 1.7.4 integration (the rows review's m3): whether a plain wheel notch that the page can no longer use still stays
+	/// with it rather than going to the row. The page's glide may have reached its end while the page is still moving there
+	/// (<paramref name="pageSettled"/> false), or the wheel moved the page under <see cref="WheelHandOverMs"/> ago
+	/// (<paramref name="sinceThePageTookTheWheelMs"/>): a fast spin or a touchpad's coasting goes on past the end, and those
+	/// notches slid the row sideways. The row takes the wheel after a pause. A page that cannot scroll at all
+	/// (<paramref name="pageScrolls"/> false) never keeps it.
+	/// </summary>
+	public static bool WheelStaysWithPage(bool pageScrolls, bool pageSettled, long sinceThePageTookTheWheelMs) =>
+		pageScrolls && (!pageSettled || sinceThePageTookTheWheelMs < WheelHandOverMs);
 
 	/// <summary>A wheel delta (120 per notch, positive away from the user) as the pixels the content moves (scrolling down is positive).</summary>
 	public static double Pixels(int delta) => -delta / 120.0 * PixelsPerNotch;
@@ -166,10 +188,12 @@ internal static class RowPaging
 	}
 
 	/// <summary>
-	/// A row's arrows are always there (hover-only arrows fail mouse users; the 1.1.4 layout audit, item 2). 1.2.0 (the button
-	/// review, L7 and L8): at full strength, not half until the pointer or the keyboard is in the row; disabled at the ends.
+	/// Nixie 1.7.4 (the rows stream): which of a row's arrows show. They are at the row's ends, over its cards, in every theme
+	/// (they were in its header, which a theme could hide: Cinematic's season page showed E1 to E6 and no arrow), while the
+	/// pointer is over the row (<paramref name="pointerOver"/>), each only while the row goes further its way.
 	/// </summary>
-	public static double ArrowOpacity(bool pointerOver, bool focusInside) => 1.0;
+	public static (bool Back, bool Forward) EdgeArrows(bool pointerOver, double offset, double extent, double viewport) =>
+		pointerOver ? (CanScrollBack(offset), CanScrollForward(offset, extent, viewport)) : (false, false);
 
 	/// <summary>The accessible name of a row's header arrow ("Scroll Recently Added left").</summary>
 	public static string ArrowName(string header, bool forward) =>
@@ -185,6 +209,70 @@ public enum RowKey
 	Right,
 	Home,
 	End,
+}
+
+/// <summary>
+/// Nixie 1.7.4 (the rows stream): a mouse drag along a row. Pressed on the row, it follows the pointer once the pointer has
+/// moved <see cref="Threshold"/> pixels sideways (less is a click, which opens the card as before); a drag opens nothing.
+/// </summary>
+internal sealed class RowDrag
+{
+	/// <summary>Pixels sideways before a press is a drag (a click that wobbles a little is still a click).</summary>
+	public const double Threshold = 10;
+
+	private double _startX;
+	private double _startOffset;
+
+	public bool Pressed { get; private set; }
+
+	public bool Dragging { get; private set; }
+
+	public void Press(double x, double offset)
+	{
+		_startX = x;
+		_startOffset = offset;
+		Pressed = true;
+		Dragging = false;
+	}
+
+	/// <summary>The row's offset for the pointer at <paramref name="x"/> (kept within 0 to <paramref name="max"/>); null while it is still a click, or nothing is pressed.</summary>
+	public double? Move(double x, double max)
+	{
+		if (!Pressed)
+		{
+			return null;
+		}
+
+		var dx = x - _startX;
+		if (!Dragging && Math.Abs(dx) < Threshold)
+		{
+			return null;
+		}
+
+		Dragging = true;
+		return Math.Clamp(_startOffset - dx, 0, Math.Max(0, max));
+	}
+
+	/// <summary>Lets go: true when the press was a drag (its release must open nothing).</summary>
+	public bool Release()
+	{
+		var was = Dragging;
+		Pressed = Dragging = false;
+		return was;
+	}
+
+	/// <summary>
+	/// Nixie 1.7.4 integration (the rows review's m2): the pointer left the row. A press that is not a drag yet is forgotten:
+	/// its release may come outside the row, where the row never hears it, and a left button held over the row later would
+	/// start a drag from the old press (the row jumped). A drag goes on (the row holds the pointer).
+	/// </summary>
+	public void Left()
+	{
+		if (!Dragging)
+		{
+			Pressed = false;
+		}
+	}
 }
 
 /// <summary>fluentfin-mpv: how far a row scrolls to show an element that got focus (none when it is already in view).</summary>

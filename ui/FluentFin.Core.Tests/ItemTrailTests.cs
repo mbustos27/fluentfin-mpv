@@ -444,8 +444,16 @@ public sealed class ItemTrailTests
 		Assert.Null(top.Eyebrow);
 		Assert.Equal("Season 3", top.Trail.Season?.Label);
 
-		// from Home (Continue watching): "Shows › What We Do in the Shadows › Season 3"
+		// from Home (Continue watching): Nixie 1.7.4: the bar lights Shows (its tab), so "What We Do in the Shadows › Season 3"
 		top.OnPageShown(TopTabs.HomeKey, null);
+		top.OnPageShown(Episode, FullEpisode());
+		await top.EyebrowLookup;
+		Assert.Equal(new TopMark(TopTabs.LibraryKey, shows.Id), top.Lit);
+		Assert.Null(top.Eyebrow);
+		Assert.Equal(("What We Do in the Shadows", "Season 3"), (top.Trail.Series?.Label, top.Trail.Season?.Label));
+
+		// from the search box: "Shows › What We Do in the Shadows › Season 3"
+		top.ChooseSearch();
 		top.OnPageShown(Episode, FullEpisode());
 		await top.EyebrowLookup;
 		Assert.Equal("Shows", top.Eyebrow?.Title);

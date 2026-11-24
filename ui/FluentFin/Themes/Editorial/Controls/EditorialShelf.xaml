@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
     Editorial: a dense shelf of posters with its details in place. The header is a big title ("Sci-fi"), a caption beside it
-    ("31 films and shows · newest first"), See all and the row's arrows on the right. The row itself is the shared ShelfRow
-    (one Tab stop, Left/Right/Home/End, Up/Down between rows, the wheel, a list named after the shelf for Narrator), its own
-    header hidden. A poster's click or Enter opens its details under the row (InlineDetailsRow); Down from the row enters
+    ("31 films and shows · newest first") and See all on the right. The row itself is the shared ShelfRow (one Tab stop,
+    Left/Right/Home/End, Up/Down between rows, the wheel, a drag, its arrows at its ends on hover, a list named after the shelf
+    for Narrator), its own header hidden. A poster's click or Enter opens its details under the row (InlineDetailsRow); Down from the row enters
     them, Up or Esc there goes back to the poster.
 -->
 <UserControl
@@ -36,8 +36,6 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock
                 x:Name="TitleText"
@@ -58,30 +56,6 @@
                 Content="See all"
                 Style="{StaticResource NixieLinkButtonStyle}"
                 Visibility="Collapsed" />
-            <Button
-                x:Name="BackButton"
-                AutomationProperties.Name="Scroll left"
-                ToolTipService.ToolTip="Scroll left"
-                Grid.Column="3"
-                VerticalAlignment="Bottom"
-                Click="BackButton_Click"
-                IsTabStop="False"
-                Style="{StaticResource NixieCompactIconButtonStyle}"
-                Visibility="Collapsed">
-                <FontIcon FontSize="14" Glyph="&#xE76B;" />
-            </Button>
-            <Button
-                x:Name="ForwardButton"
-                AutomationProperties.Name="Scroll right"
-                ToolTipService.ToolTip="Scroll right"
-                Grid.Column="4"
-                VerticalAlignment="Bottom"
-                Click="ForwardButton_Click"
-                IsTabStop="False"
-                Style="{StaticResource NixieCompactIconButtonStyle}"
-                Visibility="Collapsed">
-                <FontIcon FontSize="14" Glyph="&#xE76C;" />
-            </Button>
         </Grid>
 
         <lc:ShelfRow x:Name="Row" HasSeeAll="False" />

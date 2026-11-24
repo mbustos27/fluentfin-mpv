@@ -35,15 +35,28 @@ public sealed partial class MpvPlayerControls : UserControl
 		Loaded += (_, _) =>
 		{
 			StartTick();
+			GlassMode.Changed -= OnGlassModeChanged; // 1.7.4 integration: once, however many Loaded come (a move, below)
 			GlassMode.Changed += OnGlassModeChanged;
 			ConfigureFades();
+			WatchWindowForBars(XamlRoot); // 1.7.4
 		};
 		Unloaded += (_, _) =>
 		{
+			// 1.7.4 integration (the review's m4, for 1.9's picture in picture): a player moved to another parent gets its new
+			// Loaded before the old place's Unloaded. Then it is still in the window: stopping here would leave it with no
+			// heartbeat (no wake on the mouse, no auto-hide) and no settle of its bars
+			if (IsLoaded)
+			{
+				return;
+			}
+
 			StopTick();
 			GlassMode.Changed -= OnGlassModeChanged;
 			DropWaitingClick(Controls);
+			WatchWindowForBars(null); // 1.7.4
 		};
+		// 1.7.4: the player shown (the video came) fades its bars in again: settled after that fade, never during it
+		RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => SettleBarsLater());
 
 		// the slider marks the pointer handled itself: listen anyway, for the start and the end of a drag or a click
 		SeekBar.AddHandler(PointerPressedEvent, new PointerEventHandler(OnSeekBarPointerPressed), handledEventsToo: true);
@@ -92,6 +105,7 @@ public sealed partial class MpvPlayerControls : UserControl
 			self.ReportBottomBar();
 			self.PlaceSkipButton();
 			self.RefreshChapters();
+			self.SettleBarsLater(); // 1.7.4: the new controls' bars, once their fade is over
 		}
 
 		self.HookSkipRules(e.OldValue as MpvControlsViewModel, e.NewValue as MpvControlsViewModel); // 1.6 skip
@@ -132,6 +146,11 @@ public sealed partial class MpvPlayerControls : UserControl
 		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible))
 		{
 			PlaceSkipButton();
+			SettleBarsLater(); // 1.7.4
+		}
+		else if (e.PropertyName == nameof(MpvControlsViewModel.IsNextPromptVisible))
+		{
+			SettleBarsLater(); // 1.7.4 integration (the review's m1): the Next prompt has the bars' fade, and takes clicks
 		}
 
 		if (e.PropertyName is nameof(MpvControlsViewModel.Title) or nameof(MpvControlsViewModel.ControlsVisible) && !string.Equals(_chaptersFor, Controls?.ItemId, StringComparison.OrdinalIgnoreCase))
@@ -276,6 +295,7 @@ public sealed partial class MpvPlayerControls : UserControl
 		WakeOnCursorMove();
 		Controls?.Tick();
 		KeepKeyboardSomewhere();
+		SettleBarsIfLeftHalfway(); // 1.7.4
 	}
 
 	// -- the mouse, whatever XAML hears (Nixie 1.4.0) ----------------------------------------------------------------------
@@ -469,7 +489,8 @@ public sealed partial class MpvPlayerControls : UserControl
 	/// <summary>The overlay as XAML has it, for the harness's log: the view model's word, each bar's visibility, size and opacity.</summary>
 	internal string OverlayState()
 	{
-		static string Bar(FrameworkElement bar) => $"{bar.Visibility} {bar.ActualWidth:0}x{bar.ActualHeight:0} opacity {bar.Opacity:0.##}";
+		// 1.7.4: and the compositor's (where a fade last ended, or stopped)
+		static string Bar(FrameworkElement bar) => $"{bar.Visibility} {bar.ActualWidth:0}x{bar.ActualHeight:0} opacity {bar.Opacity:0.##} (compositor {DrawnOpacity(bar):0.##})";
 		var focused = XamlRoot is { } root ? FocusManager.GetFocusedElement(root) : null;
 		var focus = focused switch
 		{

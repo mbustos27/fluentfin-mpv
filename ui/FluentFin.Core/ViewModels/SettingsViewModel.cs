@@ -41,7 +41,7 @@ public sealed record SubtitleModeChoice(UserConfiguration_SubtitleMode Mode, str
 	public override string ToString() => Name;
 }
 
-public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache, KnownFolders? knownFolders = null, MpvPlaybackService? mpvPlayback = null) : ObservableObject, INavigationAware
+public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache, KnownFolders? knownFolders = null, MpvPlaybackService? mpvPlayback = null, ITitleBarViewModel? titleBar = null) : ObservableObject, INavigationAware
 {
 	private IDisposable? _statusSubscription;
 
@@ -716,16 +716,24 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		: !string.IsNullOrWhiteSpace(server.PublicUrl) ? server.PublicUrl.Trim()
 		: "this server";
 
-	/// <summary>What Remove server asks: the server is named, and what goes (on this PC only).</summary>
-	public static ConfirmPrompt RemoveServerPrompt(SavedServer server) => new(
+	/// <summary>
+	/// What Remove server asks: the server is named, and what goes (on this PC only). 174-sessions (BS-m2): the server signed
+	/// in to (<paramref name="inUse"/>) says that Nixie signs out of it first.
+	/// </summary>
+	public static ConfirmPrompt RemoveServerPrompt(SavedServer server, bool inUse = false) => new(
 		$"Remove {Named(server)}?",
-		server.Users.Count switch
+		(inUse ? $"{AppIdentity.Name} signs you out of it, then forgets" : $"{AppIdentity.Name} forgets") + server.Users.Count switch
 		{
-			0 => $"{AppIdentity.Name} forgets this server. Nothing changes on the server; sign in to add it again.",
-			1 => $"{AppIdentity.Name} forgets this server and the sign-in saved for {server.Users[0].Username}, with its saved home page. Nothing changes on the server; sign in to add it again.",
-			var n => $"{AppIdentity.Name} forgets this server and its {n} saved sign-ins, with their saved home pages. Nothing changes on the server; sign in to add it again.",
+			0 => " this server. Nothing changes on the server; sign in to add it again.",
+			1 => $" this server and the sign-in saved for {server.Users[0].Username}, with its saved home page. Nothing changes on the server; sign in to add it again.",
+			var n => $" this server and its {n} saved sign-ins, with their saved home pages. Nothing changes on the server; sign in to add it again.",
 		},
 		"Remove");
+
+	/// <summary>174-sessions (BS-m2): the server Nixie is signed in to now.</summary>
+	private bool InUse(SavedServer server) =>
+		titleBar is { User: not null, CurrentServer: { } current } &&
+		(ReferenceEquals(current, server) || (server.Id.Length > 0 && current.Id == server.Id));
 
 	/// <summary>What Remove asks for one saved sign-in: the user and the server are named.</summary>
 	public static ConfirmPrompt RemoveUserPrompt(SavedServer server, SavedUser user) => new(
@@ -750,10 +758,13 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	// fluentfin-mpv: a saved login that goes takes its saved home page (watch history) with it (HomeCache.ForgetLogin)
 	// Seaglass 1.1.3: only after the user said yes to RemoveServerPrompt
+	// 174-sessions (BS-m2): the server signed in to is signed out of first (Nixie stayed signed in to a server it no longer
+	// listed, and the next start showed none)
 	[RelayCommand]
 	private async Task DeleteServer(SavedServer server)
 	{
-		if (!await Asked(RemoveServerPrompt(server)))
+		var inUse = InUse(server);
+		if (!await Asked(RemoveServerPrompt(server, inUse)))
 		{
 			return;
 		}
@@ -762,6 +773,11 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		foreach (var user in server.Users.ToList())
 		{
 			await homeCache.ForgetLogin(server.Id, user.Username);
+		}
+
+		if (inUse && InUse(server))
+		{
+			await titleBar!.Logout();
 		}
 	}
 
@@ -776,7 +792,8 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 			return false;
 		}
 
-		server.Users.Remove(user);
+		SavedSignIns.ForgetName(server, user.Username); // 174-sessions (the review's m3): the sign-in page opened with the name, ticked
+		server.Users.Remove(user);                       // (its change saves the server list, the name's with it)
 		await homeCache.ForgetLogin(server.Id, user.Username);
 		return true;
 	}

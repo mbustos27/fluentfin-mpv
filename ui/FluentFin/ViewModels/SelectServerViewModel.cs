@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Helpers;
 using FluentFin.Contracts.Services;
+using FluentFin.Contracts.ViewModels;
 using FluentFin.Core.Services;
 using FluentFin.Core.Settings;
 using FluentFin.Helpers;
@@ -17,7 +18,7 @@ namespace FluentFin.Core.ViewModels;
 
 public partial class SelectServerViewModel(ISettings settings,
 										   [FromKeyedServices(NavigationRegions.InitialSetup)] INavigationService navigationService,
-										   HomeCache homeCache) : ObservableObject
+										   HomeCache homeCache) : ObservableObject, INavigationAware
 {
 	private int _found;
 
@@ -61,6 +62,22 @@ public partial class SelectServerViewModel(ISettings settings,
 
 	/// <summary>fluentfin-mpv: the networks this PC is on, remembered with a local address (a seam for tests).</summary>
 	internal Func<IReadOnlyList<string>> NetworkNames { get; set; } = () => [.. NetworkHelper.Instance.ConnectionInformation.NetworkNames];
+
+	/// <summary>
+	/// 174-signin: the line the page opens with (<see cref="SetupNotice"/>: a saved sign-in the server refused at the start,
+	/// one Sign out couldn't remove), in the page's warning, where the page says what went wrong.
+	/// </summary>
+	public Task OnNavigatedTo(object parameter)
+	{
+		if (parameter is SetupNotice notice)
+		{
+			ErrorMessage = notice.Message;
+		}
+
+		return Task.CompletedTask;
+	}
+
+	public Task OnNavigatedFrom() => Task.CompletedTask;
 
 	/// <summary>fluentfin-mpv: the first time (no saved server) the page looks for servers on this network by itself.</summary>
 	public Task OnShown() => HasServers || IsDetecting ? Task.CompletedTask : DetectServers();
