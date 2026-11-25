@@ -99,7 +99,7 @@ Back is instant, every fix left from earlier releases, and the basics gate on ev
 - The release build: Core 5,724 tests passed; UI 1,846 of 1,847 in the full run, the other passed on its own;
   the backend's 571. The package's own checks: 142, none failed. Windows Defender: no threats in the folder, the
   installer or the zip.
-- The upgrade, in Windows Sandbox as a standard user: <Sandbox>.
+- The upgrade, in Windows Sandbox as a standard user, right after publishing (3:13 to 3:28 AM): passed, every check. 1.7.5 installs over 1.7.4 and keeps its data; Restart to update installs quietly and opens Nixie again; and 1.7.4's own Restart to update brings 1.7.5, which says "Updated".
 
 **For a hand check** (off-screen runs can't do these): a display at 150 % scale, Windows' text size at 125 % and 150 %
 on tiles, a real right-click on cards and pages, and a precision touchpad's sideways swipe on a row.
