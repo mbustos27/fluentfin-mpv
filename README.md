@@ -27,13 +27,7 @@
 Nothing else needs installing: .NET, the playback backend and libmpv are inside. Nixie isn't code-signed, so Windows
 SmartScreen asks the first time (**More info → Run anyway**). Your settings and data go to `%LOCALAPPDATA%\Nixie`.
 What's new: [CHANGELOG.md](CHANGELOG.md).
-
-## Nixie for TV
-
-**Nixie for TV** is Nixie for Android TV and Google TV, based on
-[Glacier](https://github.com/Glacier-Jellyfin/glacier-androidtv): three of the four themes (Drive-in, Cinematic and
-Editorial) and a player built for the remote. On the TV, type `is.gd/nixietv` into Downloader, or enter the code
-`6673217` in Downloader. Its releases and source: [mbustos27/nixie-tv](https://github.com/mbustos27/nixie-tv).
+Watching on a TV instead? See [Nixie on your TV](#nixie-on-your-tv).
 
 ## The four themes
 
@@ -147,6 +141,15 @@ Everything it does: [docs/FEATURES.md](docs/FEATURES.md). Every key: [docs/SHORT
 
 Taken off-screen by [tools/ui-harness/gallery.ps1](tools/ui-harness/gallery.ps1) against a test server with
 public-domain and Creative Commons films (credits below).
+
+## Nixie on your TV
+
+[Nixie for TV](https://github.com/mbustos27/nixie-tv) is a separate app for Android TV and Google TV. It brings the
+Drive-in, Cinematic and Editorial themes to the big screen, with a player built for the remote, and is based on
+[Glacier](https://github.com/Glacier-Jellyfin/glacier-androidtv).
+
+To install it, open Downloader on the TV and enter **`6673217`**, or type `is.gd/nixietv`. Its releases, source and
+issues live in [mbustos27/nixie-tv](https://github.com/mbustos27/nixie-tv).
 
 ## Outside services
 
