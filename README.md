@@ -73,9 +73,11 @@ What's new: [CHANGELOG.md](CHANGELOG.md).
   trickplay, and reports to the server as one session.
 - **Skips that learn.** Skip intro and credits, "Skip this every episode?" when a show repeats a part, and online intro
   lookups if you turn them on.
-- **Collections made for you.** The server's collections and playlists, and Nixie's own, made from your libraries on
-  your PC: franchises, keywords and awards, "Acclaimed, not seen yet" and "Under 90 minutes". A library's filters add
-  its decades, genre mixes and countries.
+- **Collections made for you.** The server's collections and playlists, and Nixie's own, made on this PC from the
+  server's libraries: about ten picks a week, each saying why it's there, among them "Next in", "More like" and "More
+  from" picks tied to what you finished and a weekly Spotlight; franchises, keywords and awards, "Acclaimed, not seen
+  yet" and "Under 90 minutes". A collection's order can be reversed. A library's filters add its decades, genre mixes
+  and countries.
 - **A TV diary.** Episodes are logged when you finish them, with half-star ratings and reviews, kept on your PC.
 - **Keyboard, mouse and Narrator.** Shortcuts everywhere (press **?** for the list), back and forward on mouse buttons
   4 and 5, and every card and button read by name.

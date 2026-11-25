@@ -151,6 +151,8 @@ public partial class CollectionViewModel
 		}
 
 		_serverOrder = [.. items];
+		_placeKnown = false;
+		RecallDirection(KeepsPlace?.Invoke() == true); // 1.8: R puts a Made by Nixie collection's direction back too
 		_placeKnown = true;
 		Update();
 
@@ -163,9 +165,17 @@ public partial class CollectionViewModel
 	/// What an empty Nixie collection says. 1.7.3 fix round (BH-173-M2, rule 11): a saved filter is Nixie's own filter over a
 	/// library, so it says the filter matches nothing now, not that the titles left the server (which answered).
 	/// </summary>
-	public static LoadOutcome EmptyOutcome(SmartCollection collection) => collection.Filter is { } filter
+	public static LoadOutcome EmptyOutcome(SmartCollection collection) => collection.Ended
+		// 1.8 (BH-180-m1): a pin Nixie no longer makes: what happened and what the user can do on this PC
+		? LoadOutcome.Empty(EndedHeading, EndedText)
+		: collection.Filter is { } filter
 		? LoadOutcome.Empty("Nothing matches now", $"No titles in {(string.IsNullOrWhiteSpace(filter.LibraryName) ? "this library" : filter.LibraryName)} match this filter now.")
 		: LoadOutcome.Empty("Nothing here now", $"None of the titles in this collection are on {LoadMessages.ServerName()} any more.");
+
+	/// <summary>1.8 (BH-180-m1): an ended pin's page.</summary>
+	public const string EndedHeading = "This collection has ended";
+
+	public const string EndedText = "Nixie no longer makes it: a week's Spotlight, or a pick from what you watched, moves on. Unpin it to take it out of Saved.";
 
 	/// <summary>After a server's box set is in: "Also in your library", from the library index (none without a TMDb id).</summary>
 	private async Task AfterServerLoad()
@@ -200,7 +210,7 @@ public partial class CollectionViewModel
 
 		// review Major 3: films and episodes only (the server adds every episode of a show sent to it), and at most
 		// PlaylistMost of them, the first in the collection's order
-		var ordered = CollectionBrowse.Ordered(_serverOrder, Order, IsPlaylist, OwnDisplayOrder);
+		var ordered = SortDirections.Apply(CollectionBrowse.Ordered(_serverOrder, Order, IsPlaylist, OwnDisplayOrder), Reversed, SortDirections.Undated(Order, IsPlaylist, OwnDisplayOrder)); // 1.8: as shown
 		var playable = ordered.Where(IsPlaylistItem).ToList();
 		var shows = ordered.Count - playable.Count;
 		if (playable.Count == 0)
@@ -343,7 +353,7 @@ public partial class CollectionViewModel
 
 		if (SmartCollectionServices.Store is { } store)
 		{
-			await store.SetFavorite(nixie.Collection.Id, favorite);
+			await store.SetFavorite(nixie.Collection.Id, favorite, nixie.Collection.Title); // 1.8 (BH-180-m1): its title kept with the pin
 		}
 
 		Collection = nixie.AsItem(favorite);

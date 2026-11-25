@@ -19,14 +19,17 @@ public sealed class FranchiseBuilder : ISmartCollectionBuilder
 			.Select(g =>
 			{
 				var films = Make.ByRelease(g);
-				// 1.7 keyless: TMDb's own name for the franchise when its export file is on; else the name from the films
+				// 1.7 keyless: TMDb's own name for the franchise when its export file is on; else the name from the films.
+				// 1.8 (P1-4): the reason line says where the films are listed together and counts them
 				if (context.Outside.FranchiseNames.TryGetValue(g.Key, out var tmdbName) && FranchiseNames.FromTmdb(tmdbName) is { Length: > 0 } named)
 				{
-					return Make.Of($"franchise:{g.Key}", Kind, named, $"Your films in TMDb's “{tmdbName.Trim()}”, in release order", hasOwnOrder: true, films) with { TmdbCollection = g.Key };
+					return Make.Of(context, $"franchise:{g.Key}", Kind, named, ReasonLine.Of($"TMDb's “{tmdbName.Trim()}”", ReasonCount.Of(films)), hasOwnOrder: true, films,
+						why: $"Films in TMDb's “{tmdbName.Trim()}”, in release order") with { TmdbCollection = g.Key };
 				}
 
 				var name = FranchiseNames.Name(films);
-				return Make.Of($"franchise:{g.Key}", Kind, name, $"Your films that TMDb lists in one collection, in release order", hasOwnOrder: true, films) with { TmdbCollection = g.Key };
+				return Make.Of(context, $"franchise:{g.Key}", Kind, name, ReasonLine.Of("One collection on TMDb", ReasonCount.Of(films)), hasOwnOrder: true, films,
+					why: "Films that TMDb lists in one collection, in release order") with { TmdbCollection = g.Key };
 			})
 			.OrderBy(x => x.Title, StringComparer.CurrentCultureIgnoreCase)
 			.ToList();

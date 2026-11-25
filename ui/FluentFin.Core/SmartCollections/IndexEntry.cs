@@ -9,8 +9,13 @@ public enum IndexKind
 	Series,
 }
 
-/// <summary>One person of a title, as the index keeps them: directors, and the first five actors billed.</summary>
-public sealed record IndexPerson(string Name, Guid? Id, string Kind);
+/// <summary>One person of a title, as the index keeps them: directors, and (1.8) the first three actors billed.</summary>
+/// <param name="Id">
+/// The server's id of the person; 1.8 (review, Major 2): no longer kept (null), as nothing reads it and it was half of what the
+/// people added to the saved index (344 bytes a title on 25,738 films). Left out of the saved index when null.
+/// </param>
+public sealed record IndexPerson(string Name, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? Id,
+	string Kind);
 
 /// <summary>
 /// Nixie 1.6: one title of the library index, lean: what the builders read and a card needs (no overview, no paths). Tags
@@ -66,6 +71,18 @@ public sealed record IndexEntry
 	public string? OfficialRating { get; init; }
 	public long? RunTimeTicks { get; init; }
 	public bool Played { get; init; }
+
+	// 1.8 (P1-2, stream a): how often the user played the title, and when last (the anchors: rewatched, the latest first).
+	// Saved only when known, so an index of 34,000 titles nobody played stays as small as before
+	/// <summary>1.8: how many times the user played the title (the server's play count); 0 when never or not known.</summary>
+	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+	public int PlayCount { get; init; }
+
+	/// <summary>1.8: when the user last played the title; null when never or not known (an index saved before 1.8).</summary>
+	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+	public DateTimeOffset? LastPlayed { get; init; }
+	// end 1.8
+
 	public bool Favorite { get; init; }
 	public int? Unplayed { get; init; }
 	public string? PrimaryTag { get; init; }
@@ -126,6 +143,8 @@ public sealed record IndexEntry
 			OfficialRating = dto.OfficialRating,
 			RunTimeTicks = dto.RunTimeTicks,
 			Played = dto.UserData?.Played == true,
+			PlayCount = Math.Max(dto.UserData?.PlayCount ?? 0, 0), // 1.8 (P1-2)
+			LastPlayed = dto.UserData?.LastPlayedDate, // 1.8 (P1-2)
 			Favorite = dto.UserData?.IsFavorite == true,
 			Unplayed = dto.UserData?.UnplayedItemCount,
 			PrimaryTag = tag,
@@ -135,20 +154,11 @@ public sealed record IndexEntry
 	}
 
 	/// <summary>
-	/// The people the index keeps from a title's People: directors, and the first five actors billed. 1.7.3: nothing reads
-	/// them now (the people pass stopped: the owner's answer to the 1.7.3 plan); kept for P1's "More from".
+	/// The people the index keeps from a title's People: directors, and the first three actors billed. 1.8 (P1-2): the people
+	/// pass is back for "More from" and Spotlight (<see cref="Anchors.PeoplePass"/>), with the top three billed only (the
+	/// report's billing gate; it kept five before 1.7.3).
 	/// </summary>
-	public static IndexPerson[] PeopleOf(BaseItemDto dto)
-	{
-		if (dto.People is not { Count: > 0 } people)
-		{
-			return [];
-		}
-
-		var directors = people.Where(p => p.Type == BaseItemPerson_Type.Director && !string.IsNullOrWhiteSpace(p.Name)).Select(p => new IndexPerson(p.Name!.Trim(), p.Id, "Director"));
-		var actors = people.Where(p => p.Type == BaseItemPerson_Type.Actor && !string.IsNullOrWhiteSpace(p.Name)).Take(5).Select(p => new IndexPerson(p.Name!.Trim(), p.Id, "Actor"));
-		return [.. directors, .. actors];
-	}
+	public static IndexPerson[] PeopleOf(BaseItemDto dto) => Anchors.PeoplePass.Billed(dto);
 
 	/// <summary>A provider id from the item's ProviderIds ("Tmdb", "TmdbCollection"), any case; null when it has none.</summary>
 	public static string? ProviderId(BaseItemDto? dto, string provider)
@@ -212,8 +222,8 @@ public sealed record IndexLibrary(Guid Id, string Name, IndexKind Kind);
 
 /// <summary>
 /// Nixie 1.6: the library index of one server and user: every film and show of their movie and show libraries, the people
-/// pass (when it came through) and the played-episodes pass. 1.7.3: a read has no people pass; the people of an index saved
-/// before stay until it is read again, and nothing published reads them.
+/// pass (when it came through) and the played-episodes pass. 1.7.3: a read has no people pass. 1.8 (P1-2): it has again,
+/// after the titles, with the top three billed (<see cref="Anchors.PeoplePass"/>).
 /// </summary>
 public sealed record IndexSnapshot(
 	IReadOnlyList<IndexLibrary> Libraries,
@@ -234,10 +244,33 @@ public sealed record IndexSnapshot(
 	/// <summary>
 	/// Review M2: this index's own people pass is still to come (the people it has are lent from the index before it, for the
 	/// titles that one had). Saved, so that a read closed before its people pass reads only the people at a later start.
-	/// 1.7.3: only an index saved before 1.7.3 says so; the people pass stopped (the owner's answer to the 1.7.3 plan), and a
-	/// read no longer asks for people for it.
+	/// 1.7.3: only an index saved before 1.7.3 said so (the people pass stopped). 1.8 (P1-2): every library's people are due
+	/// (an index read first, or one with more new titles than a pass by id is worth); the people pass asks them after the
+	/// titles, and again within the hour if it didn't finish.
 	/// </summary>
 	public bool PeopleDue { get; init; }
+
+	// 1.8 (P1-2, stream a)
+	/// <summary>
+	/// 1.8: the titles whose people are still to ask, by id (new since the index before, and those whose request didn't come);
+	/// the people pass asks them after the titles, and again within the hour if they didn't come. Saved. Empty when every
+	/// title's people are in, or a whole people pass is due (<see cref="PeopleDue"/>).
+	/// </summary>
+	public IReadOnlyList<Guid> PeopleToAsk { get; init => field = value ?? []; } = [];
+
+	/// <summary>
+	/// 1.8 re-review (Minor): the share of titles whose people must be in before a slot made of people (More from, a
+	/// Spotlight of a person) is made: a people step cut short, or a minute's keep of a long one, has the people of a part of
+	/// the titles only, and a slot made of them would change as the rest came.
+	/// </summary>
+	public const double PeopleCoveredShare = 0.98;
+
+	/// <summary>
+	/// 1.8 re-review (Minor): the people of at least <see cref="PeopleCoveredShare"/> of the titles are in (none due, few still
+	/// to ask): what a slot made of people waits for. <see cref="HasPeople"/> alone says only that some are.
+	/// </summary>
+	public bool PeopleCovered => HasPeople && !PeopleDue && PeopleToAsk.Count <= (1 - PeopleCoveredShare) * Entries.Count;
+	// end 1.8
 
 	/// <summary>
 	/// 1.7.3 (BH-171-M1's other half): the played episodes didn't come with this index's read (a first read then has none,

@@ -2,6 +2,8 @@ namespace FluentFin.Core.SmartCollections.Builders;
 
 // 1.7.3 (P0-2b): every builder counts the titles with their copies collapsed (BuildContext.Titles), and (P0-1) says what it
 // counted (BuildContext.Gates): its candidates, those past its floor, those past its cap
+// 1.8 (P1-4, stream t): every collection has a reason line (one or two facts, then the count: Make.Of(context, …)), award
+// badges from its titles' award facts, and no title or line that starts with "Your" or speaks of the viewer
 
 /// <summary>Decades: films (and shows, apart) of one decade, ten or more: "1980s films". On demand only since 1.7.3.</summary>
 public sealed class DecadeBuilder : ISmartCollectionBuilder
@@ -18,8 +20,9 @@ public sealed class DecadeBuilder : ISmartCollectionBuilder
 			.ToList();
 		var made = groups.Where(g => g.Count() >= Least)
 			.OrderBy(g => g.Key.Kind).ThenByDescending(g => g.Key.Decade)
-			.Select(g => Make.Of($"decade:{g.Key.Kind.ToString().ToLowerInvariant()}:{g.Key.Decade}", Kind, $"{g.Key.Decade}s {Make.Noun(g.Key.Kind, 2)}",
-				$"Your {Make.Noun(g.Key.Kind, 2)} from {g.Key.Decade} to {g.Key.Decade + 9}", hasOwnOrder: false, Make.ByName(g)))
+			.Select(g => (g.Key.Kind, g.Key.Decade, Titles: Make.ByName(g)))
+			.Select(g => Make.Of(context, $"decade:{g.Kind.ToString().ToLowerInvariant()}:{g.Decade}", Kind, $"{g.Decade}s {Make.Noun(g.Kind, 2)}",
+				ReasonLine.Of($"Released {g.Decade} to {g.Decade + 9}", ReasonCount.Of(g.Titles)), hasOwnOrder: false, g.Titles))
 			.ToList();
 		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
 		return made;
@@ -43,7 +46,9 @@ public sealed class DirectorBuilder : ISmartCollectionBuilder
 			.ToList();
 		var made = groups.Where(g => g.Films.Count >= Least)
 			.OrderByDescending(g => g.Films.Count).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
-			.Select(g => Make.Of($"director:{Make.Key(g.Name)}", Kind, g.Name, $"Your films directed by {g.Name}, in release order", hasOwnOrder: true, Make.ByRelease(g.Films)))
+			.Select(g => (g.Name, Films: Make.ByRelease(g.Films)))
+			.Select(g => Make.Of(context, $"director:{Make.Key(g.Name)}", Kind, g.Name, ReasonLine.Of("Director", ReasonCount.Of(g.Films)), hasOwnOrder: true, g.Films,
+				why: $"Films directed by {g.Name}, in release order"))
 			.ToList();
 		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
 		return made;
@@ -66,8 +71,9 @@ public sealed class ActorBuilder : ISmartCollectionBuilder
 			.ToList();
 		var made = groups.Where(g => g.Titles.Count >= Least)
 			.OrderByDescending(g => g.Titles.Count).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
-			.Select(g => Make.Of($"actor:{Make.Key(g.Name)}", Kind, g.Name, $"Your films and shows with {g.Name}", hasOwnOrder: false,
-				[.. Make.ByRelease(g.Titles).AsEnumerable().Reverse()]))
+			.Select(g => (Name: g.Name, Titles: (IReadOnlyList<IndexEntry>)[.. Make.ByRelease(g.Titles).AsEnumerable().Reverse()]))
+			.Select(g => Make.Of(context, $"actor:{Make.Key(g.Name)}", Kind, g.Name, ReasonLine.Of("Among the first five billed", ReasonCount.Of(g.Titles)), hasOwnOrder: false,
+				g.Titles, why: $"Films and shows with {g.Name} among the first five billed, the newest first"))
 			.ToList();
 		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
 		return made;
@@ -96,8 +102,10 @@ public sealed class StudioBuilder(IndexKind kind) : ISmartCollectionBuilder
 			.ToList();
 		var made = groups.Where(g => g.Titles.Count >= Least)
 			.OrderByDescending(g => g.Titles.Count).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
-			.Select(g => Make.Of($"{(kind == IndexKind.Movie ? "studio" : "network")}:{g.Key}", Kind, g.Name,
-				kind == IndexKind.Movie ? $"Your films from {g.Name}" : $"Your shows from {g.Name}", hasOwnOrder: false, Make.ByName(g.Titles)))
+			.Select(g => (g.Key, g.Name, Titles: Make.ByName(g.Titles)))
+			.Select(g => Make.Of(context, $"{(kind == IndexKind.Movie ? "studio" : "network")}:{g.Key}", Kind, g.Name,
+				ReasonLine.Of(kind == IndexKind.Movie ? "Studio" : "Studio or network", ReasonCount.Of(g.Titles)), hasOwnOrder: false, g.Titles,
+				why: kind == IndexKind.Movie ? $"Films from {g.Name}" : $"Shows from {g.Name}"))
 			.ToList();
 		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
 		return made;
@@ -144,8 +152,9 @@ public sealed class GenreMixBuilder : ISmartCollectionBuilder
 		}
 
 		var made = found.OrderByDescending(x => x.Titles.Count).ThenBy(x => x.A).ThenBy(x => x.B).Take(context.Whole ? int.MaxValue : Most) // fix round (BH-173-M2)
-			.Select(x => Make.Of($"genres:{x.Kind.ToString().ToLowerInvariant()}:{Make.Key(x.A)}+{Make.Key(x.B)}", Kind, $"{x.A} · {x.B}",
-				$"Your {Make.Noun(x.Kind, 2)} that are both {x.A} and {x.B}", hasOwnOrder: false, Make.ByName(x.Titles)))
+			.Select(x => (x.Kind, x.A, x.B, Titles: Make.ByName(x.Titles)))
+			.Select(x => Make.Of(context, $"genres:{x.Kind.ToString().ToLowerInvariant()}:{Make.Key(x.A)}+{Make.Key(x.B)}", Kind, $"{x.A} · {x.B}",
+				ReasonLine.Of($"Both {x.A} and {x.B}", ReasonCount.Of(x.Titles)), hasOwnOrder: false, x.Titles))
 			.ToList();
 		context.Gates.Count(Kind, pairs, found.Count, made.Count);
 		return made;
@@ -189,20 +198,31 @@ public sealed class KeywordBuilder : ISmartCollectionBuilder
 		// only the allowlist's keywords, each confirmed by TMDb's names when its export is on (Keywords.NameOf)
 		var made = merged.Where(g => Keywords.NameOf(g.Tag, tmdb) is not null && g.Titles.Count >= Least)
 			.OrderByDescending(g => g.Titles.Count).ThenBy(g => g.Tag)
-			.Select(g => Make.Of($"keyword:{Make.Key(g.Tag)}", Kind, Keywords.NameOf(g.Tag, tmdb)!, Why(g.Tag, g.Tagged, g.FromWikidata ? genreWhy[g.Tag] : null), hasOwnOrder: false, Make.ByName(g.Titles)))
+			.Select(g => (g.Tag, g.Tagged, Wikidata: g.FromWikidata ? genreWhy[g.Tag] : null, Titles: Make.ByName(g.Titles)))
+			.Select(g => Make.Of(context, $"keyword:{Make.Key(g.Tag)}", Kind, Keywords.NameOf(g.Tag, tmdb)!, Reason(g.Tag, g.Tagged, g.Wikidata, g.Titles), hasOwnOrder: false,
+				g.Titles, why: Why(g.Tag, g.Tagged, g.Wikidata)))
 			.ToList();
 		context.Gates.Count(Kind, merged.Count, made.Count, made.Count);
 		return made;
 	}
 
-	// 1.7 keyless: the why line names where the titles came from: TMDb's keyword, Wikidata's genre, or both
+	// 1.7 keyless: the why line names where the titles came from: TMDb's keyword, Wikidata's genre, or both. 1.8 (P1-4):
+	// without "Your"; the reason line says the same in short, then the count
 	private static string Why(string tag, bool tagged, string? wikidata) => (tagged, wikidata) switch
 	{
-		(true, null) => $"Your titles with TMDb's keyword “{tag}”",
-		(true, { } w) => $"Your titles with TMDb's keyword “{tag}”, and {w}",
-		(false, { } w) => $"Your {w}",
-		_ => $"Your titles with TMDb's keyword “{tag}”",
+		(true, { } w) => $"Titles with TMDb's keyword “{tag}”, and {w}",
+		(false, { } w) => Capital(w),
+		_ => $"Titles with TMDb's keyword “{tag}”",
 	};
+
+	private static ReasonLine Reason(string tag, bool tagged, string? wikidata, IReadOnlyList<IndexEntry> titles) => (tagged, wikidata) switch
+	{
+		(true, { } w) => ReasonLine.Of($"TMDb keyword “{tag}”", Capital(w), ReasonCount.Of(titles)),
+		(false, { } w) => ReasonLine.Of(Capital(w), ReasonCount.Of(titles)),
+		_ => ReasonLine.Of($"TMDb keyword “{tag}”", ReasonCount.Of(titles)),
+	};
+
+	private static string Capital(string text) => text.Length == 0 ? text : char.ToUpper(text[0], System.Globalization.CultureInfo.CurrentCulture) + text[1..];
 }
 
 /// <summary>
@@ -234,7 +254,8 @@ public sealed class HighlyRatedBuilder : ISmartCollectionBuilder
 		var titles = Best.Of(pool, quality).Take(context.Whole ? int.MaxValue : Most).ToList();
 		context.Gates.Note(Kind, backing.Census);
 		var made = pool.Count >= Fewest
-			? [Make.Of("pick:highly-rated", Kind, Title, "Rated 7.5 or more and not watched yet, the best first, weighted by how much backs each rating", hasOwnOrder: false, titles)]
+			? [Make.Of(context, "pick:highly-rated", Kind, Title, ReasonLine.Of("Rated 7.5 or more, weighted by what backs each rating", ReasonCount.OfAll(titles)), hasOwnOrder: false,
+				titles, why: "Rated 7.5 or more and not watched yet, the best first, weighted by how much backs each rating")]
 			: new List<SmartCollection>();
 		context.Gates.Count(Kind, rated.Count, pool.Count >= Fewest ? pool.Count : 0, made.Count == 0 ? 0 : titles.Count);
 		return made;
@@ -261,7 +282,8 @@ public sealed class ShortFilmsBuilder : ISmartCollectionBuilder
 		var pool = context.Titles.Entries.Where(x => x.Kind == IndexKind.Movie && !x.Played && x.RunTimeTicks >= AtLeast && x.RunTimeTicks < Under).ToList();
 		var films = Best.Of(pool, context.Quality).Take(context.Whole ? int.MaxValue : Most).ToList(); // fix round (BH-173-M2): a saved filter's, uncapped
 		var made = pool.Count >= Fewest
-			? [Make.Of("pick:short-films", Kind, Title, "Feature films of 60 to 90 minutes, not watched yet, the best rated first", hasOwnOrder: false, films)]
+			? [Make.Of(context, "pick:short-films", Kind, Title, ReasonLine.Of("Feature films of 60 to 90 minutes, best rated first", ReasonCount.OfAll(films)), hasOwnOrder: false,
+				films, why: "Feature films of 60 to 90 minutes, not watched yet, the best rated first")]
 			: new List<SmartCollection>();
 		context.Gates.Count(Kind, pool.Count, pool.Count >= Fewest ? pool.Count : 0, made.Count == 0 ? 0 : films.Count);
 		return made;
@@ -306,7 +328,8 @@ public sealed class UnfinishedSeriesBuilder : ISmartCollectionBuilder
 			.Select(x => x.Show)
 			.ToList();
 		var made = shows.Count >= Fewest
-			? [Make.Of("pick:unfinished-series", Kind, "Unfinished series", "Shows you started and haven't watched for a month", hasOwnOrder: false, shows)]
+			? [Make.Of(context, "pick:unfinished-series", Kind, "Unfinished series", ReasonLine.Of("Episodes left, none watched for a month", ReasonCount.OfAll(shows)), hasOwnOrder: false,
+				shows, why: "Shows with episodes left and none watched for a month or more, the most recently left first")]
 			: new List<SmartCollection>();
 		context.Gates.Count(Kind, shows.Count, made.Count == 0 ? 0 : shows.Count, made.Count == 0 ? 0 : shows.Count);
 		return made;
@@ -328,7 +351,9 @@ public sealed class CountryBuilder : ISmartCollectionBuilder
 			.OrderByDescending(g => g.Films.Count).ThenBy(g => g.Country).ToList();
 		var home = groups.FirstOrDefault().Country;
 		var made = groups.Where(g => g.Country != home && g.Films.Count >= Least)
-			.Select(g => Make.Of($"country:{Make.Key(g.Country)}", Kind, $"Films from {Short(g.Country)}", $"Your films made in {Short(g.Country)}", hasOwnOrder: false, Make.ByName(g.Films)))
+			.Select(g => (g.Country, Films: Make.ByName(g.Films)))
+			.Select(g => Make.Of(context, $"country:{Make.Key(g.Country)}", Kind, $"Films from {Short(g.Country)}", ReasonLine.Of("First production country", ReasonCount.Of(g.Films)),
+				hasOwnOrder: false, g.Films, why: $"Films made in {Short(g.Country)}"))
 			.ToList();
 		context.Gates.Count(Kind, groups.Count, made.Count, made.Count);
 		return made;
@@ -373,7 +398,9 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 					{
 						var titles = all.Take(context.Whole ? int.MaxValue : Most).ToList(); // fix round (BH-173-M2)
 						shown = titles.Count;
-						made.Add(Make.Of("seasonal:halloween", Kind, "Halloween", "Halloween and horror, for October", hasOwnOrder: false, titles));
+						made.Add(Make.Of(context, "seasonal:halloween", Kind, "Halloween",
+							ReasonLine.Of("Halloween and horror", ReasonCount.Of(titles)) with { Until = new DateOnly(context.Now.Year, 10, 31) }, hasOwnOrder: false, titles,
+							why: "Halloween and horror, for October"));
 					}
 
 					break;
@@ -388,7 +415,9 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 					{
 						var titles = all.Take(context.Whole ? int.MaxValue : Most).ToList(); // fix round (BH-173-M2)
 						shown = titles.Count;
-						made.Add(Make.Of("seasonal:christmas", Kind, "Christmas", "Christmas films and shows, for December", hasOwnOrder: false, titles));
+						made.Add(Make.Of(context, "seasonal:christmas", Kind, "Christmas",
+							ReasonLine.Of("Christmas films and shows", ReasonCount.Of(titles)) with { Until = new DateOnly(context.Now.Year, 12, 31) }, hasOwnOrder: false, titles,
+							why: "Christmas films and shows, for December"));
 					}
 
 					break;

@@ -54,7 +54,10 @@ internal sealed class IndexPages
 	private readonly string _pass;
 	private readonly ILogger? _log;
 	private readonly Lock _lock = new();
-	private readonly SortedDictionary<(int Library, int Start), IReadOnlyList<BaseItemDto>> _pages = [];
+	private readonly SortedDictionary<(int Library, int Start), Stored> _pages = [];
+
+	// 1.8 (BH-180-m2): a page as kept: its titles' ids always (the tail's checks), its items only when they are kept
+	private sealed record Stored(IReadOnlyList<BaseItemDto>? Items, Guid?[] Ids);
 	private readonly int?[] _totals;
 	private readonly int[] _read;
 	private readonly List<TimeSpan> _took = [];
@@ -102,6 +105,19 @@ internal sealed class IndexPages
 	public event Action<int, int?>? PageIn;
 
 	/// <summary>
+	/// 1.8 (BH-180-m2): a page's items, as they came (any order, off the UI thread), before <see cref="PageIn"/>: what a pass
+	/// that doesn't keep them (<see cref="KeepItems"/>) takes from them.
+	/// </summary>
+	public event Action<int, int, IReadOnlyList<BaseItemDto>>? PageCame;
+
+	/// <summary>
+	/// 1.8 (BH-180-m2): whether the pages' items are kept until the pass ends (<see cref="Items"/>: the titles). The people pass
+	/// keeps none: each page's whole cast and crew, image tags and blurhashes, was held until the end (891 MB above the titles
+	/// at 25,000 titles with real casts); it takes the names it needs at <see cref="PageCame"/> and lets the page go.
+	/// </summary>
+	public bool KeepItems { get; init; } = true;
+
+	/// <summary>
 	/// Every title read so far, each library's in the server's order, each title once, where it came first. 1.7.3 (P0-2):
 	/// with every library it came in (<c>Libraries[0]</c> the first): a title the server lists in two libraries (3,167 of
 	/// 34,006 on the server the owner uses) counted under the first one only, and the other library's presets missed it.
@@ -112,9 +128,9 @@ internal sealed class IndexPages
 		{
 			var at = new Dictionary<Guid, int>();
 			var all = new List<(List<int> Libraries, BaseItemDto Item)>();
-			foreach (var ((library, _), items) in _pages)
+			foreach (var ((library, _), page) in _pages)
 			{
-				foreach (var item in items)
+				foreach (var item in page.Items ?? throw new InvalidOperationException("the pages' items weren't kept (KeepItems)"))
 				{
 					if (item.Id is not { } id || !at.TryGetValue(id, out var first))
 					{
@@ -235,7 +251,7 @@ internal sealed class IndexPages
 	{
 		lock (_lock)
 		{
-			return _pages.TryGetValue((library, 0), out var first) ? first.Count : 0;
+			return _pages.TryGetValue((library, 0), out var first) ? first.Ids.Length : 0;
 		}
 	}
 
@@ -250,18 +266,19 @@ internal sealed class IndexPages
 				return null;
 			}
 
-			var (key, items) = mine[^1];
+			var (key, page) = mine[^1];
+			var ids = page.Ids;
 			var asked = key.Start == 0 ? FirstPageSize : _asked.GetValueOrDefault(key, _size);
-			var end = key.Start + items.Count;
+			var end = key.Start + ids.Length;
 			var expected = _totals[library];
-			if (items.Count == 0 || items.Count < asked || (expected is { } count && end < count))
+			if (ids.Length == 0 || ids.Length < asked || (expected is { } count && end < count))
 			{
 				return null;
 			}
 
 			// a server that leaves StartIndex out answers the first titles again: stop rather than read them for ever
-			var first = items[0].Id;
-			return mine.Take(mine.Count - 1).Any(p => p.Value.Any(x => x.Id == first)) ? null : (end, _size);
+			var first = ids[0];
+			return mine.Take(mine.Count - 1).Any(p => p.Value.Ids.Contains(first)) ? null : (end, _size);
 		}
 	}
 
@@ -279,7 +296,7 @@ internal sealed class IndexPages
 			int? grew = null;
 			lock (_lock)
 			{
-				_pages[(library, start)] = items;
+				_pages[(library, start)] = new Stored(KeepItems ? items : null, [.. items.Select(x => x.Id)]); // 1.8 (BH-180-m2)
 				_asked[(library, start)] = limit;
 				if (withTotal)
 				{
@@ -309,6 +326,7 @@ internal sealed class IndexPages
 				_log?.LogInformation("Library index: {Pass} pages of {Size} titles from now on (the server is quick again)", _pass, bigger);
 			}
 
+			PageCame?.Invoke(library, start, items); // 1.8 (BH-180-m2): before PageIn, so what PageIn keeps has it
 			PageIn?.Invoke(read, total);
 			return true;
 		}

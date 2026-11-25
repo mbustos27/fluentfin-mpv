@@ -162,7 +162,7 @@ public sealed class SmartCollectionsTests
 
 		Assert.Equal("Comedy · Horror", mix.Title);
 		Assert.Equal(8, mix.ItemIds.Count);
-		Assert.Equal("Your films that are both Comedy and Horror", mix.Why);
+		Assert.Equal("Both Comedy and Horror", mix.Why); // 1.8 (P1-4): no "Your"
 	}
 
 	[Fact]
@@ -344,7 +344,7 @@ public sealed class SmartCollectionsTests
 		var keyword = Assert.Single(Built(new KeywordBuilder(), Index([.. heists, .. handTyped, .. few])));
 
 		Assert.Equal("Heists", keyword.Title);
-		Assert.Equal("Your titles with TMDb's keyword “heist”", keyword.Why);
+		Assert.Equal("Titles with TMDb's keyword “heist”", keyword.Why); // 1.8 (P1-4): no "Your"
 		Assert.Equal(["heist"], Keywords.Kept(["  Heist ", "my favourites", "simulated reality ", "halloween"]).Take(1));
 		Assert.Equal(["heist", "simulated reality", "halloween"], Keywords.Kept(["  Heist ", "my favourites", "simulated reality ", "halloween"]));
 	}
@@ -450,16 +450,21 @@ public sealed class SmartCollectionsTests
 			Film("Halloween", 1978, tags: ["halloween"], genres: ["Horror"], rating: 7.5),
 		};
 		films.AddRange(Enumerable.Range(0, 30).Select(i => Film($"F{i}", 1980 + i, tmdbCollection: $"{i / 2}")));
+		films.AddRange(Enumerable.Range(0, 8).Select(i => Film($"Horror {i}", 1980 + i, genres: ["Horror"], rating: 6.5))); // 1.8: a row's worth (the lineup's floor)
 
 		var now = SmartCollectionCatalog.Now(evening);
 		Assert.Equal((10, 31, 17), (now.Month, now.Day, now.Hour));
 		var all = SmartCollectionCatalog.BuildAll(Index(films), now);
-		var rows = FluentFin.Core.ViewModels.HomeViewModel.PickNixieRows(all, new HashSet<NixieHomeRow>(), now);
+		// 1.8 (P1-1): Home's rows are the lineup's, made for the local date
+		Lineup LineupAt(DateTimeOffset at) => CollectionLineup.Assemble(CollectionLineup.Candidates(SmartCollectionCatalog.BuildAll(Index(films), at)), LineupData.Of(films), at);
+		var lineup = LineupAt(now);
+		var rows = FluentFin.Core.ViewModels.HomeViewModel.PickNixieRows(lineup, all, new HashSet<NixieHomeRow>(), new HashSet<SmartCollectionKind>(), CollectionLineup.HomeDefault);
 
 		Assert.Contains(rows, x => x.Kind == SmartCollectionKind.Seasonal && x.Title == "Halloween");
 		var morningsRow = SmartCollectionCatalog.OfTheDay(all, SmartCollectionCatalog.Now(morning));
 		Assert.Equal(morningsRow, SmartCollectionCatalog.OfTheDay(all, now));
-		Assert.Equal(morningsRow, rows[^1]);
+		static string Shown(Lineup l) => string.Join(" | ", l.Picks.Select(x => $"{x.Collection.Id}: {string.Join(",", x.Collection.ItemIds)}"));
+		Assert.Equal(Shown(LineupAt(SmartCollectionCatalog.Now(morning))), Shown(lineup)); // the morning's lineup, that evening
 	}
 
 	/// <summary>Home, the Collections page, the Libraries page, the presets and a Nixie collection found by id: one clock.</summary>
@@ -471,7 +476,8 @@ public sealed class SmartCollectionsTests
 			.Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal) && !f.EndsWith("SmartCollectionCatalog.cs", StringComparison.Ordinal))
 			.SelectMany(f => File.ReadAllLines(f).Select(line => (File: Path.GetFileName(f), Line: line)))
 			.Where(x => x.Line.Contains("BuildAllAsync(", StringComparison.Ordinal) || x.Line.Contains("NixiePresets.For(", StringComparison.Ordinal) || x.Line.Contains("PickNixieRows(all", StringComparison.Ordinal)
-				|| x.Line.Contains("SmartCollectionCatalog.Find(", StringComparison.Ordinal) || x.Line.Contains("SmartCollectionCatalog.BuildKinds(", StringComparison.Ordinal)) // 1.7.3
+				|| x.Line.Contains("SmartCollectionCatalog.Find(", StringComparison.Ordinal) || x.Line.Contains("SmartCollectionCatalog.BuildKinds(", StringComparison.Ordinal) // 1.7.3
+				|| x.Line.Contains("CollectionLineup.BuildAsync(", StringComparison.Ordinal)) // 1.8: Home's collections and lineup
 			.ToList();
 
 		Assert.True(callers.Count >= 6, string.Join(Environment.NewLine, callers));
@@ -745,9 +751,9 @@ public sealed class SmartCollectionsTests
 		Assert.Equal(LogLevel.Information, line.Level);
 		Assert.Matches(CensusLine, line.Message);
 		// fix round (BH-173-m1): no title has a critics' rating or 5+ tags, so Acclaimed ranks by the rating alone, and says so
-		Assert.StartsWith("Made by Nixie census: 7 entries, 5 titles once copies are one; kind candidates/floor/cap: Franchise 1/0/0, Keyword 1/1/1, "
+		Assert.StartsWith("Made by Nixie census: 7 entries, 5 titles once copies are one; kind candidates/floor/cap: NextIn 0/0/0, MoreLike 0/0/0, MoreFrom 0/0/0, Franchise 1/0/0, Keyword 1/1/1, "
 			+ "HighlyRated 5/5/5 [rating only, no title has a critics' rating or 5+ tags: critic 0, tags5+ 0, listed 0], "
-			+ "UnfinishedSeries 0/0/0, Seasonal 0/0/0, ShortFilms 0/0/0, Award 0/0/0; 2 collections in ", line.Message);
+			+ "UnfinishedSeries 0/0/0, Seasonal 0/0/0, ShortFilms 0/0/0, Award 0/0/0; 2 collections in ", line.Message); // 1.8: the Spotlight is made after the first rows (BuildLaterAsync)
 		Assert.DoesNotContain("Secretname", line.Message);
 		Assert.DoesNotContain("Heat", line.Message);
 	}
@@ -882,10 +888,11 @@ public sealed class SmartCollectionsTests
 		Assert.Equal(Enum.GetValues<SmartCollectionKind>().Except(seven).Order(), SmartCollectionCatalog.Published.Order());
 		Assert.Equal(seven.Order(), SmartCollectionCatalog.OnDemandBuilders.Select(x => x.Kind).Order());
 		Assert.All(SmartCollectionCatalog.PublishedBuilders, x => Assert.Contains(x.Kind, SmartCollectionCatalog.Published));
-		Assert.Equal(SmartCollectionCatalog.PublishedBuilders.Count + SmartCollectionCatalog.OnDemandBuilders.Count, SmartCollectionCatalog.Builders.Count);
-		// Find knows every builder's ids
-		Assert.All(SmartCollectionCatalog.Builders, x => Assert.Contains((SmartCollectionKind?)x.Kind, new[] { "franchise:1", "decade:movie:1980", "director:a", "actor:a", "studio:a", "network:a",
-			"genres:movie:a+b", "keyword:heist", "country:france", "pick:highly-rated", "pick:short-films", "pick:unfinished-series", "seasonal:halloween", "award:q1" }
+		Assert.Equal(SmartCollectionCatalog.PublishedBuilders.Count + SmartCollectionCatalog.OnDemandBuilders.Count + SmartCollectionCatalog.LaterBuilders.Count, SmartCollectionCatalog.Builders.Count); // 1.8: the Spotlight, later
+		// Find knows every builder's ids (1.8: the anchored slots' in AnchorsTests)
+		Assert.All(SmartCollectionCatalog.Builders.Except(FluentFin.Core.SmartCollections.Anchors.AnchoredSlots.Builders), x => Assert.Contains((SmartCollectionKind?)x.Kind, new[] { "franchise:1", "decade:movie:1980", "director:a", "actor:a", "studio:a", "network:a",
+			"genres:movie:a+b", "keyword:heist", "country:france", "pick:highly-rated", "pick:short-films", "pick:unfinished-series", "seasonal:halloween", "award:q1",
+			"spotlight:director:a" /* 1.8 (P1-3) */ }
 			.Select(SmartCollectionCatalog.KindOf)));
 		Assert.Null(SmartCollectionCatalog.KindOf("saved:1234"));
 	}

@@ -278,8 +278,10 @@ public sealed class UpdateNoticeService : IHostedService, IDisposable
 	public Task StartAsync(CancellationToken cancellationToken)
 	{
 		// Nixie 1.5: a helper is waiting or installing (Nixie was opened again meanwhile): this start ends at once, before any
-		// window, and the helper opens Nixie when the install is done
-		if (UpdateHandoff.InstallRunning())
+		// window, and the helper opens Nixie when the install is done. 1.7.5: only for an install of this copy (another copy's
+		// helper never reads this one's request: it ended and never came back): one over this program folder, or, from a helper
+		// before 1.8's, the installed copy's (the MSI's, not a harness run pretending) or the one this data folder handed over
+		if (UpdateHandoff.StartEndsForInstall(_updates, AppContext.BaseDirectory, IsMsiInstall(), out var anotherCopys))
 		{
 			try
 			{
@@ -292,6 +294,10 @@ public sealed class UpdateNoticeService : IHostedService, IDisposable
 			{
 				_logger.LogWarning("[update] an install is under way, and its reopen could not be asked for: {Message}", ex.Message);
 			}
+		}
+		else if (anotherCopys)
+		{
+			_logger.LogInformation("[update] another copy's install is under way (not this data folder's): this start goes on");
 		}
 
 		ReadAftermath();

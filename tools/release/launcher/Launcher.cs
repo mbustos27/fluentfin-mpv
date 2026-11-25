@@ -157,6 +157,29 @@ static class UpdateHelper
                 return 5;
             }
 
+            // 1.8 (the review of 1.7.5's update-lock fix): also the mutex named for the folder of the Nixie it installs over
+            // (--app's), so a Nixie of that folder started meanwhile ends whatever its data folder: the installed copy's
+            // registry entry is gone while a major upgrade swaps the files. ui\FluentFin.Core\Updates\UpdateHandoff.cs's
+            // FolderMutexName makes the same name.
+            Mutex folder = null;
+            if (app != null)
+            {
+                try
+                {
+                    bool ownsFolder;
+                    folder = new Mutex(true, FolderMutexName(Path.GetDirectoryName(Path.GetFullPath(app))), out ownsFolder);
+                    if (!ownsFolder)
+                    {
+                        folder.Dispose();
+                        folder = null;
+                    }
+                }
+                catch (Exception)
+                {
+                    folder = null;   // a name that can't be made or opened: the session's mutex above still says an install runs
+                }
+            }
+
             try
             {
                 if (!WaitForEnd(pid, started, waitMs))
@@ -169,6 +192,12 @@ static class UpdateHelper
             }
             finally
             {
+                if (folder != null)
+                {
+                    folder.ReleaseMutex();
+                    folder.Dispose();
+                }
+
                 mutex.ReleaseMutex();
             }
         }
@@ -255,6 +284,33 @@ static class UpdateHelper
         {
             // the next start then says the installer did not finish
         }
+    }
+
+    // 1.8: the install's mutex for the program folder <folder> (UpdateHandoff.FolderMutexName makes the same name): the folder
+    // as Windows compares it (full, no trailing separator, a-z upper case: only ASCII, so .NET Framework's and .NET's casing
+    // tables can't differ), hashed
+    public static string FolderMutexName(string folder)
+    {
+        char[] path = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).ToCharArray();
+        for (int i = 0; i < path.Length; i++)
+        {
+            if (path[i] >= 'a' && path[i] <= 'z') path[i] = (char)(path[i] - 32);
+        }
+
+        string text = "nixie-update-folder-1\n" + new string(path);
+        byte[] hash;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+        {
+            hash = sha.ComputeHash(Encoding.UTF8.GetBytes(text));
+        }
+
+        var hex = new StringBuilder(MutexName + "-");
+        for (int i = 0; i < 16; i++)
+        {
+            hex.Append(hash[i].ToString("x2", CultureInfo.InvariantCulture));
+        }
+
+        return hex.ToString();
     }
 
     // the arguments as one command line, each quoted as CommandLineToArgvW reads it back (the app gets them unchanged)

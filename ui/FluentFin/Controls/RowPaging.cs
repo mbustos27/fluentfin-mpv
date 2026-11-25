@@ -188,6 +188,40 @@ internal static class RowPaging
 	}
 
 	/// <summary>
+	/// Nixie 1.8 (the re-review): a card replaced where it is (Home's Made by Nixie row taking a new lineup's collection): the
+	/// keyboard on it goes to the card in its place; on another card, it stays where it is (-1: nothing to move).
+	/// </summary>
+	public static int FocusAfterReplace(int focused, int replaced, int count) =>
+		focused == replaced && replaced >= 0 && replaced < count ? replaced : -1;
+
+	/// <summary>
+	/// Nixie 1.8 (BH-180-M1): the remembered card's place after <paramref name="added"/> cards are put in at <paramref name="at"/>
+	/// (a row taking a newer one's tiles in place): one later; or where it was (-1 stays: none remembered).
+	/// </summary>
+	public static int IndexAfterInsert(int remembered, int at, int added) => remembered >= 0 && at >= 0 && at <= remembered ? remembered + Math.Max(added, 0) : remembered;
+
+	/// <summary>Nixie 1.8 (BH-180-M1): the remembered card's place after a card moves from <paramref name="from"/> to <paramref name="to"/>: itself moved, its new place; another one moved past it, one nearer.</summary>
+	public static int IndexAfterMove(int remembered, int from, int to)
+	{
+		if (remembered < 0 || from < 0 || to < 0)
+		{
+			return remembered;
+		}
+
+		if (remembered == from)
+		{
+			return to;
+		}
+
+		if (from < remembered && to >= remembered)
+		{
+			return remembered - 1;
+		}
+
+		return from > remembered && to <= remembered ? remembered + 1 : remembered;
+	}
+
+	/// <summary>
 	/// Nixie 1.7.4 (the rows stream): which of a row's arrows show. They are at the row's ends, over its cards, in every theme
 	/// (they were in its header, which a theme could hide: Cinematic's season page showed E1 to E6 and no arrow), while the
 	/// pointer is over the row (<paramref name="pointerOver"/>), each only while the row goes further its way.

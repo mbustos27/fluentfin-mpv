@@ -117,6 +117,12 @@ namespace FluentFin.Core.Contracts.Services
 		/// </summary>
 		Task<BaseItemDtoQueryResult?> GetLibraryIndexPageSavedSince(BaseItemDto library, DateTimeOffset since, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
 
+		/// <summary>
+		/// Nixie 1.8 (P1-2): these titles' people (lean: the id and People), for the people pass's top-up of the titles new
+		/// since the index before; null when the server didn't answer.
+		/// </summary>
+		Task<IReadOnlyList<BaseItemDto>?> GetPeopleByIds(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+
 		/// <summary>Nixie 1.7.1: how many films and shows the user has and the newest one added ("25736:&lt;id&gt;"), to tell whether the saved index is current; null when not known.</summary>
 		Task<string?> GetIndexCheck(CancellationToken cancellationToken);
 

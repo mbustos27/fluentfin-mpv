@@ -5,7 +5,7 @@
 #   run-offscreen.ps1 ... -Script home -NoA11y -Then offscreen\then-170-trending.ps1
 # Covers: Settings > Look up lists online: Trakt's and TMDb trending's switches turned on (keyboard-free, through UI
 # Automation), the TMDb token pasted and saved (the field empties, "Saved"), the status lines; the requests the fake took
-# (Trakt's and TMDb's hosts only, list addresses only, no image); Home's "Trending in your library"; the Collections
+# (Trakt's and TMDb's hosts only, list addresses only, no image); Home's "Trending on this server"; the Collections
 # page's Trending and Box office rows and a trending collection's page (its eyebrow and why line); Trakt turned off taking
 # its rows away. Shots <tag>-170-<name>-<width>.png at 1920 and 1100 (TT_WIDTHS). Dot-sourced by drive.ps1: every name
 # here starts with tt. ASCII only (Windows PowerShell reads a .ps1 without a BOM in the ANSI code page).
@@ -112,20 +112,20 @@ Check "trending ($ttTag): no image was asked for" ($ttImages.Count -eq 0) "$($tt
 $ttKeyInUrl = @($ttAsked | Where-Object { $_.query -match 'api_key' -or $_.query -like "*$ttToken*" })
 Check "trending ($ttTag): the token never went in an address" ($ttKeyInUrl.Count -eq 0) ''
 
-# --- Home: Trending in your library (not "this week": Trakt's trending is right now) -------------------------------------
+# --- Home: Trending on this server (1.8; not "this week": Trakt's trending is right now) ---------------------------------
 Open-Nav 'Home'
 TT-Settle 1500
 $ttRow = Wait-Until {
     # the row is Home's last: scrolled to, so a page that realizes its rows as they come into view has it
     [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 100)
-    $r = Find-Ui -Name 'Trending in your library' -Contains -OffscreenToo
-    if (-not $r) { $r = Find-Ui -Name 'TRENDING IN YOUR LIBRARY' -Contains -OffscreenToo }
+    $r = Find-Ui -Name 'Trending on this server' -Contains -OffscreenToo
+    if (-not $r) { $r = Find-Ui -Name 'TRENDING ON THIS SERVER' -Contains -OffscreenToo }
     $r
 } -Seconds 45 -PollMs 300
-Check "trending ($ttTag): Home shows Trending in your library" ([bool]$ttRow) ''
+Check "trending ($ttTag): Home shows Trending on this server" ([bool]$ttRow) ''
 TT-Shots 'home' {
-    $r = Find-Ui -Name 'Trending in your library' -Contains -OffscreenToo
-    if (-not $r) { $r = Find-Ui -Name 'TRENDING IN YOUR LIBRARY' -Contains -OffscreenToo }
+    $r = Find-Ui -Name 'Trending on this server' -Contains -OffscreenToo
+    if (-not $r) { $r = Find-Ui -Name 'TRENDING ON THIS SERVER' -Contains -OffscreenToo }
     if ($r) { try { ([System.Windows.Automation.ScrollItemPattern]$r.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)).ScrollIntoView() } catch { [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 100) } }
     TT-Settle 900
 }

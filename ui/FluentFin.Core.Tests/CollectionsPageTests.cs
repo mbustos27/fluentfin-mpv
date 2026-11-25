@@ -294,7 +294,7 @@ public sealed class CollectionsPageTests : IDisposable
 		Assert.True(vm.State.IsLoaded);
 		Assert.Equal("The Matrix", vm.Title);
 		Assert.Equal("Made by Nixie · Franchise", vm.Eyebrow);
-		Assert.Equal("Your films that TMDb lists in one collection, in release order", vm.Why);
+		Assert.Equal("Films that TMDb lists in one collection, in release order", vm.Why); // 1.8 (P1-4): no "Your"
 		Assert.Equal(["The Matrix", "The Matrix Reloaded", "The Matrix Revolutions"], vm.Entries.Select(e => e.Item.Dto.Name));
 		Assert.Equal("1", vm.Entries[0].PositionText); // its order means something: numbered
 		Assert.True(vm.CanSaveAsPlaylist);
@@ -692,9 +692,14 @@ public sealed class CollectionsPageTests : IDisposable
 		return new HomeViewModel(_client.Object, _messages, Commands(), _homeCache);
 	}
 
+	// 1.8 (P1-1): Home's rows come from the lineup, whose floor is a row's worth of unwatched titles (8): eight more acclaimed
+	// films, so Acclaimed has 11
+	private void EightMoreAcclaimed() => _films.AddRange(Enumerable.Range(0, 8).Select(i => Film($"Acclaimed {i}", 1990 + i, null, 7.6 + (i * 0.1))));
+
 	[Fact]
 	public async Task Home_ShowsItsMadeByNixieRows_AfterNewIn_AndSnapshotsThem()
 	{
+		EightMoreAcclaimed(); // 1.8
 		var (index, _) = Services();
 		SmartCollectionServices.Index = index;
 		await index.GetAsync();
@@ -707,7 +712,9 @@ public sealed class CollectionsPageTests : IDisposable
 		var row = Assert.Single(home.NixieRows, r => r.Collection.Kind == SmartCollectionKind.HighlyRated);
 		Assert.Equal("Acclaimed, not seen yet", row.Title); // 1.7.3 (P0-4): was "Highly rated, not watched"
 		Assert.Equal("Made by Nixie", row.Kicker);
-		Assert.Equal(["The Matrix", "Amélie", "Night of the Living Dead"], row.Items.Select(i => i.Dto.Name));
+		// 1.8: its order turns daily (the lineup's daily seed): the same titles
+		Assert.Equal(["Acclaimed 0", "Acclaimed 1", "Acclaimed 2", "Acclaimed 3", "Acclaimed 4", "Acclaimed 5", "Acclaimed 6", "Acclaimed 7", "Amélie", "Night of the Living Dead", "The Matrix"],
+			row.Items.Select(i => i.Dto.Name!).Order(StringComparer.Ordinal));
 		Assert.Single((await _homeCache.Get("http://server", _client.Object.UserId)).Snapshot!.NixieRows, r => r.Collection.Kind == SmartCollectionKind.HighlyRated);
 	}
 
@@ -843,7 +850,7 @@ public sealed class CollectionsPageTests : IDisposable
 
 		// the next visit, from the saved index: the same line at once; every kind turned off: that is why
 		var settings = new SwitchSettings();
-		settings.SaveSetting(CollectionSettingKeys.KindsOff, "Franchise,Keyword,HighlyRated,UnfinishedSeries,Seasonal,ShortFilms");
+		settings.SaveSetting(CollectionSettingKeys.KindsOff, "Franchise,Keyword,HighlyRated,UnfinishedSeries,Seasonal,ShortFilms,NextIn,MoreLike,MoreFrom,Spotlight"); // 1.8 (BH-180-M2): and 1.8's kinds
 		var again = new CollectionsViewModel(_client.Object, Commands(), index, store, settings);
 		await again.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All));
 		Assert.True(again.ShowsReadingLine);
@@ -973,11 +980,14 @@ public sealed class CollectionsPageTests : IDisposable
 		{
 			new("pick:highly-rated", SmartCollectionKind.HighlyRated, "Highly rated, not watched", "", false, [Guid.NewGuid()]),
 			new("pick:unfinished-series", SmartCollectionKind.UnfinishedSeries, "Unfinished series", "", false, [Guid.NewGuid()]),
-			new("franchise:1", SmartCollectionKind.Franchise, "The Matrix", "", true, [Guid.NewGuid()]),
+			new("keyword:heist", SmartCollectionKind.Keyword, "Heists", "", false, [Guid.NewGuid()]), // 1.8: a franchise not started has no slot
 		};
+		// 1.8 (P1-1): Home's rows are the lineup's (CollectionLineupTests), then Unfinished series
+		var lineup = new Lineup([new(picks[0], LineupSlot.Acclaimed, 0.6), new(picks[2], LineupSlot.Theme, 0.5)], new Dictionary<LineupSlot, LineupSlotCount>(), DateTimeOffset.Now);
+		var noKinds = new HashSet<SmartCollectionKind>();
 
-		Assert.Equal(["Highly rated, not watched", "Unfinished series", "The Matrix"], HomeViewModel.PickNixieRows(picks, new HashSet<NixieHomeRow>(), DateTimeOffset.Now).Select(x => x.Title));
-		Assert.Equal(["Unfinished series"], HomeViewModel.PickNixieRows(picks, new HashSet<NixieHomeRow> { NixieHomeRow.HighlyRated, NixieHomeRow.Rotating }, DateTimeOffset.Now).Select(x => x.Title));
+		Assert.Equal(["Highly rated, not watched", "Heists", "Unfinished series"], HomeViewModel.PickNixieRows(lineup, picks, new HashSet<NixieHomeRow>(), noKinds, 2).Select(x => x.Title));
+		Assert.Equal(["Unfinished series"], HomeViewModel.PickNixieRows(lineup, picks, new HashSet<NixieHomeRow> { NixieHomeRow.HighlyRated, NixieHomeRow.Picks }, noKinds, 2).Select(x => x.Title));
 	}
 
 	[Fact]
@@ -1027,8 +1037,8 @@ public sealed class CollectionsPageTests : IDisposable
 
 		// never painted: Highly rated (its row off) nor The Matrix (franchises off)
 		Assert.Equal(["Unfinished series"], painted.Distinct());
-		Assert.True(HomeViewModel.NixieRowShown(unfinished, new HashSet<NixieHomeRow> { NixieHomeRow.Rotating }, new HashSet<SmartCollectionKind>()));
-		Assert.False(HomeViewModel.NixieRowShown(matrix, new HashSet<NixieHomeRow> { NixieHomeRow.Rotating }, new HashSet<SmartCollectionKind>()));
+		Assert.True(HomeViewModel.NixieRowShown(unfinished, new HashSet<NixieHomeRow> { NixieHomeRow.Picks }, new HashSet<SmartCollectionKind>()));
+		Assert.False(HomeViewModel.NixieRowShown(matrix, new HashSet<NixieHomeRow> { NixieHomeRow.Picks }, new HashSet<SmartCollectionKind>()));
 	}
 
 	[Fact]
@@ -1126,11 +1136,13 @@ public sealed class CollectionsPageTests : IDisposable
 		var vm = new CollectionsViewModel(_client.Object, Commands(), index, store);
 
 		await vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.MadeByNixie));
+		await vm.SpotlightLater; // 1.8 re-review: the week's Spotlight comes after the page
 
 		Assert.True(vm.State.IsLoaded);
-		Assert.Equal(["The server's collections", "Picks", "Franchises"], vm.Rows.Select(r => r.Title));
+		Assert.Equal(["The server's collections", CollectionsViewModel.ThisWeekTitle, "Picks", "Franchises"], vm.Rows.Select(r => r.Title)); // 1.8: This week first
 		Assert.All(vm.Rows.SelectMany(r => r.Tiles).Where(t => t.IsNixie), t => Assert.DoesNotContain(t.Nixie!.Kind, SmartCollectionCatalog.OnDemandOnly));
-		var published = vm.Rows.Where(r => r.Section == CollectionsSection.MadeByNixie).Sum(r => r.Tiles.Count);
+		// 1.8: This week holds collections of the rows under it: each counted once
+		var published = vm.Rows.Where(r => r.Section == CollectionsSection.MadeByNixie).SelectMany(r => r.Tiles).Select(t => t.Nixie!.Id).Distinct().Count();
 		Assert.Equal(published, vm.MadeByNixieCount); // the Libraries page's "Made by Nixie · N" counts what the page lists
 		// See all of Made by Nixie: the same, as a grid
 		var all = new CollectionsViewModel(_client.Object, Commands(), index, store);
@@ -1202,8 +1214,8 @@ public sealed class CollectionsPageTests : IDisposable
 		var settings = new SwitchSettings();
 		var page = new CollectionsSettingsViewModel(settings);
 
-		Assert.Equal(["Franchises", "Keywords", "Acclaimed, not seen yet", "Unfinished series", "In season", "Under 90 minutes"], page.Kinds.Select(x => x.Name));
-		Assert.Equal(["Acclaimed, not seen yet", "Unfinished series", "In season", "A collection a day"], page.HomeRows.Select(x => x.Name));
+		Assert.Equal(["Franchises", "Keywords", "Acclaimed, not seen yet", "Unfinished series", "In season", "Under 90 minutes", "Next in a franchise", "More like", "More from", "Spotlight"], page.Kinds.Select(x => x.Name)); // 1.8 (BH-180-M2): 1.8's kinds
+		Assert.Equal(["Acclaimed, not seen yet", "Unfinished series", "In season", "This week's picks", "A third row of picks"], page.HomeRows.Select(x => x.Name)); // 1.8: the lineup's
 		Assert.Equal(["Decades", "Genre mixes", "Countries"], page.LibraryFilters.Select(x => x.Name)); // fix round (BH-173-m2): the strip's switches
 		Assert.All(page.HomeRows.Concat(page.Kinds).Concat(page.LibraryFilters), x => Assert.DoesNotContain("your server", x.Description, StringComparison.OrdinalIgnoreCase)); // rule 11
 		// fix round (BH-173-q1): nothing counts raters
@@ -1252,7 +1264,7 @@ public sealed class CollectionsPageTests : IDisposable
 		Assert.False(HomeViewModel.NixieRowShown(director, none, noKinds));
 		Assert.False(HomeViewModel.NixieRowShown(decade, none, noKinds));
 		Assert.True(HomeViewModel.NixieRowShown(rated, none, noKinds));
-		Assert.True(HomeViewModel.NixieRowShown(new SmartCollection(TrendingBuilder.HomeRowId, SmartCollectionKind.Trending, "Trending in your library", "", true, [Guid.NewGuid()]), none, noKinds));
+		Assert.True(HomeViewModel.NixieRowShown(new SmartCollection(TrendingBuilder.HomeRowId, SmartCollectionKind.Trending, TrendingBuilder.HomeRowTitle, "", true, [Guid.NewGuid()]), none, noKinds));
 	}
 
 	[Fact]
@@ -1278,6 +1290,7 @@ public sealed class CollectionsPageTests : IDisposable
 	{
 		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
 		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		EightMoreAcclaimed(); // 1.8: Home's Acclaimed row, from the lineup
 		_rig = new Outside.TrendingRig(trakt: true);
 		foreach (var list in new[] { "movies/trending", "shows/trending", "movies/popular", "shows/popular", "movies/anticipated", "shows/anticipated", "movies/boxoffice" })
 		{
@@ -1297,7 +1310,7 @@ public sealed class CollectionsPageTests : IDisposable
 		await vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.MadeByNixie));
 
 		Assert.True(vm.State.IsLoaded);
-		Assert.Equal(["Picks", "Franchises"], vm.Rows.Select(r => r.Title)); // 1.7.2: none at all
+		Assert.Equal([CollectionsViewModel.ThisWeekTitle, "Picks", "Franchises"], vm.Rows.Select(r => r.Title)); // 1.7.2: none at all; 1.8: This week first
 		var said = Assert.Single(log.Entries, x => x.Level == Microsoft.Extensions.Logging.LogLevel.Warning);
 		Assert.Equal("Made by Nixie: the trending collections couldn't be matched (InvalidOperationException); the other kinds still are", said.Message);
 		Assert.DoesNotContain(log.Entries, x => x.Message.Contains("The Matrix", StringComparison.Ordinal));

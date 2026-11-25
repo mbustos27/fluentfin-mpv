@@ -308,6 +308,12 @@ T 'playback-basics: the tracks cases open, pick and read Cinematic''s panel too'
     ($pn -join '|') -eq 'Audio: Japanese|Subtitles: Off' -and $pbText -match 'Wait-Until \{ if \(G4P-TracksOpen\) \{ \$true \} \}' -and
     $pbText -match "\`$closed = -not \(G4P-TracksOpen\)" -and $pbText -match ", in use\$'") "$($pn -join '|')"
 
+# 1.8 (BH-180-m3): a release's own harness checks are in the gate: every offscreen\then-18x-*.ps1 is a manifest entry's Then
+# (release or nightly). 1.8's were in the repo and in no manifest
+$m3Then = @(Get-ChildItem (Join-Path $repo 'tools\gate\manifest') -Filter '*.psd1' | ForEach-Object { (Import-PowerShellDataFile $_.FullName).Checks } | ForEach-Object { "$($_.Then)" })
+$m3Missing = @(Get-ChildItem (Join-Path $repo 'tools\ui-harness\offscreen') -Filter 'then-18*.ps1' | Where-Object { $m3Then -notcontains "tools\ui-harness\offscreen\$($_.Name)" } | ForEach-Object { $_.Name })
+T 'every then-18x check is in a gate manifest (release or nightly)' ($m3Missing.Count -eq 0) "not in one: $($m3Missing -join ', ')"
+
 Write-Host ("--- test_gate: {0}" -f $(if ($failures) { "$failures failed" } else { 'all passed' }))
 if ($failures) { exit 1 }
 exit 0

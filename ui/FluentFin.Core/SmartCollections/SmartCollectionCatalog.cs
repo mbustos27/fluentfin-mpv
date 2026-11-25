@@ -25,6 +25,7 @@ public static class SmartCollectionCatalog
 	/// <summary>The builders of the kinds Nixie publishes, in the order they are made.</summary>
 	public static IReadOnlyList<ISmartCollectionBuilder> PublishedBuilders { get; } =
 	[
+		.. Anchors.AnchoredSlots.Builders, // 1.8 (P1-2, stream a): Next in, More like, More from (none without an anchor)
 		new FranchiseBuilder(), new KeywordBuilder(), new HighlyRatedBuilder(), new UnfinishedSeriesBuilder(), new SeasonalBuilder(), new ShortFilmsBuilder(),
 		new AwardBuilder(), // 1.7 keyless: Wikidata's awards (nothing without its lists)
 	];
@@ -36,8 +37,18 @@ public static class SmartCollectionCatalog
 		new GenreMixBuilder(), new CountryBuilder(),
 	];
 
-	/// <summary>Every builder: the published ones, then the on-demand ones.</summary>
-	public static IReadOnlyList<ISmartCollectionBuilder> Builders { get; } = [.. PublishedBuilders, .. OnDemandBuilders];
+	// 1.8 (P1-3, stream s; the review's Major 2)
+	/// <summary>
+	/// The builders of the kinds published after the first rows (the week's Spotlight): never in <see cref="BuildAllAsync"/>, which
+	/// Home's first Nixie row waits on (at 25,000 titles with people, steady rounds took 294–397 ms with the Spotlight, 149–259 ms
+	/// without: SpotlightPeople180Tests), but in
+	/// <see cref="BuildLaterAsync"/>, which a page calls once its first rows are shown.
+	/// </summary>
+	public static IReadOnlyList<ISmartCollectionBuilder> LaterBuilders { get; } = [new SpotlightBuilder(onDemand: true)];
+	// end 1.8
+
+	/// <summary>Every builder: the published ones, the on-demand ones, then those published later.</summary>
+	public static IReadOnlyList<ISmartCollectionBuilder> Builders { get; } = [.. PublishedBuilders, .. OnDemandBuilders, .. LaterBuilders];
 
 	/// <summary>
 	/// The kinds Nixie publishes: the Collections page, Home, <see cref="OfTheDay"/>, the presets' published part. Every kind but
@@ -134,11 +145,13 @@ public static class SmartCollectionCatalog
 	// the ids each builder makes (Make.Of's first argument)
 	private static readonly (string Prefix, SmartCollectionKind Kind)[] IdPrefixes =
 	[
+		.. Anchors.AnchoredSlots.IdPrefixes, // 1.8 (P1-2, stream a)
 		("franchise:", SmartCollectionKind.Franchise), ("decade:", SmartCollectionKind.Decade), ("director:", SmartCollectionKind.Director),
 		("actor:", SmartCollectionKind.Actor), ("studio:", SmartCollectionKind.Studio), ("network:", SmartCollectionKind.Network),
 		("genres:", SmartCollectionKind.GenreMix), ("keyword:", SmartCollectionKind.Keyword), ("country:", SmartCollectionKind.Country),
 		("pick:highly-rated", SmartCollectionKind.HighlyRated), ("pick:short-films", SmartCollectionKind.ShortFilms),
 		("pick:unfinished-series", SmartCollectionKind.UnfinishedSeries), ("seasonal:", SmartCollectionKind.Seasonal), ("award:", SmartCollectionKind.Award),
+		("spotlight:", SmartCollectionKind.Spotlight), // 1.8 (P1-3, stream s)
 	];
 
 	// 1.7.2: a kind whose builder throws is left out, and said once in the log (its kind and the exception's type: no titles);
@@ -227,6 +240,83 @@ public static class SmartCollectionCatalog
 		var lists = outside ?? Outside.OutsideListsSnapshot.Shared; // 1.7 keyless: the lists as they are now, not when the task runs
 		return Task.Run(() => BuildPublished(index, now, boxedFranchises, kindsOff, lists, census: true));
 	}
+
+	// 1.8 (P1-3, stream s; the review's Major 2 and Minor 3)
+	/// <summary>
+	/// The collections published after the first rows (<see cref="LaterBuilders"/>: the week's Spotlight), off the calling thread,
+	/// once an index (with its outside lists, the week and Settings' switch): every page that asks gets the same work, and only the
+	/// first pays. Call it after showing <see cref="BuildAllAsync"/>'s rows, and add what it gives when it comes
+	/// (<see cref="LaterReady"/> says so too). The week's Spotlight is kept on this PC (<paramref name="picks"/>, the signed-in
+	/// user's <see cref="SmartCollectionStore"/> by default): it holds all week and next week's is another. Counts only in the log.
+	/// </summary>
+	public static Task<IReadOnlyList<SmartCollection>> BuildLaterAsync(IndexSnapshot index, DateTimeOffset now, IReadOnlySet<SmartCollectionKind>? kindsOff = null,
+		Outside.OutsideListsSnapshot? outside = null, ISpotlightPicks? picks = null)
+	{
+		var lists = outside ?? Outside.OutsideListsSnapshot.Shared;
+		var keep = picks ?? ViewModels.SmartCollectionServices.Store;
+		var off = kindsOff?.Contains(SmartCollectionKind.Spotlight) == true;
+		var week = SpotlightWeek.Of(now).Seed;
+		lock (Later)
+		{
+			if (Later.TryGetValue(index, out var made) && ReferenceEquals(made.Outside, lists) && made.Week == week && made.Off == off && ReferenceEquals(made.Picks, keep))
+			{
+				return made.Task;
+			}
+
+			var task = Task.Run(() => MakeLater(index, now, off, lists, keep));
+			Later.AddOrUpdate(index, new LaterMade(lists, week, off, keep, task));
+			return task;
+		}
+	}
+
+	/// <summary>A later build (<see cref="BuildLaterAsync"/>) is in: the index it was made of, and what it made.</summary>
+	public static event Action<IndexSnapshot, IReadOnlyList<SmartCollection>>? LaterReady;
+
+	private sealed record LaterMade(Outside.OutsideListsSnapshot Outside, string Week, bool Off, ISpotlightPicks? Picks, Task<IReadOnlyList<SmartCollection>> Task);
+
+	private static readonly ConditionalWeakTable<IndexSnapshot, LaterMade> Later = new();
+
+	private static async Task<IReadOnlyList<SmartCollection>> MakeLater(IndexSnapshot index, DateTimeOffset now, bool off, Outside.OutsideListsSnapshot lists, ISpotlightPicks? picks)
+	{
+		if (off || index.Reading is not null)
+		{
+			return []; // turned off in Settings; a first read's partial index makes none (it would change as the rest came)
+		}
+
+		var watch = Stopwatch.StartNew();
+		IReadOnlyList<SmartCollection> made = [];
+		try
+		{
+			var kept = picks is null ? null : await picks.SpotlightPicksAsync().ConfigureAwait(false);
+			var context = new BuildContext(index, now, new HashSet<string>()) { Outside = lists, Collapsed = CollapsedOf(index) };
+			made = [.. new SpotlightBuilder(kept).Build(context).Where(x => x.ItemIds.Count > 0)];
+			var gate = context.Gates.Of(SmartCollectionKind.Spotlight) ?? new BuildGates.Gate(made.Count, made.Count, made.Count);
+			if (Log is { } log && index.Key is not null && LaterSaid.GetOrCreateValue(log).TryAdd((index.Key, index.ReadAt, index.Entries.Count), 0))
+			{
+				log.LogInformation("Made by Nixie, after the first rows: Spotlight {Candidates}/{Floor}/{Cap} [{Note}] in {Ms} ms",
+					gate.Candidates, gate.Floor, gate.Cap, context.Gates.NoteOf(SmartCollectionKind.Spotlight), (int)watch.Elapsed.TotalMilliseconds);
+			}
+
+			var week = SpotlightWeek.Of(now).Seed;
+			// 1.8 (stream l, the re-review): kept for the week only once the people are in (PeopleCovered): a first start's pick
+			// (a studio's, the people not read yet) held the whole week against the directors and actors that came minutes later
+			if (picks is not null && index.PeopleCovered && made.FirstOrDefault() is { } spotlight && kept?.GetValueOrDefault(week) != spotlight.Id)
+			{
+				await picks.SaveSpotlightPick(week, spotlight.Id).ConfigureAwait(false);
+			}
+		}
+		catch (Exception ex)
+		{
+			// as a builder's throw in BuildAll: said once, its type only; the published rows are untouched
+			Log?.LogWarning("Made by Nixie: the Spotlight couldn't be made ({Error})", ex.GetType().Name);
+		}
+
+		LaterReady?.Invoke(index, made);
+		return made;
+	}
+
+	private static readonly ConditionalWeakTable<ILogger, ConcurrentDictionary<(string Key, DateTimeOffset ReadAt, int Entries), byte>> LaterSaid = new();
+	// end 1.8
 
 	/// <summary>
 	/// Nixie 1.6.1 (bug hunt BH-160-m1): the clock every page builds Nixie's collections by, the PC's local time: the seasonal

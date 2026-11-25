@@ -30,9 +30,18 @@ function Co-Focus { $coF = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); 
 # --- Home: the Made by Nixie rows, after New in ... (the index is read in the background on a first visit) -----------
 # 1.7.3: the acclaimed pick's row, found by its role: "Highly rated, not watched" until 1.7.2, "Acclaimed, not seen yet" from
 # 1.7.3 (stream M2 renamed it), so the check holds on either side of that change
+# 1.8 gate fix: stream l's weekly lineup chooses Home's Made by Nixie rows (2 by default: the best personal row, then a
+# seasonal, trending or Spotlight one; Acclaimed only when no canon list is on), so any of them counts: the row's reason line
+# (Classic's and Cinematic's NixieRowReason; Drive-in's and Editorial's caption "Made by Nixie <middle dot> ..."), or 1.7's
+# acclaimed row by name on a 1.7 build. then-180-tiles.ps1 checks how many and what they say.
 $coPickNames = @('Acclaimed, not seen yet', 'Highly rated, not watched')
-$coRow = Wait-Until { $coPickNames | ForEach-Object { Find-Ui -Name $_ -Contains -OffscreenToo } | Select-Object -First 1 } -Seconds 60 -PollMs 300
-Check "collections ($coTag): Home shows a Made by Nixie row" ([bool]$coRow) $(if ($coRow) { $coRow.Current.Name } else { "none of: $($coPickNames -join ' | ')" })
+$coRow = Wait-Until {
+    $r = Find-Ui -Id 'NixieRowReason' -Type 'Text' -OffscreenToo
+    if (-not $r) { $r = Find-Ui -Name ('Made by Nixie ' + [char]0x00B7 + ' ') -Contains -Type 'Text' -OffscreenToo }
+    if (-not $r) { $r = $coPickNames | ForEach-Object { Find-Ui -Name $_ -Contains -OffscreenToo } | Select-Object -First 1 }
+    $r
+} -Seconds 60 -PollMs 300
+Check "collections ($coTag): Home shows a Made by Nixie row" ([bool]$coRow) $(if ($coRow) { $coRow.Current.Name } else { "no row's reason line, none of: $($coPickNames -join ' | ')" })
 $coKicker = Find-Ui -Name 'Made by Nixie' -Contains -OffscreenToo
 if (-not $coKicker) { $coKicker = Find-Ui -Name 'MADE BY NIXIE' -OffscreenToo }
 Check "collections ($coTag): the row says it is Nixie's" ([bool]$coKicker) ''
@@ -75,7 +84,7 @@ if ($coFranchise) {
     # the eyebrow and the why line are the colpage stream's header, filled through its hook (CollectionViewModel's
     # "1.6 collections" block); 1.6 integration: checked now the two branches are merged (NIXIE_COLPAGE_SEAMS on)
     Check "collections ($coTag): the header's eyebrow says Made by Nixie, Franchise" ([bool]$coEyebrow) "$(if ($coEyebrow) { $coEyebrow.Current.Name })"
-    $coWhy = Wait-Until { Find-Ui -Name 'Your films that TMDb lists in one collection' -Contains -Type 'Text' } -Seconds 3 -PollMs 200
+    $coWhy = Wait-Until { Find-Ui -Name 'Films that TMDb lists in one collection' -Contains -Type 'Text' } -Seconds 3 -PollMs 200
     Check "collections ($coTag): the header's why line says where it came from" ([bool]$coWhy) ''
     $coSave = Wait-Ui -Name 'Save as playlist' -Type 'Button' -Seconds 10
     Check "collections ($coTag): Save as playlist is there" ([bool]$coSave) ''
@@ -101,7 +110,14 @@ if ($coFranchise) {
     Check "collections ($coTag): Back from the franchise shows the Collections page" ([bool]$coBack) ''
     Co-Settle 1000
     # 1.6.1 (bug hunt BH-160-m2): a Nixie collection of shows only ("Unfinished series") doesn't offer Save as playlist
-    $coShows = Wait-Until { Find-Ui -Name 'Unfinished series, made by Nixie' -Contains -OffscreenToo } -Seconds 15 -PollMs 300
+    $coShows = Wait-Until { Find-Ui -Name 'Unfinished series, made by Nixie' -Contains -OffscreenToo } -Seconds 5 -PollMs 300
+    # 1.8 gate fix: Back puts the page where it was, at the franchise's row, and 1.8's page has This week and Picks (where the
+    # Unfinished series tile is) above it: a row's tiles are made only near the view (its ItemsRepeater), so the tile is looked
+    # for from the page's top down, as a user scrolls up to it
+    for ($coPct = 0; -not $coShows -and $coPct -le 100; $coPct += 10) {
+        [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, $coPct); Co-Settle 500
+        $coShows = Find-Ui -Name 'Unfinished series, made by Nixie' -Contains -OffscreenToo
+    }
     if ($coShows) {
         try { $coSp = $null; if ($coShows.TryGetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern, [ref]$coSp)) { $coSp.ScrollIntoView() } } catch { }
         Say "Unfinished series ($(Invoke-Element $coShows))"

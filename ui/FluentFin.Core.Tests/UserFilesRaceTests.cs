@@ -58,7 +58,7 @@ public sealed class UserFilesRaceTests : IDisposable
 		Assert.Contains("since = _files.Generation;", read);
 		Assert.True(read.IndexOf("since = _files.Generation;", StringComparison.Ordinal) < read.IndexOf("Task.Run(() => ReadFromServer(key, kind, url, user, since, previous, begun, firstIn, cancellation", StringComparison.Ordinal));
 		Assert.Contains("var login = _homeCache.LoginKey(url, user);", index); // 1.7.1: saved behind the index it says is in
-		Assert.Contains("_files.Write(key, ToJson(snapshot), login, since)", index);
+		Assert.Contains("_files.WriteAs(key, saving => ToDocument(snapshot, saving), Json, login, since)", index); // 1.8 (BH-180-m2): streamed
 		Assert.Contains("}, _homeCache.LoginKey(url, user), since);", read); // 1.7.1 review M2: the note of its last read, too
 	}
 }

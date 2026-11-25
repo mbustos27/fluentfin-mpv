@@ -157,4 +157,23 @@ public sealed class UpdateNoticeSourceTests
 		Assert.Contains("if (TurnsToClose(keyed, args.InputDevice) && FindNamed<Button>(dialog, \"CloseButton\") is { } close", notes);
 		Assert.Contains("if (!keyed && FindNamed<Button>(dialog, \"CloseButton\") is { } close && close.FocusState == FocusState.Unfocused)", notes);
 	}
+
+	/// <summary>
+	/// 1.7.5 (the gate's lifecycle run) and 1.8 (its review): a start ends for an install under way only when it is this copy's
+	/// (UpdateHandoff.StartEndsForInstall, whose rule FluentFin.Core.Tests' LauncherUpdateHelperTests check): this program
+	/// folder's helper, or, from an older helper, the MSI-installed copy (IsMsiInstall, not CanSelfUpdate, which a harness run
+	/// pretending to be installed also has) or this data folder's handoff. Before any window, and before the aftermath is read.
+	/// </summary>
+	[Fact]
+	public void AStartEndsOnlyForAnInstallOfThisCopy()
+	{
+		var service = Source("FluentFin", "Services", "UpdateNoticeService.cs").Replace("\r\n", "\n");
+		var start = service[service.IndexOf("public Task StartAsync(CancellationToken cancellationToken)", StringComparison.Ordinal)..];
+		start = start[..start.IndexOf("ReadAftermath();", StringComparison.Ordinal)];
+		Assert.Contains("if (UpdateHandoff.StartEndsForInstall(_updates, AppContext.BaseDirectory, IsMsiInstall(), out var anotherCopys))", start);
+		Assert.DoesNotContain("InstallRunning()", start);
+		Assert.DoesNotContain("CanSelfUpdate", start);
+		Assert.True(start.IndexOf("StartEndsForInstall(", StringComparison.Ordinal) < start.IndexOf("Environment.Exit(0);", StringComparison.Ordinal));
+		Assert.Contains("else if (anotherCopys)", start);
+	}
 }

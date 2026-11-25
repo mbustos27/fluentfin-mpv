@@ -167,7 +167,8 @@
                         ItemsSource="{x:Bind CollectionsSettings.Kinds}">
                         <ctk:SettingsExpander.ItemTemplate>
                             <DataTemplate x:DataType="sc:CollectionSwitch">
-                                <ctk:SettingsCard Header="{x:Bind Name}">
+                                <!--  1.8 (BH-180-M2): 1.8's kinds say what they are, and that two of them read the titles' people  -->
+                                <ctk:SettingsCard Description="{x:Bind Description}" Header="{x:Bind Name}">
                                     <ToggleSwitch AutomationProperties.Name="{x:Bind Name}" IsOn="{x:Bind IsOn, Mode=TwoWay}" />
                                 </ctk:SettingsCard>
                             </DataTemplate>

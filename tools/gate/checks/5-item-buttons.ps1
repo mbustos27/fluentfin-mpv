@@ -41,7 +41,27 @@ function Ib5-Toggle([string]$Page, [string]$Kind, [string]$On, [string]$Off, [st
         $want = if ($s0 -eq 'On') { 'Off' } else { 'On' }
         $wantName = if ($want -eq 'On') { $On } else { $Off }
         $at = Get-Epoch
-        if ($how -eq 'keyboard') { [void][OffscreenUi]::SetFocus($b); G3-Settle 300; Key 0x20 }
+        if ($how -eq 'keyboard') {
+            # 1.8 gate fix (the 1.8.0 package's Editorial run): Space only once the keyboard is on the toggle. The series page
+            # was found before its toggle could be (state '' at the start), the focus went nowhere, and the Space went to
+            # Play, which takes the keyboard on arrival (ItemPagePlace), so the show played and every later step failed
+            $ib5On = Wait-Until {
+                $y = Ib5-Find @($On, $Off)
+                if ($y) { [void][OffscreenUi]::SetFocus($y); G3-Settle 300 }
+                $fy = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id)
+                if ($y -and $fy -and (($fy | ConvertFrom-Json).name -in @($On, $Off))) { $y }
+            } -Seconds 8 -PollMs 200
+            if (-not $ib5On) {
+                $fy = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id)
+                G3-Check $ib5Id "$Page, $Kind, $how" 'the keyboard can be put on the toggle' $false "the keyboard on: $(if ($fy) { ($fy | ConvertFrom-Json).name } else { 'nothing' })"
+                continue
+            }
+            $b = $ib5On; $s0 = G3-State $b
+            $want = if ($s0 -eq 'On') { 'Off' } else { 'On' }
+            $wantName = if ($want -eq 'On') { $On } else { $Off }
+            $at = Get-Epoch
+            Key 0x20
+        }
         elseif (-not (G3-Click $b)) { G3-Check $ib5Id "$Page, $Kind, $how" 'the toggle can be clicked' $false 'no rect'; continue }
         # (drawn and named together: the state and the name read from one find; Drive-in's board is made again after a
         # season is marked, so the toggle is found afresh until both agree)

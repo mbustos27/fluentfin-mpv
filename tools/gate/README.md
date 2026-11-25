@@ -40,7 +40,7 @@ and the player's controls; settings; lifecycle).
     tools\gate\run-gate.ps1                the runner
     tools\gate\run-job.ps1                 one job in its own hidden PowerShell (the runner's; checks don't call it)
     tools\gate\gate-common.ps1             helpers a check may dot-source
-    tools\gate\manifest\<owner>.psd1       each owner's checks (g1.psd1, g2.psd1, g3.psd1, g4.psd1, back.psd1): one file
+    tools\gate\manifest\<owner>.psd1       each owner's checks (g1.psd1, g2.psd1, g3.psd1, g4.psd1, back.psd1, c180.psd1): one file
                                            per owner, so no two streams write the same file; the runner reads them all
     tools\gate\checks\<class>-<name>.ps1   a check's own script, e.g. 1-signin-methods.ps1
 
@@ -138,3 +138,5 @@ check in one theme. A job that failed while Windows minimized its window (a moni
 - g3: rows (`rows-gate`), Collections (`then-160-collections`), stress (`then-174-scrollstress`); back's `back-gate.ps1`
   in `manifest\back.psd1` at its merge.
 - g4: the player's controls (`then-174-hud`), `keys-matrix`.
+- c180 (1.8, BH-180-m3): `then-180-week`, `then-180-tiles`, `then-180-reverse`, `then-180-focus` (BH-180-M1), `then-180-off`
+  (BH-180-M2); nightly `then-180-census` and `then-180-first-row`. test_gate checks every `then-18x` script is in a manifest.

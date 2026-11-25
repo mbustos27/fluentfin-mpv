@@ -73,11 +73,13 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 	/// <summary>The box set or the playlist.</summary>
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(Title), nameof(Overview), nameof(IsFavorite), nameof(Kind), nameof(OrderLabel), nameof(OrderButtonName))]
+	[NotifyPropertyChangedFor(nameof(DirectionWords), nameof(OtherDirectionWords), nameof(DirectionGlyph), nameof(DirectionButtonName), nameof(DirectionToolTip))] // 1.8: a box set's own order (its DisplayOrder) says the direction's words
 	public partial BaseItemDto? Collection { get; private set; }
 
 	/// <summary>A playlist: an ordered list (its own order, no years in the summary).</summary>
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(OrderLabel), nameof(OrderButtonName), nameof(Kind))]
+	[NotifyPropertyChangedFor(nameof(DirectionWords), nameof(OtherDirectionWords), nameof(DirectionGlyph), nameof(DirectionButtonName), nameof(DirectionToolTip))] // 1.8
 	public partial bool IsPlaylist { get; private set; }
 
 	public string Title => CollectionNames.Display(Collection); // 1.6 collections: a box set's tidy name (a playlist's as it is)
@@ -131,6 +133,7 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(OrderLabel), nameof(OrderButtonName))]
+	[NotifyPropertyChangedFor(nameof(DirectionWords), nameof(OtherDirectionWords), nameof(DirectionGlyph), nameof(DirectionButtonName), nameof(DirectionToolTip))] // 1.8: each order has its direction's words
 	public partial CollectionOrder Order { get; set; } = CollectionOrder.Collection;
 
 	/// <summary>"Order: Collection".</summary>
@@ -140,6 +143,59 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 
 	[ObservableProperty]
 	public partial bool HideWatched { get; set; }
+
+	// ---- 1.8 (the reverse toggle; the owner, 2026-11-23: "we should be able to reverse the direction of the sort in collections")
+
+	/// <summary>
+	/// 1.8: the cards run the other way: whichever order is chosen, mirrored (<see cref="SortDirections.Apply"/>). Kept like
+	/// Order and Hide watched: Back and Forward keep this view model (<see cref="IKeptOnBack"/>), R puts it back
+	/// (<see cref="SortDirections.Recall"/>); a collection opened anew runs as its order does.
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(DirectionWords), nameof(OtherDirectionWords), nameof(DirectionGlyph), nameof(DirectionButtonName), nameof(DirectionToolTip))]
+	public partial bool Reversed { get; set; }
+
+	/// <summary>What the order chosen runs by (its direction's words): A to Z, oldest first, newest first, first to last.</summary>
+	public OrderRuns Runs => SortDirections.Runs(Order, IsPlaylist, OwnDisplayOrder);
+
+	/// <summary>The direction button's words: "Oldest first", "Newest first", "A to Z", "Z to A", "First to last".</summary>
+	public string DirectionWords => SortDirections.Words(Runs, Reversed);
+
+	/// <summary>The other direction's words: the button holds both in one cell, so it keeps its width when it flips (rule 7).</summary>
+	public string OtherDirectionWords => SortDirections.OtherWords(Runs, Reversed);
+
+	public string DirectionGlyph => SortDirections.Glyph(Runs, Reversed);
+
+	/// <summary>Narrator: the direction, then what a press does: "Newest first, switch to oldest first".</summary>
+	public string DirectionButtonName => SortDirections.ButtonName(Runs, Reversed);
+
+	public string DirectionToolTip => SortDirections.ToolTip(Runs, Reversed);
+
+	/// <summary>The direction button: the other way.</summary>
+	[RelayCommand]
+	public void ToggleDirection() => Reversed = !Reversed;
+
+	partial void OnReversedChanged(bool value)
+	{
+		Update();
+		if (_placeKnown && DirectionView is { } view)
+		{
+			SortDirections.Remember(JellyfinClient.UserId, view, value); // the user's flip only (never a page's default: CollectionPlaces' rule)
+		}
+	}
+
+	// the view the direction is kept under: a Made by Nixie collection by its own id, a server's set or playlist by its id
+	private string? DirectionView => Nixie is { } nixie ? SortDirections.ForNixie(nixie.Collection.Id) : Collection?.Id is { } id ? SortDirections.ForCollection(id) : null;
+
+	// R (a new view model, the page saying it reloads in place) puts the direction back
+	private void RecallDirection(bool keeps)
+	{
+		if (keeps && DirectionView is { } view && SortDirections.Recall(JellyfinClient.UserId, view) is { } reversed)
+		{
+			Reversed = reversed;
+		}
+	}
+	// end 1.8
 
 	/// <summary>Every item is watched (the Watched toggle shows it on).</summary>
 	[ObservableProperty]
@@ -283,13 +339,16 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 		}
 
 		_serverOrder = [.. result.Items];
-		if (KeepsPlace?.Invoke() == true && known.Id is { } set && CollectionPlaces.Recall(JellyfinClient.UserId, set) is { } place)
+		var keeps = KeepsPlace?.Invoke() == true;
+		_placeKnown = false; // (each change shows the cards again: Update below once; nothing is remembered from here)
+		if (keeps && known.Id is { } set && CollectionPlaces.Recall(JellyfinClient.UserId, set) is { } place)
 		{
-			// Back or R: the order and Hide watched as the user left them (each change shows the cards again: Update below once)
-			_placeKnown = false;
+			// Back or R: the order and Hide watched as the user left them
 			Order = place.Order;
 			HideWatched = place.HideWatched;
 		}
+
+		RecallDirection(keeps); // 1.8: and the direction
 
 		_placeKnown = true;
 		Update();
@@ -334,7 +393,7 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 	{
 		var own = CollectionBrowse.Ordered(_serverOrder, CollectionOrder.Collection, IsPlaylist, OwnDisplayOrder);
 		var places = own.Select((item, i) => (item, i)).ToDictionary(x => x.item, x => x.i + 1, ReferenceEqualityComparer.Instance);
-		var shown = CollectionBrowse.Ordered(_serverOrder, Order, IsPlaylist, OwnDisplayOrder)
+		var shown = SortDirections.Apply(CollectionBrowse.Ordered(_serverOrder, Order, IsPlaylist, OwnDisplayOrder), Reversed, SortDirections.Undated(Order, IsPlaylist, OwnDisplayOrder)) // 1.8: either way, undated last
 			.Where(x => !HideWatched || !CollectionBrowse.IsWatched(x)).ToList();
 
 		// 1.6 colpage (LB1): places only where the order means something (a franchise's release order, a playlist, an album)

@@ -4,7 +4,7 @@
     skinned by the theme's keys (PageHeaderStyle for the title, PosterTemplate for the cards, PageGroundBrush behind it, the
     page grid's gutter and title y). A box set: its poster, its title, "6 films · 1979–2016 · 1 of 6 watched" with a progress
     bar, a three-line overview (More), Play or Resume from the first film not watched in collection order (the one Primary),
-    Shuffle, the Watched and Favourite toggles; then Order (Collection, the server's DisplayOrder, by default) and Hide watched
+    Shuffle, the Watched and Favourite toggles; then Order (Collection, the server's DisplayOrder, by default), its direction (1.8) and Hide watched
     over the films, each numbered in collection order. No genre filter, and an A to Z only from 30 items sorted by name. A
     playlist opens here as an ordered list (its own order). Loading, empty and failed are worded (LoadStateView), with Retry.
 -->
@@ -275,13 +275,14 @@
                     </StackPanel>
                 </Grid>
 
-                <!--  the toolbar over the films: what is shown on the left; Order and Hide watched on the right, at the grid's right edge  -->
+                <!--  the toolbar over the films: what is shown on the left; Hide watched, Order and its direction on the right, at the grid's right edge  -->
                 <Grid
                     x:Name="Toolbar"
                     ColumnSpacing="12"
                     Visibility="{x:Bind local:CollectionPage.ToolbarVisibility(ViewModel.State.Status), Mode=OneWay}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
@@ -304,7 +305,7 @@
                     <Button
                         x:Name="OrderButton"
                         Grid.Column="2"
-                        MinWidth="180"
+                        MinWidth="{x:Bind local:CollectionPage.OrderWidth}"
                         AutomationProperties.Name="{x:Bind ViewModel.OrderButtonName, Mode=OneWay}"
                         Style="{StaticResource NixieCompactButtonStyle}"
                         ToolTipService.ToolTip="Order">
@@ -342,6 +343,31 @@
                                     Text="Date added" />
                             </MenuFlyout>
                         </Button.Flyout>
+                    </Button>
+                    <!--
+                        1.8 (the reverse toggle): the direction of whichever order is chosen, next to Order; one press, the other way. Its
+                        name says the direction, then what a press does ("Newest first, switch to oldest first"). Both directions' words
+                        share one cell (the other at Opacity 0, raw to Narrator), so it keeps its width when it flips (rule 7); review (Minor 5):
+                        it and Order are as wide as their widest words in every theme (DirectionWidth, OrderWidth), so changing Order moves nothing
+                    -->
+                    <Button
+                        x:Name="DirectionButton"
+                        Grid.Column="3"
+                        MinWidth="{x:Bind local:CollectionPage.DirectionWidth}"
+                        AutomationProperties.Name="{x:Bind ViewModel.DirectionButtonName, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.ToggleDirectionCommand}"
+                        Style="{StaticResource NixieCompactButtonStyle}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.DirectionToolTip, Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="14" Glyph="{x:Bind ViewModel.DirectionGlyph, Mode=OneWay}" />
+                            <Grid>
+                                <TextBlock x:Name="DirectionText" Text="{x:Bind ViewModel.DirectionWords, Mode=OneWay}" />
+                                <TextBlock
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Opacity="0"
+                                    Text="{x:Bind ViewModel.OtherDirectionWords, Mode=OneWay}" />
+                            </Grid>
+                        </StackPanel>
                     </Button>
                 </Grid>
 

@@ -237,6 +237,10 @@ public sealed class CanonicalTitles
 			// (season 1 watched there) from Unfinished series and Acclaimed. A film is played when any copy is.
 			Played = first.Kind == IndexKind.Series ? all.All(x => x.Played) : all.Any(x => x.Played),
 			Favorite = all.Any(x => x.Favorite),
+			// 1.8 (P1-2): the most plays and the latest play of any copy (the server shares a film's watch state between copies
+			// with the same ids: a sum would count one viewing twice)
+			PlayCount = all.Max(x => x.PlayCount),
+			LastPlayed = all.Select(x => x.LastPlayed).Where(x => x is not null).DefaultIfEmpty(null).Max(),
 			Unplayed = first.Kind == IndexKind.Series
 				? all.Select(x => x.Unplayed).Where(x => x is not null).Max()
 				: all.Select(x => x.Unplayed).Where(x => x is not null).Min(),

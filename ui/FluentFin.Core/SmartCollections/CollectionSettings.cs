@@ -28,7 +28,12 @@ public enum NixieHomeRow
 	HighlyRated,
 	UnfinishedSeries,
 	Seasonal,
+
+	/// <summary>1.6 to 1.7: "A collection a day". 1.8: no row of Home's: turned off in 1.7, it hides nothing (review, Minor 4).</summary>
 	Rotating,
+
+	/// <summary>1.8 (P1-1): "This week's picks": the lineup's rows that have no switch of their own (personal, themes, canon, Spotlight, Under 90).</summary>
+	Picks,
 }
 
 public static class CollectionSettings
@@ -46,6 +51,12 @@ public static class CollectionSettings
 
 	public static IReadOnlySet<SmartCollectionKind> KindsOff(ILocalSettingsService? settings) =>
 		Parse<SmartCollectionKind>(settings?.ReadSetting(CollectionSettingKeys.KindsOff));
+
+	/// <summary>1.8 (BH-180-M2): the kinds made of the titles' people: the index reads its people while one of them is on.</summary>
+	public static IReadOnlySet<SmartCollectionKind> PeopleKinds { get; } = new HashSet<SmartCollectionKind> { SmartCollectionKind.MoreFrom, SmartCollectionKind.Spotlight };
+
+	/// <summary>1.8 (BH-180-M2): whether a kind made of people is on (the library index's people step runs only then).</summary>
+	public static bool PeopleWanted(ILocalSettingsService? settings) => !PeopleKinds.All(KindsOff(settings).Contains);
 
 	public static IReadOnlySet<NixieHomeRow> HomeRowsOff(ILocalSettingsService? settings) =>
 		Parse<NixieHomeRow>(settings?.ReadSetting(CollectionSettingKeys.HomeRowsOff));
@@ -113,17 +124,32 @@ public sealed class CollectionsSettingsViewModel
 			Row(NixieHomeRow.HighlyRated, SmartCollectionKinds.Plural(SmartCollectionKind.HighlyRated), HighlyRatedText),
 			Row(NixieHomeRow.UnfinishedSeries, "Unfinished series", "Shows you started and haven't watched for a month."),
 			Row(NixieHomeRow.Seasonal, "In season", "Halloween in October, Christmas in December."),
-			// 1.7.3 (P0-3): only franchises, keywords and awards rotate now
-			Row(NixieHomeRow.Rotating, "A collection a day", "A franchise, keyword or award collection Nixie made, a different one each day."),
+			// 1.8 (P1-1): Home's rows come from the week's lineup (CollectionLineup). Review (Minor 4): under a name of their own
+			// ("Picks"): 1.7's "A collection a day" turned off hid a row a day, not every personal, theme and canon row
+			Row(NixieHomeRow.Picks, PicksName, PicksText),
+			// 1.8 (P1-1): two of the week's picks on Home by default, three with this on
+			new CollectionSwitch(ThirdRowName, ThirdRowText,
+				() => CollectionLineup.HomeRows(settings) > CollectionLineup.HomeDefault,
+				on =>
+				{
+					settings.SaveSetting(CollectionLineup.HomeRowsKey, on ? CollectionLineup.HomeMost : CollectionLineup.HomeDefault);
+					_homeCache?.MarkStale();
+				}),
 		];
 		// 1.7 keyless: not the awards: they come from Wikidata, whose switch is in Look up lists online ("from the server's own data").
 		// 1.7.3 (P0-3): the seven kinds Nixie no longer publishes have no switch (PageOrder: franchises and keywords here)
-		Kinds = [.. SmartCollectionKinds.PageOrder.Concat(SmartCollectionKinds.Picks).Where(kind => kind != SmartCollectionKind.Award).Select(kind => new CollectionSwitch(SmartCollectionKinds.Plural(kind), "",
+		// 1.8 (BH-180-M2): and 1.8's kinds (Next in, More like, More from, the Spotlight): with no switch, every switch off still
+		// left Home two rows, This week and the people step. More from and the Spotlight off stop the people step
+		Kinds = [.. SmartCollectionKinds.Switched.Select(kind => new CollectionSwitch(SmartCollectionKinds.Plural(kind), KindText(kind),
 			() => !CollectionSettings.KindsOff(settings).Contains(kind),
 			on =>
 			{
 				CollectionSettings.Set(settings, CollectionSettingKeys.KindsOff, kind, on);
 				_homeCache?.MarkStale();
+				if (CollectionSettings.PeopleKinds.Contains(kind))
+				{
+					ViewModels.SmartCollectionServices.Index?.PeopleSwitched();
+				}
 			}))];
 		// fix round (BH-173-m2): the presets strip's own kinds, with the switches 1.7.2 had for them (the same setting)
 		LibraryFilters = [.. NixiePresets.StripOnlyKinds.Select(kind => new CollectionSwitch(SmartCollectionKinds.Plural(kind), "",
@@ -131,8 +157,27 @@ public sealed class CollectionsSettingsViewModel
 			on => CollectionSettings.Set(settings, CollectionSettingKeys.KindsOff, kind, on)))];
 	}
 
+	/// <summary>1.8 (BH-180-M2): what 1.8's kind switches turn off (the others' words are their names).</summary>
+	public static string KindText(SmartCollectionKind kind) => kind switch
+	{
+		SmartCollectionKind.NextIn => "The next film of a franchise you started.",
+		SmartCollectionKind.MoreLike => "Titles like one you finished.",
+		SmartCollectionKind.MoreFrom => "More of a director or actor of a title you finished. Off with Spotlight, Nixie doesn't read the titles' people.",
+		SmartCollectionKind.Spotlight => "A director, actor or studio each week. Off with More from, Nixie doesn't read the titles' people.",
+		_ => "",
+	};
+
 	/// <summary>Acclaimed's Home row switch, its words (fix round, BH-173-q1).</summary>
 	public const string HighlyRatedText = "The best-rated titles on the server that you haven't watched. Titles with more behind their rating come first.";
+
+	// 1.8 (P1-1): the week's picks on Home, and their third row
+	public const string PicksName = "This week's picks";
+
+	public const string PicksText = "Collections Nixie picks for the week: first one tied to a title you finished, then what's in season or trending on the server.";
+
+	public const string ThirdRowName = "A third row of picks";
+
+	public const string ThirdRowText = "Three of this week's picks on Home instead of two.";
 
 	/// <summary>
 	/// 1.7.3 fix round (BH-173-m2): the filters Nixie adds to each library's strip (decades, genre mixes, countries), each with its

@@ -31,7 +31,8 @@ public sealed class LiveIndexFactAttribute : FactAttribute
 
 /// <summary>
 /// Nixie 1.7.1 (the index on a big server): the library index's real requests, through the real client, timed on a real
-/// Jellyfin at scale (the throwaway 25,736-film instance): the first-ever read (its first rows, the titles in; 1.7.3: no people),
+/// Jellyfin at scale (the throwaway 25,736-film instance): the first-ever read (its first rows, the titles in; 1.8: the people
+/// step behind them, and a top-up of a hundred titles' people by id),
 /// then a restart with the saved index (shown without a read when the server's check says nothing changed), and the
 /// Collections page's first row with it. Writes durations and counts only (no title, no name, no token) to
 /// NIXIE_LIVE_INDEX_OUT. Signs out at the end.
@@ -56,7 +57,7 @@ public sealed class LiveIndexTests
 		{
 			await client.Initialize(server.TrimEnd('/'), auth);
 
-			// the first-ever read: its first rows, and the titles in (the reading line gone); 1.7.3: no people pass behind them
+			// the first-ever read: its first rows, and the titles in (the reading line gone); 1.8: the people step behind them
 			var firstLog = new CoreListLogger<LibraryIndex>();
 			var first = new LibraryIndex(client, homeCache, Path.Combine(folder, "LibraryIndex"), messages, firstLog, TimeProvider.System);
 			var watch = Stopwatch.StartNew();
@@ -68,10 +69,24 @@ public sealed class LiveIndexTests
 					firstRows = watch.ElapsedMilliseconds;
 				}
 			};
+			// 1.8 (BH-180-m2): the most managed memory the first read and its people step took, above what was before it
+			var before = GC.GetTotalMemory(forceFullCollection: true);
+			var peak = before;
+			using var sampled = new CancellationTokenSource();
+			var sampler = Task.Run(async () =>
+			{
+				while (!sampled.IsCancellationRequested)
+				{
+					peak = Math.Max(peak, GC.GetTotalMemory(false));
+					await Task.Delay(10);
+				}
+			});
 			var titles = await first.GetAsync();
 			var titlesIn = watch.ElapsedMilliseconds;
 			await first.Settled;
 			var whole = watch.ElapsedMilliseconds;
+			await sampled.CancelAsync();
+			await sampler;
 			Assert.NotNull(titles);
 			var peoplePages = firstLog.Entries.Count(e => e.Message.StartsWith("Library index: people page", StringComparison.Ordinal));
 			summary["firstRead"] = new JsonObject
@@ -80,11 +95,17 @@ public sealed class LiveIndexTests
 				["firstRowsMs"] = firstRows,
 				["titlesInMs"] = titlesIn,
 				["settledMs"] = whole,
-				["peoplePages"] = peoplePages, // 1.7.3: none
+				["peoplePages"] = peoplePages, // 1.8 (P1-2): every library's people, once, after the titles
+				["peopleStepMs"] = whole - titlesIn,
+				["peakMB"] = Math.Round((peak - before) / 1048576.0), // 1.8 (BH-180-m2)
+				["peoplePerTitle"] = first.Current is { } read && read.Entries.Count > 0 ? Math.Round(read.Entries.Average(x => x.People.Length), 1) : 0,
+				["titlesWithPeople"] = first.Current?.Entries.Count(x => x.People.Length > 0),
 				["inMoreThanOneLibrary"] = titles.Entries.Count(x => x.LibraryIds.Length > 1), // 1.7.3 (P0-2)
 				["log"] = Lines(firstLog),
 			};
-			Assert.Equal(0, peoplePages);
+			Assert.True(peoplePages > 0);
+			Assert.True(titles.PeopleDue); // the titles came before their people (rule 1)
+			Assert.True(first.Current!.HasPeople);
 			first.Dispose();
 
 			// a restart: the saved index at once, and no read while the server's check says nothing changed
@@ -107,8 +128,16 @@ public sealed class LiveIndexTests
 			await page.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All));
 			var pageMs = watch.ElapsedMilliseconds;
 			await page.OnNavigatedFrom();
+			// 1.8: the published collections of the saved index, as a page builds them: the census line (counts, kinds, ms only)
+			var censusLog = new CoreListLogger<LibraryIndex>();
+			watch.Restart();
+			var made = SmartCollectionCatalog.BuildAll(SmartCollectionCatalog.PublishedBuilders, saved!, SmartCollectionCatalog.Now(), null, null, Core.Outside.OutsideListsSnapshot.Empty, censusLog, census: true);
+			var buildMs = watch.ElapsedMilliseconds;
 			summary["restart"] = new JsonObject
 			{
+				["buildAllMs"] = buildMs,
+				["census"] = censusLog.Entries.FirstOrDefault().Message,
+				["anchoredSlots"] = made.Count(x => x.Kind is SmartCollectionKind.NextIn or SmartCollectionKind.MoreLike or SmartCollectionKind.MoreFrom),
 				["savedMs"] = savedMs,
 				["titles"] = saved!.Entries.Count,
 				["collectionsPageMs"] = pageMs,
@@ -148,6 +177,21 @@ public sealed class LiveIndexTests
 			};
 			Assert.NotNull(merged);
 			Assert.Equal(saved.Entries.Count, merged!.Entries.Count);
+
+			// 1.8 (P1-2): the people step's top-up, as after a library change: a hundred titles' people by id
+			var peopleLog = new CoreListLogger<LibraryIndex>();
+			var peopleRead = new IndexRead(client, TimeProvider.System, peopleLog);
+			Assert.True(await peopleRead.LibrariesOfAsync(saved));
+			watch.Restart();
+			var topped = (await peopleRead.PeopleAsync(saved with { PeopleToAsk = [.. saved.Entries.Take(100).Select(x => x.Id)] }, null, CancellationToken.None)).Index;
+			summary["peopleById"] = new JsonObject
+			{
+				["ms"] = watch.ElapsedMilliseconds,
+				["titles"] = 100,
+				["log"] = Lines(peopleLog),
+			};
+			Assert.NotNull(topped);
+			Assert.Empty(topped!.PeopleToAsk);
 		}
 		finally
 		{
@@ -182,7 +226,9 @@ public sealed class LiveIndexTests
 	private static async Task<AuthenticationResult> SignIn(HttpClient http)
 	{
 		var file = Environment.GetEnvironmentVariable("NIXIE_LIVE_INDEX_CREDENTIALS") ?? throw new InvalidOperationException("NIXIE_LIVE_INDEX_CREDENTIALS");
-		var user = JsonNode.Parse(await File.ReadAllTextAsync(file))!["user"]!;
+		// 1.8: NIXIE_LIVE_INDEX_ACCOUNT picks another of the file's test accounts ("watcher": one that has watched, for the anchors)
+		var account = Environment.GetEnvironmentVariable("NIXIE_LIVE_INDEX_ACCOUNT") is { Length: > 0 } named ? named : "user";
+		var user = JsonNode.Parse(await File.ReadAllTextAsync(file))![account]!;
 		using var request = new HttpRequestMessage(HttpMethod.Post, "/Users/AuthenticateByName")
 		{
 			// 1.7.5: the names as Jellyfin's DTO has them (JsonContent camel-cased them), with a length (JsonContent's is chunked):

@@ -376,7 +376,7 @@ public sealed partial class WikidataListsTests
 		Assert.Equal("keyword:heist", heists.Id);
 		Assert.Equal("Heists", heists.Title);
 		Assert.Equal(5, heists.ItemIds.Count);
-		Assert.Equal("Your titles with TMDb's keyword “heist”, and heist films from Wikidata", heists.Why);
+		Assert.Equal("Titles with TMDb's keyword “heist”, and heist films from Wikidata", heists.Why); // 1.8 (P1-4): no "Your"
 	}
 
 	[Fact]
@@ -390,7 +390,7 @@ public sealed partial class WikidataListsTests
 		var made = Assert.Single(new KeywordBuilder().Build(BuildContext.For(index, Noon) with { Outside = OutsideListsSnapshot.Empty with { Lists = [slasher] } }));
 
 		Assert.Equal("Slashers", made.Title);
-		Assert.Equal("Your slasher films from Wikidata", made.Why);
+		Assert.Equal("Slasher films from Wikidata", made.Why); // 1.8 (P1-4): no "Your"
 	}
 
 	[Fact]

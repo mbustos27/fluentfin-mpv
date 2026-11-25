@@ -159,6 +159,8 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		{
 			await State.RefreshBehindAsync(() => LoadSections(behind: true));
 		}
+
+		await RefreshNixieIfNewDay(); // 1.8 (P1-1): kept across a day change: the new day's Made by Nixie rows behind
 	}
 
 	/// <summary>
@@ -207,6 +209,10 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 				{
 					await homeCache.Save(serverUrl, userId, shown, cached.ChangesSeen);
 				}
+			}
+			else
+			{
+				await RefreshNixieIfNewDay(); // 1.8 (P1-1): a page saved under five minutes ago, before midnight: the new day's rows behind
 			}
 
 			var nothing = ContinueItems.Count == 0 && NextUpItems.Count == 0 && RecentItems.Count == 0;

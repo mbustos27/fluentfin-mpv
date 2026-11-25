@@ -162,7 +162,8 @@ public sealed class RepeatedTitleTests : IDisposable
 		var home = new HomeViewModel(_client.Object, _messages, Commands(), _homeCache);
 		await home.OnNavigatedTo(new object());
 		Assert.True(home.State.IsLoaded);
-		Assert.Contains(home.NixieRows, r => r.Collection.Kind == SmartCollectionKind.HighlyRated);
+		// 1.8 (P1-1): Home's two are the lineup's: Acclaimed, or the week's Spotlight and a theme (stream s's Spotlight joins)
+		Assert.Contains(home.NixieRows, r => r.Collection.Kind is SmartCollectionKind.HighlyRated or SmartCollectionKind.Keyword or SmartCollectionKind.Spotlight);
 	}
 
 	[Fact]

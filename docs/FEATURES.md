@@ -27,7 +27,9 @@ changed in each version is in [CHANGELOG.md](../CHANGELOG.md); every key is in [
     medium or large posters or a list (1.4.0: the same in every layout).
   - **Collections and playlists** (1.4.0): a page of their own in every layout, in the collection's or playlist's
     own order, with Play or Resume on the first unwatched, Shuffle and Hide watched; a film's page says which
-    collections it is part of.
+    collections it is part of. A direction button next to Order (1.8) reverses whichever order is chosen ("Newest
+    first" or "Oldest first", "A to Z" or "Z to A"), on the Collections page's See all too, and is kept through Back,
+    Forward and R.
   - **Item pages:** a full-width backdrop with the title's logo, info chips (year, rating, runtime, resolution, HDR,
     audio), and Play as the one highlighted action.
   - **The player's own controls:** on a dark gradient, with Skip intro/credits, Previous and Next, a Next episode
@@ -43,20 +45,37 @@ changed in each version is in [CHANGELOG.md](../CHANGELOG.md); every key is in [
     episode?". The skip lands on the cut: the nearest black frame or silence within a few seconds.
   - **Settings → Playback** has "Learn skips from my seeks", "When a show has a skip rule" (a button, or skipped by
     itself) and the list of skip rules, with Forget for each rule, each show, and all.
-- **Collections made by Nixie** (1.6; fewer and better in 1.7.3), from your libraries, on this PC (nothing is sent
-  anywhere): franchises (two or more films TMDb puts in one collection), keywords, "Acclaimed, not seen yet" (the
-  best 20 titles you haven't watched, weighted by how much backs each rating), "Under 90 minutes" (films of 60 to 90
-  minutes you haven't watched, best first), shows you left over a month ago, and Halloween or Christmas in season. A
-  title counts once however many files or libraries hold it. There are no collections of directors, actors, studios,
-  networks, decades, countries or genre pairs; a library's filters keep its decades, genre mixes and countries. They
-  share one Collections page with the server's collections and playlists, open like any other, and **Save as
-  playlist** copies one to the server as a private playlist when you press it.
+- **Collections made by Nixie** (1.6; fewer and better in 1.7.3; picked for the week in 1.8), from the server's
+  libraries, on this PC (nothing is sent anywhere): franchises (two or more films TMDb puts in one collection),
+  keywords, "Acclaimed, not seen yet" (the best 20 titles you haven't watched, weighted by how much backs each rating),
+  "Under 90 minutes" (films of 60 to 90 minutes you haven't watched, best first), shows you left over a month ago, and
+  Halloween or Christmas in season. A title counts once however many files or libraries hold it. There are no
+  collections of directors, actors, studios, networks, decades, countries or genre pairs; a library's filters keep its
+  decades, genre mixes and countries. They share one Collections page with the server's collections and playlists, open
+  like any other, and **Save as playlist** copies one to the server as a private playlist when you press it.
+  - **This week** (1.8): ten collections or fewer, first under Made by Nixie, picked so that no two are near copies,
+    none is too small or too broad and no kind takes more than two. The same all day; some turn each day, themes each
+    week. Home shows two of them after New in (three with Settings > Collections > Made by Nixie on Home > "A third row
+    of picks"; "This week's picks" turns them off there), then Unfinished series.
+  - **Picks tied to what you finished** (1.8): a film, show or anime you finished (a show at 90 % of its episodes) or
+    made a favourite brings "Next in <franchise>" (from the next film), "More like <title>" (titles that share its rarer
+    traits, not just a genre) and "More from <person>" (its director or one of its three leads, with five or more
+    titles here you haven't seen). Each holds for three days; with nothing finished, none show. Each kind has its
+    switch in Settings > Collections > Made by Nixie collections; with More from and Spotlight off, Nixie doesn't read
+    the titles' people.
+  - **The weekly Spotlight** (1.8): from Monday to Sunday, one director, lead actor or studio with a house style (Studio
+    Ghibli, Pixar, A24 and 27 more) with well-rated titles on the server, five or more of them not watched, the best of
+    those first.
+  - **Every tile says why it's there** (1.8): one or two facts, how many titles are here and how many you haven't
+    watched, and an end date when there is one ("TMDb keyword “heist” · 5 films, none watched"). With Wikidata's awards
+    on, up to two award badges ("Best Picture winner"). Narrator reads all of it. A pin that has moved on (last week's
+    Spotlight) stays in Saved, made again where Nixie can, or marked "Ended" with a way to unpin it.
 - **Discover** (1.7): **Settings → Look up lists online**, each source off until you turn it on. Award winners and
   finer genres from Wikidata, franchise names from TMDb, and what's trending on Trakt and TMDb, each matched to your
   libraries on this PC: an Awards row and Trending, Popular, Most anticipated and Box office rows on the Collections
-  page, and "Trending in your library" on Home. Each source has a "What is sent" card: a request for a public list,
-  the same for everyone, with Nixie's name and version; never the server you use, your account, libraries or what you watch.
-  Details: [PRIVACY.md](../PRIVACY.md).
+  page, and "Trending on this server" on Home (1.8; it was "Trending in your library"). Each source has a "What is
+  sent" card: a request for a public list, the same for everyone, with Nixie's name and version; never the server you
+  use, your account, libraries or what you watch. Details: [PRIVACY.md](../PRIVACY.md).
 - **The way up from an episode** (1.7): an episode shows its show and its season over its title ("Shows › What We Do
   in the Shadows › Season 3"), each a button that opens that page, and a season shows its show, in every theme and
   however you got there.
@@ -93,7 +112,8 @@ changed in each version is in [CHANGELOG.md](../CHANGELOG.md); every key is in [
   - Ratings are sent to Jellyfin only if you turn that on.
 - **Home shows what it has at once.** The libraries list is cached per session, rows are requested in parallel with a
   placeholder each, and the last Home page is saved and shown at once on the next start while the rest fills in as it
-  arrives.
+  arrives. On a first start, Home's first Made by Nixie row comes from the first titles the index reads, about a second
+  after Home opens on a library of 25,000 titles (1.8), and the rows from the whole library take its place.
 - **Clearer states.** A loading screen with Cancel, plus error and empty states with Try again on Home, libraries,
   item pages, Search and the server page.
 - **Updates, checked on by default** (1.5). Nixie asks GitHub only for its latest release: when it opens, every 4

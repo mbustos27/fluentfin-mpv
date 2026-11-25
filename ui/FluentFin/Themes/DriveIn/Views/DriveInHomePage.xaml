@@ -18,6 +18,7 @@
     xmlns:local="using:FluentFin.Themes.DriveIn.Views"
     xmlns:lc="using:FluentFin.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:sc="using:FluentFin.Core.SmartCollections"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
     lc:TopBar.ExtendsUnder="True"
@@ -176,11 +177,12 @@
                     <ItemsControl x:Name="NixieRows" Margin="0,24,0,0" IsTabStop="False" ItemsSource="{x:Bind ViewModel.NixieRows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:NixieHomeRowViewModel">
+                                <!--  1.8 (P1-4): beside the sign, "Made by Nixie", the reason line and the award badges  -->
                                 <lc:ShelfRow
                                     dc:DriveInRows.Marquee="True"
-                                    dc:DriveInRows.Subtitle="{x:Bind Kicker}"
+                                    dc:DriveInRows.Subtitle="{x:Bind sc:NixieTileWords.RowSubtitle(Kicker, Collection), Mode=OneWay}"
                                     HasSeeAll="True"
-                                    Header="{x:Bind Title}"
+                                    Header="{x:Bind Title, Mode=OneWay}"
                                     ItemTemplate="{StaticResource DriveInPoster}"
                                     ItemsSource="{x:Bind Items, Mode=OneWay}"
                                     SeeAll="NixieSeeAll"

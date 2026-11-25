@@ -26,7 +26,10 @@ public sealed class AwardBuilder : ISmartCollectionBuilder
 				var titles = matcher.MatchAll(award.Items.Select(x => x.Ref));
 				if (titles.Count >= Least)
 				{
-					made.Add(Make.Of($"award:{award.Id}", Kind, award.Title, award.Why, hasOwnOrder: true, titles));
+					// 1.8 (P1-4): the reason line names who gives the award and counts the titles here; the page keeps the
+					// list's own line ("…, from Wikidata, by year"); no badge of the award it is
+					made.Add(Make.Of(context, $"award:{award.Id}", Kind, award.Title, ReasonLine.Of(AwardFacts.BodyOf(award), ReasonCount.Of(titles)),
+						hasOwnOrder: true, titles, why: award.Why, award: AwardFacts.AwardOf(award)));
 				}
 			}
 		}

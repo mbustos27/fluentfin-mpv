@@ -338,6 +338,86 @@ public static class UpdateHandoff
 	public static bool InstallRunning() => InstallRunning(MutexName);
 
 	/// <summary>
+	/// 1.7.5 (the gate's lifecycle run): whether this start ends for an install under way (and asks the helper to open Nixie
+	/// afterwards). <see cref="MutexName"/> is one for the whole Windows session, so it also says an install of ANOTHER copy:
+	/// a portable copy on a data folder of its own then ended at once, wrote its reopen request where no helper reads it, and
+	/// never came back (a start that did nothing). Only the installed copy (<paramref name="installedCopy"/>: its own files are
+	/// the ones replaced) and a copy whose data folder handed the install over (<see cref="PendingFile"/> in
+	/// <paramref name="updatesFolder"/>: its helper reads that folder's request) end; <paramref name="anotherCopys"/> says
+	/// when a copy goes on beside another copy's install.
+	/// <para>
+	/// 1.8 (its review): <paramref name="installedCopy"/> is the registry's InstallFolder, which a major upgrade removes with the
+	/// old product and writes back near its end, so a helper also holds <see cref="FolderMutexName"/> of the folder it installs
+	/// over (Launcher.cs, 1.8's helpers on): a start from <paramref name="programFolder"/> ends while it is held, whatever its
+	/// data folder. A pending.json counts only while the install hasn't finished (<see cref="HandedOver"/>).
+	/// </para>
+	/// </summary>
+	public static bool StartEndsForInstall(string updatesFolder, string programFolder, bool installedCopy, out bool anotherCopys) =>
+		StartEndsForInstall(updatesFolder, programFolder, installedCopy, MutexName, out anotherCopys);
+
+	internal static bool StartEndsForInstall(string updatesFolder, string programFolder, bool installedCopy, string mutexName, out bool anotherCopys)
+	{
+		anotherCopys = false;
+		// a helper installing over this copy's own files
+		if (FolderMutexName(programFolder) is { } folder && InstallRunning(folder))
+		{
+			return true;
+		}
+
+		if (!InstallRunning(mutexName))
+		{
+			return false;
+		}
+
+		if (installedCopy || HandedOver(updatesFolder))
+		{
+			return true;
+		}
+
+		anotherCopys = true;
+		return false;
+	}
+
+	/// <summary>
+	/// 1.8 (its review): this data folder handed an install to a helper that hasn't finished it: its <see cref="PendingFile"/>
+	/// without a <see cref="ResultFile"/> (<see cref="WritePending"/> deletes the last result; the helper writes its own when
+	/// msiexec is done). A finished install's pending.json stays until the next start reads it, so on its own it says nothing.
+	/// </summary>
+	internal static bool HandedOver(string updatesFolder) =>
+		File.Exists(Path.Combine(updatesFolder, PendingFile)) && !File.Exists(Path.Combine(updatesFolder, ResultFile));
+
+	/// <summary>
+	/// 1.8: the install's mutex for the program folder <paramref name="programFolder"/>, held by the helper installing over it
+	/// (tools\release\launcher\Launcher.cs's FolderMutexName makes the same name): the folder as Windows compares it (full, no
+	/// trailing separator, a-z upper case: ASCII only, so .NET Framework's and .NET's casing can't differ), hashed. Null for a
+	/// folder that can't be made full.
+	/// </summary>
+	public static string? FolderMutexName(string programFolder)
+	{
+		string full;
+		try
+		{
+			full = Path.GetFullPath(programFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+		}
+		catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or System.Security.SecurityException)
+		{
+			return null;
+		}
+
+		var path = full.ToCharArray();
+		for (var i = 0; i < path.Length; i++)
+		{
+			if (path[i] is >= 'a' and <= 'z')
+			{
+				path[i] = (char)(path[i] - 32);
+			}
+		}
+
+		var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("nixie-update-folder-1\n" + new string(path)));
+		return MutexName + "-" + Convert.ToHexStringLower(hash, 0, 16);
+	}
+
+	/// <summary>
 	/// Review m6: whether a helper OWNS the mutex <paramref name="name"/> now. A mutex that only exists (a handle still open
 	/// after its release) or was abandoned (its helper ended without releasing it) is no install under way.
 	/// </summary>

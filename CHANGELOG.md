@@ -1,5 +1,130 @@
 # Changelog
 
+## 1.8.0
+
+Collections, better: Made by Nixie picks about ten collections for the week and says why each is there, among them
+picks tied to what you finished and a weekly Spotlight. Home shows its first Made by Nixie row in about a second, and
+any collection's order can be reversed.
+
+- **Made by Nixie's picks for the week.** Made by Nixie on the Collections page opens with **This week**: ten
+  collections or fewer, picked from everything Nixie makes from the server's libraries, each with its reason.
+  - No two are near copies (of two that share more than half their titles, the better one stays), none is too small to
+    be worth opening or so broad it is really a filter, and there are at most two of a kind.
+  - The picks are the same all day. "Acclaimed, not seen yet" and "Under 90 minutes" turn their titles each day, themes
+    change each week and award lists each month, and a pick tied to a title you finished holds for three days. A new
+    day brings the new picks when you come back to Home or Collections, past midnight too.
+  - **Home shows two of them** after New in: one tied to a title you finished first, then what's in season, "Trending
+    on this server" or the week's Spotlight, then the rest in the week's order. Unfinished series stays a row of its
+    own. A collection holds the same titles in the same order on Home, in This week and in its own row.
+- **Picks tied to what you finished.** A film, show or anime you finished (a show once 90 % of its episodes are
+  watched) or made a favourite brings the most personal picks, each saying why:
+  - **"Next in Mission: Impossible"**: a franchise you've started, from the next film: "Next: Mission: Impossible II
+    (2000) · 1 of 4 films watched". A favourite alone doesn't start one.
+  - **"More like Heat"**: titles that share its rarer traits, such as keywords, cast, director or decade, not just a
+    genre: "Shares heists, drama and the 1990s · 9 films".
+  - **"More from Denis Villeneuve"**: the director or one of the three leads of such a title, with five or more titles
+    here you haven't seen: "You finished Arrival · 6 more films, none watched".
+  - Each holds for three days, and a title finished in the last three days comes first. With nothing finished or made
+    a favourite, none show.
+  - For More from and the Spotlight, the library index reads each title's director and three leads again, once,
+    behind the titles: no row waits for it, later reads ask only for the new titles' people, and it lets each page go
+    as it comes (about 200 MB at its peak, on 25,000 titles). More from waits until nearly every title's people are in.
+    With both turned off, Nixie doesn't read the titles' people at all.
+- **The weekly Spotlight.** Every Monday Made by Nixie spotlights one director, lead actor or studio with a house style
+  (Studio Ghibli, Pixar, A24, Aardman and 26 more) with well-rated titles on the server, five or more of them not
+  watched: "Spotlight: Jean-Pierre Melville", "Director · 8 films, none watched · until Sun 29 Nov". The best-rated ones
+  you haven't seen come first. It stays all week, to Sunday; directors and actors take turns, and no one comes two weeks
+  running. A director needs 6 films here, an actor 8 titles billed among the first three.
+- **Every Made by Nixie tile says why it's there.** Under its title: one or two facts, how many titles are here and how
+  many you haven't watched, and an end date when there is one ("TMDb keyword “heist” · 5 films, none watched",
+  "Academy Awards · 2 films, 1 unwatched", "Halloween and horror · 11 films, none watched · until Sat 31 Oct"). Home's
+  Made by Nixie rows say it under their names.
+  - **Award badges:** with "Awards and genres from Wikidata" on (Settings > Look up lists online), a tile wears up to
+    two badges for the awards its titles won or were nominated for, such as "Best Picture winner" or "2 Palme d'Or
+    winners". Trending tiles too.
+  - Titles lead with what the collection is and never start with "Your": Home's trending row is now **"Trending on this
+    server"** (it was "Trending in your library").
+  - Narrator reads each tile's title, "made by Nixie", its kind, its reason and its badges.
+  - A tile's words get more room when Windows' text size is larger, and long badges wrap instead of being cut.
+- **Home's Made by Nixie row comes in about a second.** On a first start with a library of 25,000 titles, Home's first
+  Made by Nixie row shows about 1 s after Home opens, from the first titles read; it waited 11 to 15 s for the whole
+  library before. The rows from the whole library then take its place where it is, with the keyboard kept on the same
+  card. On later starts the saved rows show in 0.2 to 0.6 s. The Spotlight is made after the first rows and never holds
+  them up.
+- **Reverse any order.** The page of a collection, a playlist or a Made by Nixie collection has a direction button next
+  to Order, and so has the Collections page's See all. It reverses whichever order is chosen: "Newest first" to "Oldest
+  first", "A to Z" to "Z to A", "First to last" to "Last to first". Films with no date stay last either way.
+  - It is kept as Order and Hide watched are, through Back, Forward and R.
+  - Narrator names the direction and what a press does ("Newest first, switch to oldest first"). The keyboard and a
+    gamepad reach it, and nothing in the toolbar moves when it flips.
+  - Save as playlist saves the order shown.
+- **A pin outlives its week.** A pinned Spotlight, or a pick tied to what you finished, stays in Saved after it moves
+  on: Nixie makes it again where it can, and otherwise keeps it there marked "Ended", with a page that says so and how
+  to unpin it.
+- **Settings > Collections:**
+  - **Made by Nixie collections** has a switch each for Next in, More like, More from and Spotlight, each saying what
+    it makes. More from's and Spotlight's say that with both off Nixie doesn't read the titles' people, and turning
+    them off stops a read under way. With every kind off, there is no Made by Nixie on Home or Collections, and no
+    people are read.
+  - **Made by Nixie on Home** has two new switches:
+    - **This week's picks**: Home's rows of the week's picks (those tied to what you finished, themes, award lists,
+      the Spotlight, Under 90 minutes). "Acclaimed, not seen yet", In season and Unfinished series keep their own
+      switches, and the trending row follows its sources'. It takes the place of "A collection a day": if you turned
+      that off, the picks show on Home all the same until you turn this off.
+    - **A third row of picks**: three of the week's picks on Home instead of two.
+
+**Fixed**
+
+- **Home never shows another server's page.** Signing out and into another server while Home was still filling could
+  save the first server's Home as the second's, shown at the next visit until it refreshed.
+- **A saved filter's tile said "0 titles"** (since 1.7). It now says its library and what it keeps: "Movies · Horror ·
+  Unwatched".
+- **Another copy's update no longer closes Nixie as it starts** (since 1.5). A copy of Nixie (a portable one, say)
+  opened while another copy on this PC was installing its update closed again at once ("an install is under way").
+  Only an update of its own copy ends a start now.
+
+**Verified**
+
+- Four streams, each reviewed as it was done and again after its fixes. Every Major the reviews found was fixed before
+  the merge, among them a rewatch counted for any title started twice, an interrupted read of the people starting over
+  from nothing, a show 90 % watched counted as unwatched by the Spotlight, Home's first row waiting for the Spotlight,
+  and Home saved under another server. Every rule and fix has a test that fails without it.
+- A bug hunt on the merged build, at 25,470 titles: its two Majors and three Minors were fixed before the build. This
+  week now keeps the keyboard on its tile when the people come in and the row changes (the keyboard went to Back), and
+  every kind switched off now turns Made by Nixie and the people read off. 1.8's off-screen checks are in the basics
+  gate.
+- The people read with real-sized casts (40 people a title) in a test of 25,000 titles: its peak 200 MB above the
+  titles' and 1.0 s (858 MB and 2.6 s before the hunt's fix); on our test Jellyfin 12.4 with its real casts, 2.7 s
+  (3.5 s).
+- Off-screen in all four themes: the tiles' words, counts, badges and Narrator names at 1280 × 720, 1920 wide and
+  2560 × 1392; the direction button by keyboard, mouse, quick presses and a gamepad, every order both ways with nothing
+  in the toolbar moving, kept after Back, Forward and R; This week, Home's rows and See all's button kept after Back.
+- On a test Jellyfin 12.4 with 25,738 titles: the titles in 8.3 s and their directors and leads 9.5 s behind them;
+  later, 100 new titles' people in 78 ms; as an account with 1,000 films watched, Made by Nixie's collections in 0.3 s
+  and the Collections page in 2 s. The saved index is about 170 bytes a title larger (23.4 MB there) and still loads in
+  about 0.2 s.
+- On a test server's library of 25,000 titles: Home's first Made by Nixie row about 1 s after Home opens on a first
+  start (11 to 15 s before), and the week's picks made in 25 to 87 ms.
+- The release build: Core 5,961 tests and UI 1,861 passed, none failed; the package's own checks ran; Windows
+  Defender found no threats in the folder, the installer or the zip.
+- The basics gate on the release package: 78 of 91 jobs in 160 min on a busy PC. No app bug: three of its checks
+  still expected 1.7.5's Home rows or raced the keyboard, and were fixed and passed on rerun (the tiles 25 of 25 in
+  four themes, Collections 35 of 35, the item pages' buttons 46 of 46); two Back cells were slow only under load; the
+  rows at 2560 × 1392 didn't run (the large monitor was off); and one Drive-in stress run hit the Windows input
+  crash already listed in the known issues.
+- The upgrade, in Windows Sandbox as a standard user: <Sandbox>.
+
+**For a hand check** (off-screen runs can't do these): Windows' text size at 125 % and 150 % on Made by Nixie's tiles,
+and Narrator itself on This week and the direction button.
+
+**Known issues:**
+
+- On a first start, More from and a person's Spotlight wait until the index has read the titles' people: This week
+  takes them as soon as they are in, Home at the next visit or R. On the next start Home swaps two of its rows for them
+  a couple of seconds after it opens, once.
+- Midnight and the week's turn were checked by reading the code, not by a run across them. After a restart just after
+  midnight, Home can show yesterday's picks until your next visit to it.
+
 ## 1.7.5
 
 Back is instant, every fix left from earlier releases, and the basics gate on every release build.

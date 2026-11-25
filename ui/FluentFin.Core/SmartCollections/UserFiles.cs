@@ -66,6 +66,44 @@ internal sealed class UserFiles
 	public string PathOf(string key) => Path.Combine(_folder, key + ".json");
 
 	/// <param name="since">1.6.1: the <see cref="Generation"/> the data was read after; null: written whatever came since.</param>
+	/// <summary>
+	/// 1.8 (BH-180-m2): as <see cref="Write"/>, a typed document streamed to the file (<paramref name="document"/> is given the
+	/// login it carries): no tree of it, nor a byte array of the whole file, in memory first.
+	/// </summary>
+	public async Task WriteAs<T>(string key, Func<string?, T> document, JsonSerializerOptions options, string? login, long? since = null)
+	{
+		await _writing.WaitAsync().ConfigureAwait(false);
+		try
+		{
+			if (since is { } began && ForgottenSince(key, login, began))
+			{
+				_logger.LogInformation("Not saving {File}: its user signed out while it was read", Path.GetFileName(_folder));
+				return;
+			}
+
+			await Task.Run(async () =>
+			{
+				Directory.CreateDirectory(_folder);
+				var path = PathOf(key);
+				var temporary = path + ".tmp";
+				await using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
+				{
+					await JsonSerializer.SerializeAsync(stream, document(login), options).ConfigureAwait(false);
+				}
+
+				File.Move(temporary, path, overwrite: true);
+			}).ConfigureAwait(false);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogWarning(ex, "Could not save {File}", Path.GetFileName(_folder));
+		}
+		finally
+		{
+			_writing.Release();
+		}
+	}
+
 	public async Task Write(string key, JsonObject root, string? login, long? since = null)
 	{
 		root["Login"] = login;

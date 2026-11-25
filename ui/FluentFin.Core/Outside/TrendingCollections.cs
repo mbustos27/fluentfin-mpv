@@ -8,7 +8,8 @@ namespace FluentFin.Core.Outside;
 /// <list type="bullet">
 /// <item>The Collections page's rows: Trending (Trakt and TMDb merged), Popular, Most anticipated (films and shows
 /// each) and Box office this week (films), each collection in the list's order, empty ones left out.</item>
-/// <item>Home's "Trending in your library": films and shows of both sources' trending lists, merged by rank.</item>
+/// <item>Home's "Trending on this server" (1.8; was "Trending in your library"): films and shows of both sources' trending
+/// lists, merged by rank.</item>
 /// </list>
 /// Trakt's trending is what is being watched right now and TMDb's is the week's, so no title says "this week"; the why
 /// line says each source's window (<see cref="Windows"/>). Trakt's API Use Policy (2026-10-20): "Label discovery lists
@@ -19,8 +20,8 @@ public static class TrendingBuilder
 	/// <summary>Home's row: its collection's id.</summary>
 	public const string HomeRowId = "trending:week";
 
-	/// <summary>Home's row: its title.</summary>
-	public const string HomeRowTitle = "Trending in your library";
+	/// <summary>Home's row: its title. 1.8 (P1-4, the report's name): was "Trending in your library" (rule 11: the server isn't the user's).</summary>
+	public const string HomeRowTitle = "Trending on this server";
 
 	/// <summary>
 	/// The trending why line: each source's window, for the sources given (those whose lists are in), Trakt first:
@@ -70,7 +71,7 @@ public static class TrendingBuilder
 	/// <summary>Every collection of the Collections page's trending rows, kind by kind in <see cref="PageOrder"/>; none empty.</summary>
 	public static IReadOnlyList<SmartCollection> Build(IndexSnapshot index, TrendingSnapshot lists) => Build(new OutsideMatcher(index), lists);
 
-	internal static IReadOnlyList<SmartCollection> Build(OutsideMatcher matcher, TrendingSnapshot lists)
+	internal static IReadOnlyList<SmartCollection> Build(OutsideMatcher matcher, TrendingSnapshot lists, AwardFacts? awards = null)
 	{
 		var made = new List<SmartCollection>();
 		foreach (var list in PageOrder.Select(ListOf))
@@ -86,7 +87,7 @@ public static class TrendingBuilder
 				var entries = Merge(matcher, [.. reads.Select(x => x.Titles)]);
 				if (entries.Count > 0)
 				{
-					made.Add(Collection(list, kind, reads.Select(x => x.Source), entries));
+					made.Add(Collection(list, kind, reads.Select(x => x.Source), entries) with { Badges = (awards ?? AwardFacts.Empty).BadgesFor(entries.Select(x => x.Id)) }); // 1.8 (P1-4)
 				}
 			}
 		}
@@ -97,7 +98,7 @@ public static class TrendingBuilder
 	/// <summary>Home's row: both sources' trending films and shows merged by rank; null when no list is on or none of its titles is in the library.</summary>
 	public static SmartCollection? HomeRow(IndexSnapshot index, TrendingSnapshot lists) => HomeRow(new OutsideMatcher(index), lists);
 
-	internal static SmartCollection? HomeRow(OutsideMatcher matcher, TrendingSnapshot lists)
+	internal static SmartCollection? HomeRow(OutsideMatcher matcher, TrendingSnapshot lists, AwardFacts? awards = null)
 	{
 		var reads = lists.Lists.Where(x => x.List == TrendingList.Trending).OrderBy(x => x.Source).ThenBy(x => x.Kind).ToList();
 		var entries = reads.Count == 0 ? [] : Merge(matcher, [.. reads.Select(x => x.Titles)]);
@@ -112,6 +113,8 @@ public static class TrendingBuilder
 			Cover = [.. entries.Take(4)],
 			InListOrder = true,
 			Only = entries.All(x => x.Kind == IndexKind.Movie) ? IndexKind.Movie : entries.All(x => x.Kind == IndexKind.Series) ? IndexKind.Series : null,
+			Reason = Reason(reads.Select(x => x.Source), entries), // 1.8 (P1-4)
+			Badges = (awards ?? AwardFacts.Empty).BadgesFor(entries.Select(x => x.Id)), // 1.8 (P1-4): its titles' award facts
 		};
 	}
 
@@ -147,8 +150,13 @@ public static class TrendingBuilder
 			Cover = [.. entries.Take(4)],
 			Only = films ? IndexKind.Movie : IndexKind.Series,
 			InListOrder = true,
+			Reason = list == TrendingList.Trending ? Reason(from, entries) : ReasonLine.Of(why, ReasonCount.Of(entries)), // 1.8 (P1-4)
 		};
 	}
+
+	// 1.8 (P1-4): the trending reason line: each source's window (one fact a source), then the count here
+	private static ReasonLine Reason(IEnumerable<OutsideSourceId> sources, IReadOnlyList<IndexEntry> entries) =>
+		new() { Facts = [.. sources.Distinct().Order().Select(x => Windows([x]))], Count = ReasonCount.Of(entries) };
 }
 
 /// <summary>
@@ -159,7 +167,8 @@ public static class TrendingBuilder
 public sealed class TrendingCollections
 {
 	private readonly Lock _lock = new();
-	private (IndexSnapshot Index, string Lists, IReadOnlyList<SmartCollection> Made, SmartCollection? Home)? _memo;
+	// 1.8 (P1-4): and the award lists the badges were made of (Wikidata's, OutsideListsSnapshot.Shared)
+	private (IndexSnapshot Index, string Lists, OutsideListsSnapshot Awards, IReadOnlyList<SmartCollection> Made, SmartCollection? Home)? _memo;
 	// BH-170-q4: bumped by Forget; a match that began before a sign-out isn't kept after it (as TopNavigation's trail session)
 	private int _session;
 
@@ -227,11 +236,12 @@ public sealed class TrendingCollections
 		// the matches are kept for these very lists: a list that aged out (past its source's maximum age, while the source
 		// keeps refusing) changes the key and takes its matches with it (the review, #3); a version alone wouldn't move
 		var key = Key(lists);
+		var outside = OutsideListsSnapshot.Shared; // 1.8 (P1-4): the award lists the badges come from
 		int session;
 		lock (_lock)
 		{
 			session = _session;
-			if (_memo is { } memo && ReferenceEquals(memo.Index, index) && memo.Lists == key)
+			if (_memo is { } memo && ReferenceEquals(memo.Index, index) && memo.Lists == key && ReferenceEquals(memo.Awards, outside))
 			{
 				return (memo.Made, memo.Home);
 			}
@@ -245,14 +255,15 @@ public sealed class TrendingCollections
 
 		Matching?.Invoke();
 		var matcher = new OutsideMatcher(index);
-		var made = TrendingBuilder.Build(matcher, lists);
-		var home = TrendingBuilder.HomeRow(matcher, lists);
+		var awards = AwardFacts.Of(outside.Lists, matcher); // 1.8 (P1-4): the tiles' award badges
+		var made = TrendingBuilder.Build(matcher, lists, awards);
+		var home = TrendingBuilder.HomeRow(matcher, lists, awards);
 		lock (_lock)
 		{
 			// BH-170-q4: signed out while this matched: the caller gets its answer, but nothing of it is kept
 			if (session == _session)
 			{
-				_memo = (index, key, made, home);
+				_memo = (index, key, outside, made, home);
 			}
 		}
 

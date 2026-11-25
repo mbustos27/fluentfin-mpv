@@ -132,8 +132,38 @@ public sealed partial class ShelfRow : UserControl
 	/// </summary>
 	private void Source_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
 	{
-		if (e.Action != System.Collections.Specialized.NotifyCollectionChangedAction.Remove || XamlRoot is not { Content: { } content } root)
+		// Nixie 1.8 (the re-review): and a card replaced where it is (Home's Made by Nixie row taking a new lineup's
+		// collection): the keyboard on it goes to the card in its place, not out of the window
+		var replaced = e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Replace;
+		// 1.8 (BH-180-M1): a row that takes a newer one's tiles in place (the Collections page's This week when the people come
+		// in) puts tiles in before the remembered one and moves it: the remembered card is the same card at its new place, and a
+		// moved card the keyboard was on keeps it
+		if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
 		{
+			_lastIndex = RowPaging.IndexAfterInsert(_lastIndex, e.NewStartingIndex, e.NewItems?.Count ?? 1);
+			return;
+		}
+
+		if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Move)
+		{
+			var was = _lastIndex;
+			_lastIndex = RowPaging.IndexAfterMove(_lastIndex, e.OldStartingIndex, e.NewStartingIndex);
+			if (was >= 0 && was == e.OldStartingIndex && XamlRoot is { } at)
+			{
+				Refocus(at, _lastIndex, "a moved card's focus");
+			}
+
+			return;
+		}
+
+		if ((e.Action != System.Collections.Specialized.NotifyCollectionChangedAction.Remove && !replaced) || XamlRoot is not { Content: { } content } root)
+		{
+			return;
+		}
+
+		if (replaced)
+		{
+			RefocusReplaced(root, e.OldStartingIndex);
 			return;
 		}
 
@@ -180,6 +210,35 @@ public sealed partial class ShelfRow : UserControl
 			}
 		};
 		timer.Start();
+	}
+
+	// Nixie 1.8 (the re-review): the card the keyboard was on was replaced: once the repeater has made the new one, it takes the focus
+	private void RefocusReplaced(XamlRoot root, int replaced)
+	{
+		if (RowPaging.FocusAfterReplace(_lastIndex, replaced, Count) is >= 0 and var index)
+		{
+			Refocus(root, index, "a replaced card's focus");
+		}
+	}
+
+	// the keyboard in this row: once the repeater has the card at `index` again, that card takes it
+	private void Refocus(XamlRoot root, int index, string what)
+	{
+		var focused = FocusManager.GetFocusedElement(root) as DependencyObject;
+		if (!IsInside(focused, Repeater) || index < 0)
+		{
+			return;
+		}
+
+		var state = focused is Control { FocusState: FocusState.Keyboard } ? FocusState.Keyboard : FocusState.Programmatic;
+		_ = FluentFin.Services.UiDispatch.Enqueue(DispatcherQueue, what, () =>
+		{
+			if (!App.IsClosing && XamlRoot is not null && index < Count)
+			{
+				Repeater.UpdateLayout();
+				FocusIndex(index, state);
+			}
+		});
 	}
 
 	/// <summary>Nixie 1.7.4: the row's scroll viewer (Editorial's shelf gives its cards room for their focus ring in it).</summary>

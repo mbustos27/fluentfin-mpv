@@ -15,6 +15,7 @@
     xmlns:lc="using:FluentFin.Controls"
     xmlns:local="using:FluentFin.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:sc="using:FluentFin.Core.SmartCollections"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
     Background="{ThemeResource PageGroundBrush}"
@@ -22,14 +23,20 @@
 
     <Page.Resources>
         <!--  one tile: the art (the set's poster, or a Nixie collection's mosaic and mark), then its name and what it holds.
-              1.7.1 (review M1): what it holds, its spoken name and its art change in place as a first read's pages come  -->
+              1.7.1 (review M1): what it holds, its spoken name and its art change in place as a first read's pages come.
+              1.8 (P1-4, stream t): a Nixie tile says its reason line (the facts, two lines at most, then the count on a line
+              of its own, never cut off) and wears up to two award badges over its art; Narrator hears them in that order.
+              The words take one height on every tile (NixieTileShown.WordsHeight: a title of two lines, facts of two and
+              three count lines, grown with Windows' text size), so every tile of a row and of See all's grid is one size,
+              nothing is clipped at 125 or 150 % text, and a reason that comes later moves nothing (rule 7). A badge too long
+              for one line ("3 BAFTA Best Film winners") wraps to a second over the art; the tile keeps its size  -->
         <DataTemplate x:Key="CollectionTileTemplate" x:DataType="vm:CollectionTile">
             <Button
                 Width="168"
                 Margin="0,0,16,0"
                 Padding="0"
                 HorizontalContentAlignment="Stretch"
-                AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
+                AutomationProperties.Name="{x:Bind sc:NixieTileWords.TileName(AutomationName, Nixie), Mode=OneWay}"
                 Background="Transparent"
                 BorderThickness="0"
                 Click="Tile_Click"
@@ -74,8 +81,50 @@
                                 Foreground="#FFFFC4A6"
                                 Text="N" />
                         </Border>
+                        <!--  1.8 (P1-4): the award badges, over the art's foot (the chips of the cards' counts; Narrator: the tile's name)  -->
+                        <StackPanel
+                            x:Name="TileBadges"
+                            Margin="0,0,0,4"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Spacing="4">
+                            <Border
+                                Height="Auto"
+                                MinHeight="{StaticResource NixieBadgeSize}"
+                                Margin="8,0,8,0"
+                                Padding="8,3"
+                                Style="{StaticResource NixieCountChipStyle}"
+                                Visibility="{x:Bind local:NixieTileShown.Badge(Nixie, 0), Mode=OneWay}">
+                                <TextBlock
+                                    FontSize="12"
+                                    MaxLines="2"
+                                    Style="{StaticResource NixieCountChipTextStyle}"
+                                    Text="{x:Bind sc:NixieTileWords.Badge(Nixie, 0), Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="WrapWholeWords" />
+                            </Border>
+                            <Border
+                                Height="Auto"
+                                MinHeight="{StaticResource NixieBadgeSize}"
+                                Margin="8,0,8,0"
+                                Padding="8,3"
+                                Style="{StaticResource NixieCountChipStyle}"
+                                Visibility="{x:Bind local:NixieTileShown.Badge(Nixie, 1), Mode=OneWay}">
+                                <TextBlock
+                                    FontSize="12"
+                                    MaxLines="2"
+                                    Style="{StaticResource NixieCountChipTextStyle}"
+                                    Text="{x:Bind sc:NixieTileWords.Badge(Nixie, 1), Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="WrapWholeWords" />
+                            </Border>
+                        </StackPanel>
                     </Grid>
-                    <StackPanel Grid.Row="1" Padding="4,0,4,0" Spacing="2">
+                    <StackPanel
+                        Grid.Row="1"
+                        Height="{x:Bind local:NixieTileShown.WordsHeight}"
+                        Padding="4,0,4,0"
+                        Spacing="2">
                         <TextBlock
                             FontWeight="SemiBold"
                             Foreground="{ThemeResource GlassTextPrimaryBrush}"
@@ -83,11 +132,24 @@
                             Text="{x:Bind Title}"
                             TextTrimming="CharacterEllipsis"
                             TextWrapping="WrapWholeWords" />
+                        <!--  1.8: a Nixie tile's facts ("TMDb keyword “heist”"), or a server's set's "6 films · 3 left"  -->
                         <TextBlock
+                            x:Name="TileFacts"
                             Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            MaxLines="2"
                             Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="{x:Bind Detail, Mode=OneWay}"
-                            TextTrimming="CharacterEllipsis" />
+                            Text="{x:Bind sc:NixieTileWords.TileFacts(Detail, Nixie), Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="WrapWholeWords" />
+                        <!--  1.8: a Nixie tile's count, how many are watched and its end date, each on a line of its own ("1,204 titles", "1,150 unwatched", "until Sun 29 Nov")  -->
+                        <TextBlock
+                            x:Name="TileCount"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            MaxLines="3"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind sc:NixieTileWords.TileCount(Nixie), Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
                     </StackPanel>
                 </Grid>
             </Button>
@@ -186,6 +248,32 @@
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
+
+            <!--
+                1.8 (the owner: "reverse the direction of the sort in collections"): See all's direction, as the Library's
+                button: an icon of one width (no jump when it flips), its arrow the way the tiles run, Narrator "A to Z, switch to
+                Z to A"; the words beside it. A tab stop before the grid, so keyboard and gamepad reach it
+            -->
+            <StackPanel
+                x:Name="GridDirectionBar"
+                Orientation="Horizontal"
+                Spacing="10"
+                Visibility="{x:Bind ViewModel.IsSeeAll, Mode=OneWay}">
+                <Button
+                    x:Name="GridDirectionButton"
+                    AutomationProperties.Name="{x:Bind ViewModel.GridDirectionName, Mode=OneWay}"
+                    Click="GridDirection_Click"
+                    Style="{StaticResource NixieCompactIconButtonStyle}"
+                    ToolTipService.Placement="Bottom"
+                    ToolTipService.ToolTip="{x:Bind ViewModel.GridDirectionTip, Mode=OneWay}">
+                    <FontIcon FontSize="14" Glyph="{x:Bind ViewModel.GridDirectionGlyph, Mode=OneWay}" />
+                </Button>
+                <TextBlock
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    Text="{x:Bind ViewModel.GridDirectionWords, Mode=OneWay}" />
+            </StackPanel>
 
             <!--  See all: one row's tiles as a grid  -->
             <lc:RowList

@@ -37,6 +37,9 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 	private readonly Lock _lock = new();
 	private int _pages;
 	private int _peoplePages;
+	private int _peopleById; // 1.8 (P1-2): requests of titles' people by id
+	private int _peopleByIdTitles;
+	private bool _peopleByIdFails;
 	private int _inFlight;
 	private int _mostAtOnce;
 	private string? _check = "2500:newest";
@@ -64,6 +67,15 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 					Items = [.. _films.Skip(start).Take(limit).Select(x => new BaseItemDto { Id = x.Id, Type = BaseItemDto_Type.Movie, People = [new BaseItemPerson { Name = $"Director {x.ProductionYear}", Type = BaseItemPerson_Type.Director }] })],
 					TotalRecordCount = total ? _films.Count : null,
 				};
+			});
+		// 1.8 (P1-2): the people step's top-up, the new titles' people by id (counted; failing when a test says so)
+		_client.Setup(x => x.GetPeopleByIds(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync((IReadOnlyList<Guid> ids, CancellationToken _) =>
+			{
+				Interlocked.Increment(ref _peopleById);
+				Interlocked.Add(ref _peopleByIdTitles, ids.Count);
+				return _peopleByIdFails ? null : (IReadOnlyList<BaseItemDto>?)[.. _films.Where(x => ids.Contains(x.Id!.Value))
+					.Select(x => new BaseItemDto { Id = x.Id, Type = BaseItemDto_Type.Movie, People = [new BaseItemPerson { Name = $"Director {x.ProductionYear}", Type = BaseItemPerson_Type.Director }] })];
 			});
 		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
 		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
@@ -154,9 +166,9 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		await index.Settled;
 
 		Assert.Equal(saved.Entries.Count, shown!.Entries.Count);
-		Assert.False(shown.HasPeople); // 1.7.3: no people pass
+		Assert.True(shown.HasPeople); // 1.8 (P1-2): the first read's people pass, saved with it
 		Assert.Equal(read, (_pages, _peoplePages)); // 1.7.0 read every title and every person again here, at every start
-		Assert.Equal(0, _peoplePages);
+		Assert.Equal(0, _peopleById);
 		_client.Verify(x => x.GetIndexCheck(It.IsAny<CancellationToken>()), Times.Exactly(2)); // the read's own, and the restart's
 	}
 
@@ -214,7 +226,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
 		await ReadAndSave(time);
-		var read = _pages;
+		var (read, people) = (_pages, _peoplePages);
 		_check = "2501:another";
 		_films.Add(Film(2500)); // a film added
 
@@ -225,59 +237,16 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		await index.Settled;
 
 		Assert.True(_pages > read);
-		Assert.Equal(0, _peoplePages);
-		Assert.False(index.Current!.HasPeople);
+		// 1.8 (P1-2): no library's people again; the new film's alone, by id, the others' lent from the index before
+		Assert.Equal(people, _peoplePages);
+		Assert.Equal((1, 1), (_peopleById, _peopleByIdTitles));
+		Assert.True(index.Current!.HasPeople);
+		Assert.Equal("Director 2000", Assert.Single(index.Current.Entries.Single(x => x.Name == "Film 02500").People).Name);
+		Assert.All(index.Current.Entries, x => Assert.Single(x.People));
 		Assert.Equal(time.Now - TimeSpan.FromHours(2), index.Current.ReadAt); // the day's date kept
 	}
 
-	// 1.7.3 (the owner's answer 1 to the 1.7.3 plan, closing BH-171-m3): the actors-and-directors pass stopped. It cost about
-	// twice the titles on the server the owner uses (682 s of 1,198) and nothing published reads people any more. No read asks
-	// for people: a first read, R, a library change's read, the day's read, and a start with an index saved before 1.7.3
-	// whose people were still due (1.7.2 read only its people then)
-	[Fact]
-	public async Task NoReadAsksForPeople_AndAnIndexWithItsPeopleDueReadsNothingForThem()
-	{
-		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
-		using (var first = Index(time))
-		{
-			Assert.Equal(2500, (await first.GetAsync())!.Entries.Count); // a first read
-			await first.Settled;
-			Assert.NotNull(await first.RefreshAsync()); // R
-			await first.Settled;
-			Assert.False(first.Current!.HasPeople);
-		}
-
-		// as 1.7.2 left it after a read closed before its people pass: no people, due (revision 3: nothing else to read for)
-		var file = Directory.GetFiles(Path.Combine(_folder, "LibraryIndex"), "*.json").Single();
-		await File.WriteAllTextAsync(file, (await File.ReadAllTextAsync(file)).Replace("\"PeopleDue\":false", "\"PeopleDue\":true", StringComparison.Ordinal));
-		var read = _pages;
-		time.Now += TimeSpan.FromHours(2); // past the hour
-		using (var later = Index(time))
-		{
-			Assert.True((await later.GetAsync())!.PeopleDue);
-			await Task.Delay(100);
-			await later.Checking;
-			await later.Settled;
-			Assert.Equal(read, _pages); // 1.7.2 read the people of every title here
-		}
-
-		_check = "2501:another"; // a library change's read
-		_films.Add(Film(2500));
-		using var change = Index(time);
-		await change.GetAsync();
-		await WaitForIndex(change, x => x.Entries.Count == 2501);
-		await change.Settled;
-		time.Now += LibraryIndex.FreshFor + TimeSpan.FromHours(1); // and the day's
-		using var day = Index(time);
-		await day.GetAsync();
-		await WaitForIndex(day, x => x.ReadAt == time.Now);
-		await day.Settled;
-
-		Assert.True(_pages > read);
-		Assert.Equal(0, _peoplePages);
-		_client.Verify(x => x.GetLibraryPeoplePage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never());
-		Assert.False(day.Current!.PeopleDue);
-	}
+	// 1.8 (P1-2): 1.7.3's "no read asks for people" became the people step's tests (IndexOnABigServerTests.People180.cs)
 
 	// review (Minor): R during a read was kept, and the next visit read the whole library again behind it
 	[Fact]
@@ -1464,7 +1433,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		foreach (var (nixie, detail, spoken) in tiles)
 		{
 			var expected = made[nixie.Id];
-			Assert.Equal(expected.ItemIds, nixie.ItemIds);
+			Assert.Equal(expected.ItemIds.Order(), nixie.ItemIds.Order()); // 1.8: the same titles (the lineup turns or ranks This week's)
 			Assert.Equal((expected.CountText, expected.AutomationName), (detail, spoken));
 		}
 	}
@@ -1609,10 +1578,12 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		Assert.Contains(lines, l => l.StartsWith("Library index: titles pass done: 2500 titles in 4 requests (2 at a time)", StringComparison.Ordinal));
 		Assert.Contains(lines, l => l.StartsWith("Library index: 2500 titles made into the index in ", StringComparison.Ordinal) && l.EndsWith(" ms (0 in more than one library)", StringComparison.Ordinal));
 		Assert.Contains(lines, l => l.StartsWith("Library index: 2500 titles in 1 libraries, played episodes in, ", StringComparison.Ordinal) && l.EndsWith(" s", StringComparison.Ordinal));
-		Assert.DoesNotContain(lines, l => l.Contains("people", StringComparison.OrdinalIgnoreCase)); // 1.7.3: no people pass
+		// 1.8 (P1-2): the people pass, after the titles, in the first read: counts and durations
+		Assert.Contains(lines, l => l.StartsWith("Library index: people pass done: 2500 titles in ", StringComparison.Ordinal));
+		Assert.Contains(lines, l => l.StartsWith("Library index: the people are in (every library's): 2500 titles with people, ", StringComparison.Ordinal) && l.EndsWith(" s", StringComparison.Ordinal));
 		Assert.Contains(lines, l => l.StartsWith("Library index: the saved one (2500 titles, read ", StringComparison.Ordinal) && l.EndsWith(" ms from this PC", StringComparison.Ordinal));
 		Assert.Contains(lines, l => l.StartsWith("Collections: ", StringComparison.Ordinal) && l.Contains(" ms (Made by Nixie from the saved index)", StringComparison.Ordinal));
-		Assert.DoesNotContain(lines, l => l.Contains("Film 0", StringComparison.Ordinal) || l.Contains("Movies", StringComparison.Ordinal));
+		Assert.DoesNotContain(lines, l => l.Contains("Film 0", StringComparison.Ordinal) || l.Contains("Movies", StringComparison.Ordinal) || l.Contains("Director", StringComparison.Ordinal));
 		await ui.Run(vm.OnNavigatedFrom);
 	}
 

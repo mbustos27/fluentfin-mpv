@@ -23,6 +23,11 @@
 		<PackageReference Include="TMDbLib" Version="3.0.0" />
 	</ItemGroup>
 
+	<!-- Nixie 1.8: Made by Nixie's data files (the Spotlight's curated studios), read from the assembly by their file name -->
+	<ItemGroup>
+		<EmbeddedResource Include="SmartCollections\Data\*.json" LogicalName="FluentFin.Core.SmartCollections.Data.%(Filename)%(Extension)" />
+	</ItemGroup>
+
 	<!-- fluentfin-mpv: the tests set JellyfinClient's clock and hand it server messages; the app's tests give the player page
 	     a HomeCache in a folder of their own -->
 	<ItemGroup>

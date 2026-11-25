@@ -7,7 +7,10 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 
 ## Fix queue (next fix release)
 For the next fix release now: 1.7.5 took this whole queue but the lines below (its section lists each item with its fix
-and test); its bug hunt's queued items are first below, and what 1.7.5 itself left is in its section's Left. 1.7.4 was
+and test); its bug hunt's queued items are first below, and what 1.7.5 itself left is in its section's Left. 1.8.0 was
+a feature release (Collections, better) and took none of it; what it left is in its section's Left, and it fixed two
+older bugs on the way (Home saved under another server, from 1.7.5's Left, and a start ended by another copy's
+install, since 1.5). 1.7.4 was
 the basics release (its section) and took none of it; 1.7.3 took Made by Nixie's four P0s, 1.7.1's queue, the rule 11
 sweep and the rename's code constants (its section).
 
@@ -135,6 +138,227 @@ runs post keys and cannot move the real cursor or hear sound).
     owner.
   - A precision touchpad's two-finger sideways swipe on a row, and its coasting at a page's end (the harness posts a
     tilt wheel, as a legacy touchpad sends it): not run, for the owner.
+
+- **1.8.0** (Made by Nixie's tiles and the direction button):
+  - Windows' text size (Settings > Accessibility > Text size) at 125 % and 150 % on Made by Nixie's tiles (This week,
+    the Collections page's rows) and Home's Made by Nixie rows: the title, the reason, the count's lines and the badges
+    whole inside the tile, nothing cut or overlapping. The words area is computed from the text size (124, 154 and 184
+    px at 100, 125 and 150 %); no off-screen run can set it: not run, for the owner.
+  - A real Narrator pass on This week and the direction button: each tile read as its title, "made by Nixie", its kind,
+    its reason and count, and its badges; the button as "Newest first, switch to oldest first", and the new words after
+    a press (off-screen runs read the UI Automation names, not what Narrator says): not run, for the owner.
+
+## Nixie 1.8.0: Collections, better
+- **The plan** (the owner, 2026-11-22: "Yes, with P1", a release of its own before the player; 2026-11-23: "we should be
+  able to reverse the direction of the sort in collections"): the four P1 items of the local report
+  `docs\reports\Useful Made by Nixie collections.md` and the reverse toggle. P2 and P3 aren't approved: no Browse by, no
+  new library filters, no item-page links, no themes table, no National Film Registry or Criterion lists, nothing on the
+  TV. Four streams cut from 1.7.5's fx1 at `794e9a1b`, no two writing the same file: t (titles, reason lines and badges;
+  the shared API first), a (anchors, and the people step in the index), s (the Spotlight, then the reverse toggle on the
+  Collection page), l (the lineup, Home, This week and See all's toggle).
+- **Merged** (2026-11-25, 3:12 AM, `wip/rel-1.8` from main's `7f7a7176`, 1.7.5): `41a6ccbd` records `wip/rel-1.7.5`
+  (`0629ba5e`) as merged (`-s ours`): 1.7.5 is on main as one squash, so the streams bring only their own changes. Then
+  t (`48a93ea0`, its head `884b84c9`), a (`a6760988`, `59032b9a`), s (`c4bcad68`, `cd64b5eb`) and l (`aaee58b2`,
+  `b7170408`). After them: `wip/175-lifefix` (`9a15e5b3`: `c5d80392` and its review's fixes, `8cf35b1e`), these docs
+  (`1dcf4ec8`), and the bug hunt's fixes, `wip/180-fix-a` (`3710ae88`: `099f23df`) and `wip/180-fix-l` (`35850e11`:
+  `22de103e`).
+  - Conflicts: at a's merge, `LibraryIndex.cs` (a's people-only read kept beside 1.7.5's saved-since read). Inside the
+    streams: s merged a (`d654896e`: the ids test's list in `SmartCollectionsTests`, both builders kept); l merged t, a
+    and s (`b14446ad`: `MoreLikeBuilder`, a's finished rule kept in `AnchorData.LikeOf`); l and s merged
+    `wip/rel-1.7.5` at `ece995d8` (`LibraryIndex.ReadFromServer`: a's people-only read kept).
+  - Outside a stream's own files, as agreed: `SmartCollectionCatalog.cs` (a's and s's builders, a line each in
+    `PublishedBuilders` and `IdPrefixes`), the census and ids tests in `SmartCollectionsTests.cs`, Home's fixtures in
+    `CollectionsPageTests.cs` and `TrendingPagesTests.cs` (the lineup's floors), `FluentFin.Core.csproj` (one
+    `EmbeddedResource` line for the Spotlight's studios), and four lines of 1.7.5 back's `HomeViewModel.cs` (l: the
+    midnight hooks in `Returned` and `LoadSections`).
+- **P1-1, the lineup** (l, `SmartCollections\CollectionLineup.cs`): kinds map to slots (keywords to themes, awards to
+  canon, Acclaimed, Under 90, Seasonal, Unfinished, Trending for Home's merged row only, the four new kinds to their
+  own); franchises, saved filters, popular lists and on-demand kinds have no slot (no evidence). Floors: 8 unwatched,
+  a franchise 2 owned and 1 unwatched, a person 5, a canon 10 or 10 % and 5 unwatched; a theme's ceiling max(30, 1 % of
+  films); artwork in 6 of the first 8 posters where at least half the index has a poster (the throwaway 12.4 has 140 of
+  25,736: no artwork gate there); coherence drops the bottom third of themes and canon; greedy novelty (Jaccard > 0.5
+  with a better one taken, or more than half the first 8 posters shown already); caps (Next in 1, More like 2, More
+  from 1, Spotlight 1; Acclaimed only while no canon is taken); 10 slots; seeds by FNV-1a over the local date (daily
+  slots the day, themes and the Spotlight the ISO week, canon and seasonal the month, the personal slots 3-day
+  buckets). The lineup itself takes 25 to 87 ms at 25,000 titles. `CollectionLineupTests`, `HomeLineupTests`.
+  - Home: at most 3 rows (default 2, `CollectionsHomeLineupRows`; "A third row of picks"), personal first, then
+    seasonal, trending or the Spotlight, then the lineup's order; Unfinished series apart and not counted. "This week's
+    picks" is its own stored switch (`NixieHomeRow.Picks`): 1.7's "A collection a day" (`Rotating`) turned off hid one
+    row a day, and as the first build read it, every personal row (the review's Minor 4); turned off, it now hides
+    nothing.
+  - The Collections page (after 1.7.5's back merged): This week first under Made by Nixie, the lineup's tiles in order,
+    never a See all; a collection This week holds is the lineup's version everywhere on the page. A kept page counts a
+    new local date as stale (This week made again on Back).
+  - Its review (`b2981456`; no Blocker or Major): five Minors, fixed in `9a4ff917` and `c19126bb` (canon and Acclaimed
+    could both be lost; the artwork gate dropped a small Next in, now only rows of 8 or more; the caps untested; the old
+    switch above, and a filter after the cap; Home's rows swapped while shown, now replaced in place), and the second
+    midnight path (`HomeViewModel.cs`'s fresh branch, wired in `b7170408`).
+- **Home's first Made by Nixie row** (the coordinator's perf Major on l: with a's slots, Home's first row came 9.3 s,
+  then 15.5 s after the index read on the fake 25,000; most of it the fake's pages twice as slow that run, Nixie's own
+  share about 0.4 s): `9a4ff917` shows the first row from a first read's first pages, puts the saved index behind the
+  saved page, keeps a's anchors and More like's alike titles per index (warm 186 to 307 ms down to 60 to 92 ms), and
+  logs "Home: its first Made by Nixie row in N ms since Home opened, from X" once a visit. `then-180-first-row.ps1`,
+  first start, three runs each: before 14,352 / 14,700 / 15,636 ms and 14,726 / 12,412 / 11,341 ms (the whole read);
+  after 1,187 / 798 / 2,112 ms and 1,034 / 1,002 / 1,015 ms. Next start, from the saved page: 210 to 624 ms. `56b47345`
+  starts s's `BuildLaterAsync` beside the build: the rows first, the Spotlight after, in place.
+  - Its re-review (`b7170408`): a Major, older than l (since before 1.7.5): `SaveShown` read the session when it saved,
+    not when the fill began, so a sign-out and a sign-in elsewhere during a fill saved the first server's Home as the
+    other's, fresh (the Spotlight's wait widened the window to 1.5 to 3.5 s; reproduced). A fill now notes its server
+    and user when it starts and swaps or saves only while that session is signed in. Six Minors: Back kept a
+    first-pages row (a kept Home is filled while hidden); a first read's pages are titles A and 0 to 9 (only a full
+    Acclaimed or Under 90 minutes shows from them, never saved); the midnight hook was unwired (wired); the first week's
+    Spotlight was kept before the people came (kept only once `PeopleCovered`); the Collections page waited for the
+    Spotlight (it shows first); a failed rebuild cleared the rows (the lineup without the Spotlight stays). A row taking
+    a new lineup's collection keeps its cards for the same titles (`NixieHomeRowViewModel.Take`), and `ShelfRow` hands
+    the keyboard to the card in a replaced one's place (`RowPaging.FocusAfterReplace`).
+- **P1-2, anchors** (a, `SmartCollections\Anchors\`): finished is a film played or a show at 90 % of its episodes;
+  rewatched a finished title played twice or more; favourites count, but don't start a franchise. `Hold`: 3 calendar
+  days, a title finished in the last 3 days first. `PeopleIndex` (directors and the top 3 billed), `TitleSimilarity`
+  (IDF cosine over namespaced features). Six candidates a kind at most, best first; More like and More from keep their
+  own order on their page; none in a library's presets strip (`Whole`); census notes with each kind's time.
+  `AnchorsTests` (20), `PeoplePassTests` (6), `IndexOnABigServerTests.People180.cs` (5).
+  - **The people step** (1.7.3 dropped the people pass, the owner's answer 1; P1-2 and the Spotlight need it, so it
+    comes back behind the titles, once, then by id): directors and the top 3 billed (`IndexEntry.PeopleOf`),
+    `PlayCount` and `LastPlayed`, read behind the titles in the same read; the titles never wait. An index saved
+    before 1.8 reads only its people. Later reads ask for new titles' people by id (`GetPeopleByIds`), at most hourly;
+    R during the step reads the titles again. `PeopleCovered` (98 % of the titles' people in, none due): More from and
+    a person's Spotlight wait for it. Person ids aren't saved: about 168 bytes a title (19.3 to 23.4 MB at 25,738
+    titles), a start's load 206 ms (`SavedIndexSize180Tests`).
+  - Its review: two Majors, fixed in `0d659a8f`: a rewatch was any title started twice (`PlayCount` counts starts),
+    now only a finished one, with no count said; a step cut short (a failed page, R, a close, a sign-in elsewhere) kept
+    nothing and began again (1.7.1's whole people pass took 682 s on the owner's server), now it keeps what came, saves
+    every minute and asks for the rest by id. Its four Minors (calendar days in the hold; the 90 % rule in More from
+    and More like; a sign-in elsewhere cancels the running read; a test of the people-only read). The re-review (no
+    Blocker or Major): four Minors, fixed in `59032b9a` (a test of the cut-short keep; `PeopleCovered` instead of a
+    flag set on partial people; a 401 or 403 in the step keeps what came; index writes in order, an older one never
+    after a newer one).
+- **P1-3, the Spotlight** (s, `SpotlightBuilder.cs`, `SpotlightStudios.cs`, and
+  `SmartCollections\Data\spotlight-studios.json` with 30 studios that have a house style, embedded): a director with 6
+  films, an actor top-3 billed in 8 titles, or a listed studio with 6; 5 unwatched; their best 6 at or above the
+  catalogue's 70th percentile of the shrunk score; coherence; one a week from Monday by the ISO week, directors and
+  actors in turn, never the same twice running;
+  `Reason.Until` the Sunday. It is made after Home's first rows (`SmartCollectionCatalog.BuildLaterAsync`,
+  `LaterReady`), and the week's pick is kept in `SmartCollectionStore`. `SpotlightTests` (23),
+  `SpotlightPeople180Tests` (25,000 titles with people: a person picked, never the long tail; gates 137 ms, the pick
+  4 ms).
+  - Its review: two Majors, fixed: a show 90 % watched counted as unwatched (`dcefa64b`, `AnchorFinder.Finished`), and
+    Home's first Nixie row waited for the Spotlight's build (`cd64b5eb`: Home's build 294 to 397 ms with it, 149 to 259
+    without). Four Minors, fixed: the pick could change mid-week or come again (kept for the week), Newest first began
+    with the undated films (last both ways, `d6ca53dd`), the Order button's width moved the toolbar (216 and 140 px,
+    `b0c0d330`), and a clock before 2001 (`eb81adfb`).
+- **P1-4, titles, reason lines and badges** (t): `NixieTitles` (Next in, More like, More from, Spotlight; `Check`
+  refuses "Your" and any word about the viewer), `ReasonLine`, `ReasonCount` and `ReasonFacts` (a reason may say what
+  the user did with a title, a title never), the end date absolute ("until Sun 29 Nov") so a saved Home page is never
+  wrong the next day; `AwardFacts` from Wikidata's award lists (won beats nominated, at most 2 badges a tile, a
+  collection of an award shows none of itself), trending tiles included; the tiles in four themes (the words area from
+  Windows' text size: 124, 154 and 184 px at 100, 125 and 150 %; badges on up to two lines; the count's parts on their
+  own lines); `TileAutomationName`. Every existing builder's reason, no `Why` starting with "Your", and Home's
+  trending row "Trending on this server" (`TrendingCollections.HomeRowTitle`). A saved filter's tile says its library and what it
+  keeps (1.7 said "0 titles" on every one; `f704e998`). `BuildAll` at 26,000 titles, median of 5: 85 to 94 ms without
+  award lists, 115 to 122 ms with 9.
+  - Its review: one Major in l's file, which l had already (`NixieRowKey` without the reason and badges kept a 1.7.x
+    saved row without its reason line after the upgrade; in since `f76ec19c`, with its test). Minors, fixed in
+    `d58d6774` to `884b84c9`: badges cut with "…", the count line cut, the timing test's 20 s bound (now 4 times a
+    reference work timed in the same run: a 10 times slowdown fails), and the sizes 1280 × 720 and 2560 × 1392 checked.
+- **The reverse toggle** (s on the Collection page, `87d4b426`; l on the Collections page's See all, `4e94c586`;
+  `ViewModels\SortDirection.cs`): `Reversed` per user and view for the session (`SortDirections.Remember` on the user's
+  press only, `Recall` on Back, Forward and R), the order mirrored, undated films last both ways, then Hide watched; its
+  words from what the order runs by (`OrderRuns`), its Narrator name "Newest first, switch to oldest first", both
+  directions' words in one cell so its width never changes (rule 7). Save as playlist takes the order shown.
+  `CollectionReverse180Tests` (11), `SortDirectionTests` (27).
+- **Off-screen runs** (each on its stream's own build, before the integration): `then-180-tiles.ps1` (t) 18 checks a
+  theme in all four at 1920 and 1100 px wide; at 1280 × 720 and 2560 × 1392 no failure, with a per-size check of the
+  words inside the tile (Cinematic's and Drive-in's first franchise search timed out and skipped 4 checks, which the
+  per-size check covered; a skip fails since `884b84c9`); `then-180-reverse.ps1` (s) 22 of 22 in each theme on
+  `cd64b5eb` (keyboard first, a click, three quick presses, gamepad A, Narrator names, every order both ways with no
+  toolbar move, Back, Forward, R, a playlist);
+  l's This week check (Home's rows, This week at 1920 and 1280, See all's button by keyboard, its name, its bounds on
+  the flip, kept after Back) 13 of 13 in each theme on `4e94c586`; `then-180-census.ps1` (s) passes on the fake 25,000
+  (17 collections in 289 ms; no Spotlight there: the fake has no people and no listed studio).
+- **Live, on the throwaway 12.4** (a's `LiveIndexTests`, opt-in; 25,738 titles, durations only): first rows 0.84 s,
+  the titles in 8.3 s, the people step 9.5 s behind them (36 pages), 100 titles' people by id 78 ms; a restart's saved
+  index 189 ms and the Collections page 1.86 s; as an account with 1,000 films watched, 1,000 anchors, More like in
+  85 ms, the published build 303 ms, the Collections page 2.0 s.
+- **Since 1.5, found by 1.7.5's release gate** (`c5d80392`, from `wip/175-lifefix`, reviewed for 1.8): the update
+  helper's lock (`Local\Nixie-update-install`) is one for the whole Windows session, so any copy's install ended every
+  Nixie starting meanwhile, on any data folder, and its reopen request went to an Updates folder that helper never
+  reads, so it never came back. `UpdateHandoff.StartEndsForInstall`: a start ends only for the installed copy (its files
+  are the ones replaced) or a copy whose data folder handed the install over; any other goes on and logs "another
+  copy's install is under way". `AnotherCopysInstall_DoesNotEndAPortableCopysStart` fails with the old rule; the
+  lifecycle gate with its check's fix (`a2f8186b`): 4 of 4 themes, 27 of 27.
+  - Its review's three findings, fixed in `8cf35b1e`, each with a test that fails with its fix reverted: an installed
+    copy started on another data folder ran against half-installed files (a major upgrade removes the registry's
+    `InstallFolder` and writes it back near its end), so the helper also holds a lock named for its program folder
+    (`UpdateHandoff.FolderMutexName`), and a start ends while its own folder's is held; a finished `pending.json` (one
+    with `install-result.txt`) no longer counts as handed over; the call site passes `IsMsiInstall()` and its program
+    folder, not `CanSelfUpdate`.
+- **The 1.8 bug hunt** (the local report `docs\reports\Bug hunt 2026-11-25 (1.8).md`, on `aaee58b2`: 13 off-screen runs
+  on the fake server, at 25,470 titles and real shape). Its two Majors and three Minors were fixed before the build
+  (`22de103e`, `099f23df`), with their tests:
+  - BH-180-M1: the people coming in remade This week, and the keyboard on one of its tiles went to the title bar's Back
+    (Classic and Drive-in; Enter or a gamepad's A then left the page). The Collections page's rows are kept by what they
+    are and take a newer row's tiles in place (`CollectionsRow.Take`); `ShelfRow` follows its card through tiles put in
+    and moved (`RowPaging.IndexAfterInsert`, `IndexAfterMove`). `then-180-focus.ps1`.
+  - BH-180-M2 (rule 9): with every kind switched off, Home still had two Made by Nixie rows, This week four tiles, and
+    the people step read every library: 1.8's four kinds had no switch. Settings > Collections has one each for Next in,
+    More like, More from and Spotlight (`SmartCollectionKinds.Switched`; More from's and Spotlight's say they read the
+    titles' people); every switch off is Made by Nixie off, and the page says so again. The people step runs only while
+    More from or the Spotlight is on (`CollectionSettings.PeopleWanted`); turning both off stops a running one, and
+    turning one back on starts it (`LibraryIndex.PeopleSwitched`). `then-180-off.ps1`.
+  - BH-180-m1: a pin of last week's Spotlight, or of a pick that moved on, vanished from Saved. A pin Nixie no longer
+    makes is looked for by its id (any kind; a Spotlight among its candidates), else kept in Saved under the title kept
+    with the pin (`SmartCollectionStore.PinnedTitles`), "Ended", and its page says "This collection has ended" and how
+    to unpin it.
+  - BH-180-m2 (rule 2): the people step held every page whole (each title's whole cast and crew, image tags and
+    blurhashes) until it ended, and every save built the whole index as a tree. `IndexPages` keeps ids only for the
+    people and hands each page over as it comes (`PageCame`); the index is streamed to its file (`UserFiles.WriteAs`).
+    At 25,000 titles with 40 people each: the step's peak above the titles 858 to 200 MB, 2.6 to 1.0 s; with R halfway,
+    670 to 207 MB; halfway through, no page still held (`PeopleStepMemory180Tests`). On our QA Jellyfin 12.4 (3,073
+    titles, their real casts): 3.5 to 2.7 s.
+  - BH-180-m3: 1.8's off-screen checks weren't in any gate manifest. `tools\gate\manifest\c180.psd1`: week180 (Home's
+    rows, This week, See all's direction; four themes at the gate's sizes), tiles and reverse (four themes, sizing the
+    window themselves), focus180 (four themes) and off180 (Classic); census and first-row nightly. `test_gate.ps1` fails
+    on a `then-18x` script in no manifest. `then-180-week.ps1` and `then-180-first-row.ps1` are in the repository now.
+  - Its six nits are left (below).
+- **Suites:** the release build (`cd11a3b5`): Core 5,961 passed, UI 1,861 passed, none failed; backend's ran; Defender:
+  no threats (folder, MSI, zip). **The release gate** (verify-package, 4:40 to 7:20 AM): 78 of 91 jobs in 160 min,
+  beside a TV gate run. Triage (`wip/180-gatefix`, check fixes only, `0f21a073`, `d666e075`):
+  - `tiles` ×4 and `collections` Classic: the checks expected 1.7.5's Home rows (Acclaimed). 1.8's lineup puts Next
+    in, More like and Unfinished series there, so the checks now ask the lineup. Rerun: tiles 25 of 25 in four themes,
+    collections 35 of 35. A Home with no lineup rows still fails them.
+  - `item-buttons` Editorial: a harness race (its Space went to Play, which takes the keyboard on arrival); 46 of 46.
+  - `scrollstress` Drive-in: the `0xc0000409` fail-fast in `Microsoft.UI.Input.dll` (1.7.5's known crash), its
+    second sighting, inside WinUI.
+  - `back`: Cinematic's series cell was load (the app showed it in 14–17 ms). Drive-in's Collections cell put the
+    keyboard back on the tile in 1.3–1.5 s in the full runs, against 155–163 ms alone on 1.7.5 and on 1.8. Not proven
+    load or code: a follow-up for 1.8.1 (This week's refresh on Back is the suspect).
+  - `rows` ×4 at 2560 × 1392: the large monitor was off.
+- **Left:**
+  - The bug hunt's six nits:
+    - BH-180-q1: a Switch user during the Spotlight's build (about 0.2 to 0.7 s) saves user A's pick as user B's week
+      (harmless: B's build skips an id it doesn't have); `MakeLater` should pass its store's key.
+    - BH-180-q2: every tile has the Nixie words' height, so a server collection's or a playlist's tile has about 85 px
+      empty below its two lines, and those rows are taller.
+    - BH-180-q3: some words read oddly: "Shares Germany, …" (a country as a shared trait), and without TMDb's
+      franchise names "Next in The Frontier and the Mirror films".
+    - BH-180-q4: after a restart just after midnight, a Home page saved under 5 minutes before it shows yesterday's
+      lineup until the next visit (`s_nixieDay` is empty in a new process).
+    - BH-180-q5: `SmartCollectionCatalog.LaterReady` has no subscriber in the app (dead code, or a test-only seam).
+    - BH-180-q6 (by design): on a first start, Home's rows are made before the people are in and aren't made again when
+      they publish, so More from and the Spotlight reach Home at a later visit or R (This week takes them at once). On
+      the next start Home swaps two of its rows about 2 s after it opens: each upgrade's users see that once.
+  - Next: midnight, the week's turn (Sunday to Monday) and a clock change were only read from the code
+    (`RefreshNixieIfNewDay`, `CollectionsViewModel.Returned`'s new date, `SpotlightWeek` and the ISO-week seeds): dev
+    builds have no clock hook, and no run touched the system clock. A `NIXIE_HARNESS_NOW` (dev builds only) would let
+    one off-screen check cross both.
+  - A title finished on this PC reaches the personal picks at the index's next read of plays, not at once: the index
+    doesn't hear `ItemUserData.Changed`.
+  - Home's row taking a new lineup's collection with the keyboard on it: unit and source tests only (`RowPagingTests`,
+    `NixieHomeRowViewModel.Take`); the gate's focus180 checks This week's, not Home's.
+  - Next in and More from made nothing on the throwaway 12.4 (no franchises there, and people on 3 titles: its
+    metadata is offline), so neither has been seen on real data. The lineup wasn't timed cold on the throwaway itself
+    (its shape in a unit test: 105 ms).
+  - 125 % and 150 % text size and Narrator itself can't run off-screen: 1.8.0's hand checks (Hand checks, recorded).
 
 ## Nixie 1.7.5: Back is instant, every remaining fix, and the basics gate
 - **Merged** (2026-11-24, `wip/rel-1.7.5` from main's `d0a61039`: `c7b5f72d`, 1.7.4 plus docs, with the roadmap's

@@ -345,6 +345,90 @@ public sealed class LauncherUpdateHelperTests : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// 1.7.5 (the gate's lifecycle run, Cinematic): the helper's mutex is one for the whole Windows session, and a portable copy
+	/// on a data folder of its own ended at its start while another copy's helper held it ("an install is under way"), writing
+	/// its reopen request where no helper reads it: Nixie never opened. Only the installed copy, or a copy whose data folder
+	/// handed the install over (its pending.json), ends. 1.8 (its review): a finished install's pending.json (an
+	/// install-result.txt beside it, as a quiet install on close leaves them until the next start) hands nothing over.
+	/// </summary>
+	[Fact]
+	public void AnotherCopysInstall_DoesNotEndAPortableCopysStart()
+	{
+		var updates = Path.Combine(_dir, "Updates folder");
+		var program = Path.Combine(_dir, "a portable copy");
+		bool Ends(bool installed, out bool another)
+		{
+			var ends = false;
+			var other = false;
+			var probe = new Thread(() => ends = UpdateHandoff.StartEndsForInstall(updates, program, installed, _mutex, out other));   // as another process sees it
+			probe.Start();
+			probe.Join();
+			another = other;
+			return ends;
+		}
+
+		Assert.False(Ends(installed: false, out var none));                  // no install anywhere
+		Assert.False(none);
+		using var held = new Mutex(true, _mutex, out var mine);
+		try
+		{
+			Assert.True(mine);
+			Assert.False(Ends(installed: false, out var another));           // another copy's install: this portable copy goes on
+			Assert.True(another);
+			Assert.True(Ends(installed: true, out _));                       // the installed copy: its files are being replaced
+			File.WriteAllText(Path.Combine(updates, UpdateHandoff.PendingFile), "{}");
+			File.WriteAllText(Path.Combine(updates, UpdateHandoff.ResultFile), "exit=0\r\n");
+			Assert.False(Ends(installed: false, out another));               // a finished install's pending.json: nothing handed over
+			Assert.True(another);
+			File.Delete(Path.Combine(updates, UpdateHandoff.ResultFile));
+			Assert.True(Ends(installed: false, out another));                // this data folder handed it over: its helper reads the request
+			Assert.False(another);
+		}
+		finally
+		{
+			held.ReleaseMutex();
+		}
+	}
+
+	/// <summary>
+	/// 1.8 (the review of 1.7.5's update-lock fix): the installed copy's registry entry is gone while a major upgrade swaps its
+	/// files, so the real helper also holds the mutex named for the folder it installs over (--app's): a Nixie of that folder
+	/// started meanwhile on another data folder ends, one of another folder doesn't, and the helper lets it go before it opens
+	/// Nixie again. The app and the launcher make the same name (the app finds the launcher's).
+	/// </summary>
+	[Fact]
+	public void TheHelper_HoldsItsProgramFoldersMutex_SoThatFoldersStartEnds_WhateverItsDataFolder()
+	{
+		var (msiexec, app) = StandIns();
+		var folder = Path.GetDirectoryName(app)!;
+		var otherData = Path.Combine(_dir, "another data folder", "Updates");
+		Directory.CreateDirectory(otherData);
+		var unused = @"Local\Nixie-update-install-test-" + Guid.NewGuid().ToString("N");   // no session-wide install: only the folder's
+		bool Ends(string program)
+		{
+			var ends = false;
+			var probe = new Thread(() => ends = UpdateHandoff.StartEndsForInstall(otherData, program, installedCopy: false, unused, out _));
+			probe.Start();
+			probe.Join();
+			return ends;
+		}
+
+		Assert.False(Ends(folder));
+		var nixie = Sleeper(app, 4000);
+		var info = Helper(msiexec, app, nixie, reopen: true, quiet: false, []);
+		info.Environment["NIXIE_TEST_MUTEX"] = UpdateHandoff.FolderMutexName(folder);   // the reopened stand-in says whether it is still there
+		var helper = Start(info);
+		Assert.True(SpinWait.SpinUntil(() => Ends(folder), 10_000), "a start from the folder being installed over went on");
+		Assert.True(Ends(folder.ToLowerInvariant() + Path.DirectorySeparatorChar));    // the same folder, as Windows compares it
+		Assert.False(Ends(Path.Combine(_dir, "a portable copy")));                    // another folder's copy goes on
+		Assert.True(helper.WaitForExit(30_000), "the helper did not finish");
+		Assert.Equal(0, helper.ExitCode);
+		Assert.False(Ends(folder));
+		Assert.True(SpinWait.SpinUntil(() => File.Exists(Path.Combine(folder, "Nixie-mutex.txt")), 10_000), "Nixie was not opened again");
+		Assert.Equal("exists=False", File.ReadAllText(Path.Combine(folder, "Nixie-mutex.txt")));   // let go before Nixie opened
+	}
+
 	/// <summary>The release build has no stand-in switch: asked for one, it refuses (2) and runs nothing.</summary>
 	[Fact]
 	public void TheReleaseBuild_RunsOnlyWindowsMsiexec()

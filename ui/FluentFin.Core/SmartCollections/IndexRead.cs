@@ -15,6 +15,10 @@ namespace FluentFin.Core.SmartCollections;
 /// (P0-2); the reading line has the check's count as its total until every library's own is in (BH-171-q1); and the played
 /// episodes can be asked again on their own (<see cref="PlaysAsync"/>, BH-171-M1's other half).
 /// </para>
+/// <para>
+/// 1.8 (P1-2): the people come back, after the titles (<see cref="PeopleAsync"/>, <see cref="Anchors.PeoplePass"/>): the top
+/// three billed only; every library's people once, then only the new titles' by id.
+/// </para>
 /// </summary>
 internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogger? log)
 {
@@ -273,6 +277,42 @@ internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogg
 		return (known with { Entries = entries, Check = check }, "");
 	}
 	// end 1.7.5
+
+	// 1.8 (P1-2, stream a)
+	/// <summary>The size the whole people pass's pages start at (they double while the server is quick: <see cref="IndexPages"/>).</summary>
+	public const int PeoplePageSize = IndexPages.MinCarriedSize;
+
+	/// <summary>1.8: how often a long people step hands what came so far to be kept (<see cref="LibraryIndex"/>'s; tests shorten it).</summary>
+	public TimeSpan PeopleKeptEvery { get; init; } = Anchors.PeoplePass.DefaultKeepEvery;
+
+	/// <summary>
+	/// 1.8 (P1-2): the people of <paramref name="index"/>'s titles (read by this read, or by <see cref="LibrariesOfAsync"/>'s
+	/// libraries): every library's when a whole pass is due (<see cref="IndexSnapshot.PeopleDue"/>, or the index has none),
+	/// else those still to ask (<see cref="IndexSnapshot.PeopleToAsk"/>) by id. The index with what came, the rest still to
+	/// ask; never null, also when cut short (review, Major: what came is kept). <paramref name="keep"/> keeps what came so far
+	/// during a long step.
+	/// </summary>
+	public Task<Anchors.PeopleRun> PeopleAsync(IndexSnapshot index, Anchors.PeoplePass.Keep? keep, CancellationToken cancellationToken) =>
+		new Anchors.PeoplePass(log) { KeepEvery = PeopleKeptEvery }.RunAsync(index, index, index.PeopleToAsk, _libraries, client.GetLibraryPeoplePage, client.GetPeopleByIds,
+			PeoplePageSize, cancellationToken, keep);
+
+	/// <summary>
+	/// 1.8 (the people alone, for an index whose people are due): the server's libraries that <paramref name="known"/> was read
+	/// from; false when they couldn't be read, or none of them is there any more.
+	/// </summary>
+	public async Task<bool> LibrariesOfAsync(IndexSnapshot known)
+	{
+		var views = await client.GetUserViewsOrNull().ConfigureAwait(false);
+		if (views is null)
+		{
+			return false;
+		}
+
+		var ids = known.Libraries.Select(l => l.Id).ToHashSet();
+		_libraries = [.. views.Where(v => v.Id is { } id && ids.Contains(id) && JellyfinClient.IndexKinds(v) is not null)];
+		return _libraries.Count > 0;
+	}
+	// end 1.8
 
 	/// <summary>
 	/// 1.7.3 (BH-171-M1's other half): the played episodes alone, for an index whose own didn't come

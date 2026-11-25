@@ -422,6 +422,14 @@ public sealed partial class CollectionPage : Page
 
 	public static Visibility Shown(string? text) => string.IsNullOrWhiteSpace(text) ? Visibility.Collapsed : Visibility.Visible;
 
+	// 1.8 review (Minor 5, rule 7): Order and its direction as wide as their widest words in every theme ("Order: Release date",
+	// "Newest first", "First to last"), so changing Order moves nothing in the toolbar (the harness measures it in each theme)
+	/// <summary>The Order button's width: "Order: Release date" fits in every theme.</summary>
+	public static double OrderWidth => 216;
+
+	/// <summary>The direction button's width: the arrow and "Newest first", "First to last" fit in every theme.</summary>
+	public static double DirectionWidth => 140;
+
 	/// <summary>"Collection · 6 films · 1979–2016 · 1 of 6 watched".</summary>
 	public static string KindAndSummary(string kind, string summary) => string.IsNullOrEmpty(summary) ? kind : $"{kind} · {summary}";
 

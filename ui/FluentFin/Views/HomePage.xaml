@@ -15,6 +15,7 @@
     xmlns:lc="using:FluentFin.Controls"
     xmlns:local="using:FluentFin.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:sc="using:FluentFin.Core.SmartCollections"
     xmlns:services="using:FluentFin.Core.Contracts.Services"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
@@ -218,16 +219,30 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:NixieHomeRowViewModel">
                         <StackPanel Spacing="0">
-                            <TextBlock
-                                Margin="{StaticResource SmallLeftRightMargin}"
-                                CharacterSpacing="80"
-                                Foreground="{ThemeResource GlassTextSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="MADE BY NIXIE" />
+                            <!--  1.8 (P1-4): the kicker, then the row's reason line and award badges, cut short at the window's edge  -->
+                            <Grid Margin="{StaticResource SmallLeftRightMargin}" ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    CharacterSpacing="80"
+                                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="MADE BY NIXIE" />
+                                <TextBlock
+                                    x:Name="NixieRowReason"
+                                    Grid.Column="1"
+                                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind sc:NixieTileWords.RowLine(Collection), Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                            </Grid>
                             <lc:ShelfRow
                                 Margin="{StaticResource SmallLeftRightMargin}"
                                 HasSeeAll="True"
-                                Header="{x:Bind Title}"
+                                Header="{x:Bind Title, Mode=OneWay}"
                                 ItemsSource="{x:Bind Items, Mode=OneWay}"
                                 SeeAll="NixieSeeAll"
                                 Tag="{x:Bind}">

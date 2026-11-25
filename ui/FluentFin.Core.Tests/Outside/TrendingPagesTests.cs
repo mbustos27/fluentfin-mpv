@@ -14,7 +14,7 @@ namespace FluentFin.Core.Tests.Outside;
 /// <summary>
 /// 1.7 trending on the pages the user sees: the Collections page's Trending, Popular, Most anticipated and Box office rows
 /// (only those with a collection), their See all, a source turned off taking its rows away while the page shows, and Home's
-/// "Trending in your library" (only while a source is on and it has titles).
+/// "Trending on this server" (1.8; was "Trending in your library") (only while a source is on and it has titles).
 /// </summary>
 [Collection(CollectionNamesSerial.Name)]
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
@@ -77,8 +77,18 @@ public sealed class TrendingPagesTests : IDisposable
 		CommunityRating = 6.0f,
 		RunTimeTicks = TimeSpan.FromMinutes(100).Ticks,
 		ProviderIds = new BaseItemDto_ProviderIds { AdditionalData = new Dictionary<string, object> { ["Tmdb"] = tmdb } },
+		ImageTags = new BaseItemDto_ImageTags { AdditionalData = new Dictionary<string, object> { ["Primary"] = "p" + tmdb } }, // 1.8: as a real library's
 		UserData = new UserItemDataDto { Played = false },
 	};
+
+	// 1.8 (P1-1): Home's rows come from the lineup, which takes a trending row with a row's worth of unwatched titles (8): eight
+	// more of the library's films trending on Trakt, after Dune and The Matrix
+	private void EightMoreTrending()
+	{
+		var more = Enumerable.Range(0, 8).Select(i => Film($"Trending {i}", 2015 + i, $"{700_000 + i}")).ToList();
+		_films.AddRange(more);
+		_rig.Fake.Trakt["movies/trending"] = [.. _rig.Fake.Trakt["movies/trending"], .. more.Select(f => ((string?)IndexEntry.ProviderId(f, "Tmdb"), (string?)null, (string?)null, f.Name!))];
+	}
 
 	private async Task<(LibraryIndex Index, SmartCollectionStore Store, TrendingCollections Trending)> Services()
 	{
@@ -162,15 +172,16 @@ public sealed class TrendingPagesTests : IDisposable
 	[Fact]
 	public async Task Home_ShowsTrendingInYourLibrary_InTraktsOrder_AndSnapshotsIt()
 	{
+		EightMoreTrending(); // 1.8
 		await Services();
 		var home = Home();
 
 		await home.OnNavigatedTo(new object());
 
 		var row = Assert.Single(home.NixieRows, r => r.Collection.Kind == SmartCollectionKind.Trending);
-		Assert.Equal("Trending in your library", row.Title);
+		Assert.Equal("Trending on this server", row.Title);
 		Assert.Equal("Made by Nixie", row.Kicker);
-		Assert.Equal(["Dune", "The Matrix"], row.Items.Select(i => i.Dto.Name));
+		Assert.Equal(["Dune", "The Matrix", .. Enumerable.Range(0, 8).Select(i => $"Trending {i}")], row.Items.Select(i => i.Dto.Name));
 		Assert.Single((await _homeCache.Get("http://server", _client.Object.UserId)).Snapshot!.NixieRows, r => r.Collection.Kind == SmartCollectionKind.Trending);
 	}
 
@@ -178,6 +189,7 @@ public sealed class TrendingPagesTests : IDisposable
 	public async Task ListsThatCameInWhileAnotherPageShowed_AreOnHome_AtTheNextVisit_ThoughHomesSavedPageWasFresh()
 	{
 		// the harness's first run: Home loaded (Trakt off), Settings turned Trakt on, the lists came in, Home again
+		EightMoreTrending(); // 1.8
 		await Services();
 		_rig.Hub.SetOn(OutsideSourceId.Trakt, false);
 		var home = Home();
@@ -199,6 +211,7 @@ public sealed class TrendingPagesTests : IDisposable
 	public async Task Home_MatchesTheLists_OffItsOwnThread()
 	{
 		// a8a5e5d: matching builds lookups over the whole index (25,000 titles on a big library): never on Home's thread
+		EightMoreTrending(); // 1.8
 		var (_, _, trending) = await Services();
 		var threads = new System.Collections.Concurrent.ConcurrentBag<string?>();
 		trending.Matching += () => threads.Add(Thread.CurrentThread.Name);
@@ -217,6 +230,7 @@ public sealed class TrendingPagesTests : IDisposable
 	{
 		// the review's #6: Home kept the old collection when its first titles were the same, so its why line (and See all)
 		// still named TMDb after TMDb was turned off
+		EightMoreTrending(); // 1.8: before TMDb is turned on (that refreshes Trakt's lists too, in the background)
 		Assert.Null(_rig.Token.Save(TrendingFake.Token));
 		_rig.Hub.SetOn(OutsideSourceId.TmdbTrending, true);
 		_rig.Fake.Tmdb["movie"] = [(438631, "Dune"), (603, "The Matrix")];
@@ -233,7 +247,7 @@ public sealed class TrendingPagesTests : IDisposable
 		await home.OnNavigatedTo(new object());
 
 		row = Assert.Single(home.NixieRows, r => r.Collection.Kind == SmartCollectionKind.Trending);
-		Assert.Equal(["Dune", "The Matrix"], row.Items.Select(i => i.Dto.Name));   // the same titles
+		Assert.Equal(["Dune", "The Matrix"], row.Items.Take(2).Select(i => i.Dto.Name));   // the same titles
 		Assert.Equal("Trakt: watched right now", row.Collection.Why);
 	}
 

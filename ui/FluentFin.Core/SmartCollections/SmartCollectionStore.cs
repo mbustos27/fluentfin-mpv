@@ -13,7 +13,7 @@ namespace FluentFin.Core.SmartCollections;
 /// filters saved under a name ("Save as collection") and the Nixie collections pinned with Favourite (a Nixie collection is
 /// not a server item, so its Favourite is kept here). Forgotten with the user's other files on sign-out.
 /// </summary>
-public sealed class SmartCollectionStore
+public sealed class SmartCollectionStore : Builders.ISpotlightPicks
 {
 	private const int FormatVersion = 1;
 
@@ -27,7 +27,15 @@ public sealed class SmartCollectionStore
 
 	private sealed record Saved(string Id, string Name, SavedFilter Filter);
 
-	private sealed record State(List<Saved> Filters, HashSet<string> Favorites);
+	private sealed record State(List<Saved> Filters, HashSet<string> Favorites)
+	{
+		// 1.8 (stream s; the review's Minor 3): the week's Spotlight by ISO week ("2026-W48" → its id), the newest weeks only
+		public Dictionary<string, string> Spotlight { get; init; } = new(StringComparer.Ordinal);
+
+		// 1.8 (stream l, BH-180-m1): a pinned Nixie collection's title (its id → title), so a pin that is no longer made (last
+		// week's Spotlight, a pick from what the user watched that moved on) still shows in Saved by name, said to have ended
+		public Dictionary<string, string> PinnedTitles { get; init; } = new(StringComparer.Ordinal);
+	}
 
 	public SmartCollectionStore(IJellyfinClient client, HomeCache homeCache, KnownFolders folders, ILogger<SmartCollectionStore> logger)
 		: this(client, homeCache, Path.Combine(folders.ApplicationData, "SmartCollections"), logger)
@@ -61,7 +69,11 @@ public sealed class SmartCollectionStore
 		{
 			try
 			{
-				state = new State(root["Filters"].Deserialize<List<Saved>>(Json) ?? [], root["Favorites"].Deserialize<HashSet<string>>(Json) ?? []);
+				state = new State(root["Filters"].Deserialize<List<Saved>>(Json) ?? [], root["Favorites"].Deserialize<HashSet<string>>(Json) ?? [])
+				{
+					Spotlight = root["Spotlight"]?.Deserialize<Dictionary<string, string>>(Json) ?? new(StringComparer.Ordinal), // 1.8
+					PinnedTitles = root["PinnedTitles"]?.Deserialize<Dictionary<string, string>>(Json) ?? new(StringComparer.Ordinal), // 1.8 (BH-180-m1)
+				};
 			}
 			catch (Exception ex)
 			{
@@ -73,17 +85,68 @@ public sealed class SmartCollectionStore
 		return state;
 	}
 
-	private async Task Save(State state)
+	/// <param name="changed">1.8: false for the week's Spotlight pick (nothing the pages list changed).</param>
+	private async Task Save(State state, bool changed = true)
 	{
 		var root = new JsonObject
 		{
 			["Version"] = FormatVersion,
 			["Filters"] = JsonSerializer.SerializeToNode(state.Filters, Json),
 			["Favorites"] = JsonSerializer.SerializeToNode(state.Favorites, Json),
+			["Spotlight"] = JsonSerializer.SerializeToNode(state.Spotlight, Json), // 1.8
+			["PinnedTitles"] = JsonSerializer.SerializeToNode(state.PinnedTitles, Json), // 1.8 (BH-180-m1)
 		};
 		await _files.Write(_key!, root, _homeCache.LoginKey(_client.BaseUrl, _client.UserId)).ConfigureAwait(false);
-		Changed?.Invoke(this, EventArgs.Empty);
+		if (changed)
+		{
+			Changed?.Invoke(this, EventArgs.Empty);
+		}
 	}
+
+	// 1.8 (stream s; the review's Minor 3)
+	/// <summary>How many weeks' Spotlight picks are kept.</summary>
+	public const int SpotlightWeeksKept = 8;
+
+	/// <summary>1.8: the Spotlight picked each week, on this PC (by ISO week, "2026-W48"); forgotten with the user's files on sign-out.</summary>
+	public async Task<IReadOnlyDictionary<string, string>> SpotlightPicksAsync()
+	{
+		await _lock.WaitAsync().ConfigureAwait(false);
+		try
+		{
+			return new Dictionary<string, string>((await Load().ConfigureAwait(false)).Spotlight, StringComparer.Ordinal);
+		}
+		finally
+		{
+			_lock.Release();
+		}
+	}
+
+	/// <summary>1.8: the week's Spotlight, kept so it holds all week and the next week's is another; the newest weeks only.</summary>
+	public async Task SaveSpotlightPick(string week, string id)
+	{
+		await _lock.WaitAsync().ConfigureAwait(false);
+		try
+		{
+			var state = await Load().ConfigureAwait(false);
+			if (state.Spotlight.TryGetValue(week, out var was) && was == id)
+			{
+				return;
+			}
+
+			state.Spotlight[week] = id;
+			foreach (var old in state.Spotlight.Keys.OrderByDescending(x => x, StringComparer.Ordinal).Skip(SpotlightWeeksKept).ToList())
+			{
+				state.Spotlight.Remove(old);
+			}
+
+			await Save(state, changed: false).ConfigureAwait(false);
+		}
+		finally
+		{
+			_lock.Release();
+		}
+	}
+	// end 1.8
 
 	/// <summary>The saved filters, as collections (their titles are found when one is opened).</summary>
 	public async Task<IReadOnlyList<SmartCollection>> SavedAsync()
@@ -204,16 +267,41 @@ public sealed class SmartCollectionStore
 		}
 	}
 
-	public async Task SetFavorite(string collectionId, bool favorite)
+	/// <param name="title">1.8 (BH-180-m1): a Nixie collection's title, kept with its pin (Saved names it once it is no longer made).</param>
+	public async Task SetFavorite(string collectionId, bool favorite, string? title = null)
 	{
 		await _lock.WaitAsync().ConfigureAwait(false);
 		try
 		{
 			var state = await Load().ConfigureAwait(false);
-			if (favorite ? state.Favorites.Add(collectionId) : state.Favorites.Remove(collectionId))
+			var titled = favorite && title is { Length: > 0 } && (!state.PinnedTitles.TryGetValue(collectionId, out var was) || was != title);
+			if (favorite && titled)
+			{
+				state.PinnedTitles[collectionId] = title!;
+			}
+			else if (!favorite)
+			{
+				state.PinnedTitles.Remove(collectionId);
+			}
+
+			if ((favorite ? state.Favorites.Add(collectionId) : state.Favorites.Remove(collectionId)) || titled)
 			{
 				await Save(state).ConfigureAwait(false);
 			}
+		}
+		finally
+		{
+			_lock.Release();
+		}
+	}
+
+	/// <summary>1.8 (BH-180-m1): the titles kept with the pins (a pin made before 1.8's fix has none).</summary>
+	public async Task<IReadOnlyDictionary<string, string>> PinnedTitlesAsync()
+	{
+		await _lock.WaitAsync().ConfigureAwait(false);
+		try
+		{
+			return new Dictionary<string, string>((await Load().ConfigureAwait(false)).PinnedTitles, StringComparer.Ordinal);
 		}
 		finally
 		{

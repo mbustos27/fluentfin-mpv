@@ -15,7 +15,7 @@ the terms re-check of 2026-11-21):
   * {"mode"}: "ok"; "429" (a bare 429: no Retry-After, no body, as Trakt's security systems send); "refuse" (403);
     "error" (502); "hang" (no answer for 30 s).
 - The lists hold titles of the fake library (with its ProviderIds: Tmdb, Imdb, and Tvdb for shows) among titles it doesn't
-  have, so the app's "Trending in your library" row and the Collections page's Trakt rows have something to
+  have, so the app's "Trending on this server" row and the Collections page's Trakt rows have something to
   match, and so do the contrast cases.
 - Reached through outside.py (/__harness/outside/api.trakt.tv/<path>); POST /__harness/outside/config
   {"api.trakt.tv": {"mode", "counts", "sizes": {"movies/popular": n, ...}, "reset"}} configures it. Its config() names

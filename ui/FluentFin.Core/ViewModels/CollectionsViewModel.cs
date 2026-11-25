@@ -88,8 +88,15 @@ public sealed partial class CollectionTile : ObservableObject
 		return new CollectionTile(shownName, detail, spoken, set, null, [set]);
 	}
 
-	public static CollectionTile Made(SmartCollection collection) =>
-		new(collection.Title, collection.CountText, collection.AutomationName, null, collection, [.. collection.Cover.Select(x => x.ToDto())]);
+	public static CollectionTile Made(SmartCollection collection) => collection.Ended
+		? new(collection.Title, EndedText, $"{collection.Title}, made by Nixie, {EndedSpoken}", null, collection, []) // 1.8 (BH-180-m1)
+		: new(collection.Title, collection.CountText, collection.AutomationName, null, collection, [.. collection.Cover.Select(x => x.ToDto())]);
+
+	/// <summary>1.8 (BH-180-m1): what a pinned collection Nixie no longer makes says under its title in Saved.</summary>
+	public const string EndedText = "Ended";
+
+	/// <summary>1.8 (BH-180-m1): and what Narrator says of it.</summary>
+	public const string EndedSpoken = "ended: Nixie no longer makes it, unpin it to take it out of Saved";
 
 	/// <summary>"6 films · 3 left", "6 films · all watched", "6 films"; "" when the server gave no count.</summary>
 	public static string BoxSetDetail(int? count, int? unplayed)
@@ -121,7 +128,10 @@ public sealed class CollectionsRow(string title, CollectionsSection section, Sma
 
 	public SmartCollectionKind? Kind { get; } = kind;
 
-	public IReadOnlyList<CollectionTile> Tiles { get; } = tiles;
+	// 1.8 (BH-180-M1): observable, so a row takes a newer one's tiles in place (Take) and the keyboard stays on its tile
+	private readonly ObservableCollection<CollectionTile> _tiles = [.. tiles];
+
+	public IReadOnlyList<CollectionTile> Tiles => _tiles;
 
 	public bool HasSeeAll { get; } = hasSeeAll;
 
@@ -138,6 +148,56 @@ public sealed class CollectionsRow(string title, CollectionsSection section, Sma
 			Tiles[i].Update(newer.Tiles[i]);
 		}
 	}
+
+	/// <summary>
+	/// 1.8 (BH-180-M1): the same row (its title, section, kind, heading and See all) whose tiles changed: This week when the
+	/// people come in, a first read's rows growing. In place, by what each tile is: the tile of a collection (or set) still in
+	/// it stays (its contents the newer one's) and moves to its place, a new one is put in, a gone one taken out. The keyboard
+	/// stays on its tile; one whose tile went goes to its neighbour (ShelfRow). Making the row again sent it to Back.
+	/// </summary>
+	internal void Take(CollectionsRow newer)
+	{
+		for (var i = 0; i < newer.Tiles.Count; i++)
+		{
+			var key = KeyOf(newer.Tiles[i]);
+			var at = -1;
+			for (var k = i; k < _tiles.Count && at < 0; k++)
+			{
+				at = KeyOf(_tiles[k]) == key ? k : -1;
+			}
+
+			if (at < 0)
+			{
+				_tiles.Insert(i, newer.Tiles[i]);
+				continue;
+			}
+
+			if (at != i)
+			{
+				_tiles.Move(at, i);
+			}
+
+			if (_tiles[i].Title != newer.Tiles[i].Title)
+			{
+				_tiles[i] = newer.Tiles[i]; // renamed (TMDb's franchise names came): replaced where it is (ShelfRow keeps the keyboard on it)
+			}
+			else
+			{
+				_tiles[i].Update(newer.Tiles[i]);
+			}
+		}
+
+		while (_tiles.Count > newer.Tiles.Count)
+		{
+			_tiles.RemoveAt(_tiles.Count - 1);
+		}
+	}
+
+	/// <summary>Whether <paramref name="newer"/> is this row (made again): its tiles may differ (<see cref="Take"/>).</summary>
+	internal bool IsRow(CollectionsRow newer) => Title == newer.Title && Section == newer.Section && Kind == newer.Kind && Heading == newer.Heading && HasSeeAll == newer.HasSeeAll;
+
+	// a tile is its collection (a Nixie one's id), or the server's set, or its title
+	private static string KeyOf(CollectionTile tile) => tile.Nixie?.Id ?? (tile.Set?.Id is { } id ? $"set:{id:N}" : $"title:{tile.Title}");
 }
 
 /// <summary>
@@ -175,6 +235,53 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	public partial IReadOnlyList<CollectionTile> GridTiles { get; private set; } = [];
 
 	public bool IsSeeAll => Place.SeeAll;
+
+	// ---- 1.8: the grid's reverse toggle (stream s's sort-direction setting) ----------------------------------------------------
+
+	/// <summary>
+	/// 1.8 (the owner, 2026-11-23: "we should be able to reverse the direction of the sort in collections"): See all's grid runs
+	/// the other way. Kept like Order and Hide watched: for the session, per user and grid (<see cref="SortDirections"/>), so Back
+	/// (the kept view model), Forward and R (a new one, which recalls it) show it the same; a grid opened anew runs as its order does.
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(GridDirectionName), nameof(GridDirectionTip), nameof(GridDirectionGlyph), nameof(GridDirectionWords))]
+	public partial bool GridReversed { get; private set; }
+
+	/// <summary>What the grid's order runs by: names A to Z (the server's sets, playlists, franchises), else the list's own sequence.</summary>
+	public OrderRuns GridRuns => Place.Section switch
+	{
+		CollectionsSection.Server or CollectionsSection.Playlists => OrderRuns.AToZ,
+		CollectionsSection.MadeByNixie when Place.Kind == SmartCollectionKind.Franchise => OrderRuns.AToZ,
+		_ => OrderRuns.FirstToLast,
+	};
+
+	/// <summary>The direction button's Narrator name: "A to Z, switch to Z to A".</summary>
+	public string GridDirectionName => SortDirections.ButtonName(GridRuns, GridReversed);
+
+	/// <summary>Its tooltip: "Switch to Z to A".</summary>
+	public string GridDirectionTip => SortDirections.ToolTip(GridRuns, GridReversed);
+
+	/// <summary>Its arrow, the way the tiles run (the Library's glyphs, one width: no jump when it flips).</summary>
+	public string GridDirectionGlyph => SortDirections.Glyph(GridRuns, GridReversed);
+
+	/// <summary>The words beside it: "A to Z", "Z to A", "First to last", "Last to first".</summary>
+	public string GridDirectionWords => SortDirections.Words(GridRuns, GridReversed);
+
+	private string GridView => SortDirections.ForGrid(Place.Section, Place.Kind);
+
+	/// <summary>The direction button: the grid runs the other way, kept for this grid (the user's press only).</summary>
+	public void ReverseGrid()
+	{
+		if (!Place.SeeAll)
+		{
+			return;
+		}
+
+		GridReversed = !GridReversed;
+		SortDirections.Remember(JellyfinClient.UserId, GridView, GridReversed);
+		GridTiles = [.. GridTiles.Reverse()]; // the same tiles, the other way (no read, no build)
+	}
+	// end 1.8
 
 	/// <summary>The index is being read for the first time: "Made by Nixie" says so.</summary>
 	[ObservableProperty]
@@ -245,7 +352,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		try
 		{
 			var off = CollectionSettings.KindsOff(settings);
-			return SmartCollectionKinds.PageOrder.Concat(SmartCollectionKinds.Picks).Where(x => x != SmartCollectionKind.Award).All(off.Contains);
+			return SmartCollectionKinds.Switched.All(off.Contains); // 1.8 (BH-180-M2): 1.8's kinds too
 		}
 		catch (Exception)
 		{
@@ -348,6 +455,9 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 			}
 		}
 
+		// 1.8 (P1-1): This week's lineup is of a day (its daily picks turn, its themes each ISO week): shown again on another day,
+		// the rows are made again
+		changed |= _lineupDate is { } made && SmartCollectionCatalog.Now(_time).Date != made;
 		if (changed)
 		{
 			try
@@ -385,6 +495,13 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		_ui = SynchronizationContext.Current;
 		Place = parameter as CollectionsPlace ?? new CollectionsPlace(parameter is CollectionsSection section ? section : CollectionsSection.All);
 		OnPropertyChanged(nameof(IsSeeAll));
+		// 1.8: this grid's direction as the user left it this session (R makes a new page: it reads it back here)
+		GridReversed = Place.SeeAll && SortDirections.Recall(JellyfinClient.UserId, GridView) == true;
+		OnPropertyChanged(nameof(GridRuns));
+		OnPropertyChanged(nameof(GridDirectionName));
+		OnPropertyChanged(nameof(GridDirectionTip));
+		OnPropertyChanged(nameof(GridDirectionGlyph));
+		OnPropertyChanged(nameof(GridDirectionWords));
 		Title = Place.SeeAll ? Place.Kind is { } kind ? SmartCollectionKinds.Plural(kind) : SectionTitle(Place.Section) : "Collections";
 		index.Changed -= OnIndexChanged;
 		index.Changed += OnIndexChanged;
@@ -612,23 +729,90 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	}
 
 	/// <summary>Every collection Nixie makes of this index, less the franchises the admin boxed and the kinds turned off.</summary>
-	public async Task<IReadOnlyList<SmartCollection>> MadeByNixie(IndexSnapshot snapshot) => Unboxed(await Build(snapshot));
+	public async Task<IReadOnlyList<SmartCollection>> MadeByNixie(IndexSnapshot snapshot) => Unboxed((await Build(snapshot, waitForLater: true)).All);
+
+	/// <summary>1.8 (P1-1): This week's row's title: the week's lineup (<see cref="CollectionLineup"/>), ten tiles at most.</summary>
+	public const string ThisWeekTitle = "This week";
+
+	/// <summary>1.8: the collections made after the first rows (stream s's <see cref="SmartCollectionCatalog.BuildLaterAsync"/>); tests give their own.</summary>
+	internal Func<IndexSnapshot, DateTimeOffset, IReadOnlySet<SmartCollectionKind>, Task<IReadOnlyList<SmartCollection>>> LaterBuild { get; set; } =
+		(index, now, kindsOff) => SmartCollectionCatalog.BuildLaterAsync(index, now, kindsOff);
+
+	// 1.8 (P1-1): the local date of the lineup This week shows (null: none yet)
+	private DateTime? _lineupDate;
+
+	// 1.8 (P1-1): what the page makes of an index: every collection (its own rows) and the week's lineup (This week)
+	private sealed record Built(IReadOnlyList<SmartCollection> All, Lineup Lineup)
+	{
+		public static Built None { get; } = new([], Lineup.Empty);
+
+		/// <summary>The re-review: the week's Spotlight still being made (the page shows it after: ShowSpotlightLater).</summary>
+		public Task<IReadOnlyList<SmartCollection>>? Later { get; init; }
+	}
 
 	// 1.7.1: every collection of this index, the boxed franchises too (Unboxed leaves them out), so it can be made before the
-	// server's sets are in
-	private async Task<IReadOnlyList<SmartCollection>> Build(IndexSnapshot snapshot)
+	// server's sets are in. 1.8 (P1-1): and This week's lineup, made with them off the UI thread, of the same candidates as
+	// Home's (Home's rows are its first ones)
+	/// <param name="waitForLater">The Spotlight waited for (a count: the Libraries page's), not shown after (the page's own rows).</param>
+	private async Task<Built> Build(IndexSnapshot snapshot, bool waitForLater = false)
 	{
-		var made = await SmartCollectionCatalog.BuildAllAsync(snapshot, SmartCollectionCatalog.Now(_time), null, CollectionSettings.KindsOff(settings)); // 1.6.1 (BH-160-m1): the local date
-		made = [.. made.Where(x => SmartCollectionCatalog.Published.Contains(x.Kind))]; // 1.7.3 (P0-3): the published kinds only
 		// 1.7 trending: the public lists' collections (Trending, Popular, Most anticipated, Box office), matched on this PC.
-		// 1.7.3: in a catch of their own, as each kind's builder is: a throw there took every Made by Nixie row away
+		// 1.7.3: in a catch of their own, as each kind's builder is: a throw there took every Made by Nixie row away. 1.8: and
+		// the merged trending row, the lineup's Trending candidate
+		IReadOnlyList<SmartCollection> lists = [];
+		SmartCollection? trendingRow = null;
 		if (Outside.TrendingServices.Collections is { } trending)
 		{
-			made = [.. made, .. await TrendingMatch.Safely(() => trending.For(snapshot), [], _log)];
+			lists = await TrendingMatch.Safely(() => trending.For(snapshot), [], _log);
+			trendingRow = await TrendingMatch.Safely(() => trending.HomeRowFor(snapshot), null, _log);
 		}
 		// end 1.7 trending
-		return made;
+		IReadOnlyList<SmartCollection> extra = trendingRow is null ? [] : [trendingRow];
+		var kindsOff = CollectionSettings.KindsOff(settings);
+		// 1.8 (stream s's Major 2): the week's Spotlight is made apart (BuildLaterAsync, once an index), beside the build. The
+		// re-review: the page doesn't wait for it: in when it is made already, else the page shows and This week takes it after
+		var later = LaterBuild(snapshot, SmartCollectionCatalog.Now(_time), kindsOff);
+		var made = await CollectionLineup.BuildAsync(snapshot, SmartCollectionCatalog.Now(_time), null, kindsOff, // 1.6.1 (BH-160-m1): the local date
+			extra);
+		IReadOnlyList<SmartCollection> spotlight = [];
+		Task<IReadOnlyList<SmartCollection>>? pending = null;
+		if (later.IsCompleted || waitForLater)
+		{
+			spotlight = await later;
+		}
+		else
+		{
+			pending = later;
+		}
+
+		if (spotlight.Count > 0)
+		{
+			// one of the page's collections, as when it was a published builder's (the Libraries page's "Made by Nixie · N")
+			made = await CollectionLineup.AssembleAsync(snapshot, [.. made.All, .. spotlight], extra, SmartCollectionCatalog.Now(_time), fallback: made);
+		}
+
+		return new Built([.. made.All.Where(x => SmartCollectionCatalog.Published.Contains(x.Kind)), .. lists], made.Lineup) { Later = pending }; // 1.7.3 (P0-3): the published kinds only
 	}
+
+	// 1.8 (the re-review): the Spotlight made after the page showed: the page again (This week with it; its later build is in, so
+	// Build takes it at once) while it shows that index. Called on the page's thread, after its show
+	private async Task ShowSpotlightLater(IndexSnapshot snapshot, Task<IReadOnlyList<SmartCollection>> later)
+	{
+		try
+		{
+			if ((await later).Count > 0 && ReferenceEquals(_latest, snapshot))
+			{
+				await ShowAsync(snapshot);
+			}
+		}
+		catch (Exception)
+		{
+			// the page keeps what it shows
+		}
+	}
+
+	/// <summary>Tests: the week's Spotlight shown after the page (done when there is none).</summary>
+	internal Task SpotlightLater { get; private set; } = Task.CompletedTask;
 
 	// 1.7.3 (the owner's answer 2): the user's saved filters and pins, once the pins and filters of the kinds that went
 	// (directors, actors, studios, networks) are taken out; a filter of theirs whose removal failed isn't listed either
@@ -643,16 +827,31 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	// a genre mix, a country), each made by its id; none when there are no such pins. Off the UI thread.
 	private async Task<IReadOnlyList<SmartCollection>> PinnedOnDemand(IndexSnapshot snapshot, IReadOnlyList<SmartCollection> made)
 	{
-		var ids = _favorites.Where(NixiePresets.IsStripOnly).Except(made.Select(x => x.Id)).ToList();
+		// 1.8 (BH-180-m1): every pin of a kind Nixie makes that this build didn't (last week's Spotlight, a pick from what the
+		// user watched that moved on), not the presets strip's kinds alone: they went from Saved without a word
+		var titles = await store.PinnedTitlesAsync();
+		foreach (var pinned in made.Where(x => _favorites.Contains(x.Id) && titles.GetValueOrDefault(x.Id) != x.Title))
+		{
+			await store.SetFavorite(pinned.Id, true, pinned.Title); // a pin made before this kept no title: named from now on
+		}
+
+		var ids = _favorites.Where(x => SmartCollectionCatalog.KindOf(x) is not null && !RetiredCollections.IsGone(x)).Except(made.Select(x => x.Id)).ToList();
 		if (ids.Count == 0)
 		{
 			return [];
 		}
 
 		var now = SmartCollectionCatalog.Now(_time);
-		// fix round (BH-173-M2): by its id, every title of its rule (a genre mix past the strip's twelve is still found)
-		return await Task.Run(() => (IReadOnlyList<SmartCollection>)[.. ids.Select(id => SmartCollectionCatalog.Find(snapshot, id, now, whole: true)).OfType<SmartCollection>()]);
+		// fix round (BH-173-M2): by its id, every title of its rule (a genre mix past the strip's twelve is still found); the
+		// Spotlight's by its candidates (any week's person or studio). 1.8 (BH-180-m1): one not made at all stays, by its title,
+		// said to have ended (opened, it says so and offers to unpin), until the user unpins it
+		return await Task.Run(() => (IReadOnlyList<SmartCollection>)[.. ids.Select(id =>
+			SmartCollectionCatalog.Find(snapshot, id, now, whole: NixiePresets.IsStripOnly(id))
+			?? new SmartCollection(id, SmartCollectionCatalog.KindOf(id)!.Value, titles.GetValueOrDefault(id) ?? EndedTitle, "", false, []) { Ended = true })]);
 	}
+
+	/// <summary>1.8 (BH-180-m1): an ended pin's name when it was pinned before Nixie kept pins' titles.</summary>
+	public const string EndedTitle = "A pinned collection";
 
 	// 1.7.3: a throw's place for the log: its type and method, never its message (which could name a title)
 	private static string Where(Exception ex) => ex.TargetSite is { } site ? $"{site.DeclaringType?.Name}.{site.Name}" : "an unknown place";
@@ -669,7 +868,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 
 	// 1.7.1: the saved index's collections, made as soon as it is read from this PC; none without one. 1.7.2: none when they
 	// couldn't be made (the load awaits this beside the server's sets: a throw here failed the whole page)
-	private async Task<IReadOnlyList<SmartCollection>?> BuildSoon(Task<IndexSnapshot?> known)
+	private async Task<Built?> BuildSoon(Task<IndexSnapshot?> known)
 	{
 		if (await known is not { } snapshot)
 		{
@@ -683,7 +882,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		catch (Exception ex)
 		{
 			MadeByNixieFailed(ex);
-			return [];
+			return Built.None;
 		}
 	}
 
@@ -743,7 +942,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	internal Func<IndexSnapshot, Task>? Making { get; init; }
 
 	// the collections are made off the UI thread (BuildAllAsync), then shown on it
-	private async Task ShowAsync(IndexSnapshot? snapshot, IReadOnlyList<SmartCollection>? built = null)
+	private async Task ShowAsync(IndexSnapshot? snapshot, Built? built = null)
 	{
 		var asked = Interlocked.Increment(ref _asked);
 		_latest = snapshot ?? _latest;
@@ -762,11 +961,16 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 
 			IReadOnlyList<SmartCollection> made = [];
 			IReadOnlyList<SmartCollection> pinned = [];
+			var lineup = Lineup.Empty; // 1.8 (P1-1)
+			Task<IReadOnlyList<SmartCollection>>? later = null; // the re-review
 			if (snapshot is not null)
 			{
 				try
 				{
-					made = Unboxed(built ?? await Build(snapshot));
+					var both = built ?? await Build(snapshot);
+					later = both.Later;
+					made = Unboxed(both.All);
+					lineup = both.Lineup;
 					pinned = await PinnedOnDemand(snapshot, made); // 1.7.3
 				}
 				catch (Exception ex) when (ex is not OperationCanceledException)
@@ -783,7 +987,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 				}
 
 				_shown = asked;
-				ShowLocked(made, pinned);
+				ShowLocked(made, pinned, lineup);
 				// 1.7.3 fix round (BH-173-m1): a whole index that made nothing says so (none of a first read's pages, nor a show
 				// without an index: a read that failed)
 				_nixieEmptyText = EveryKindOff() ? NixieOffText : NixieEmptyText;
@@ -802,6 +1006,11 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 						snapshot?.Reading is not null ? "first read, its pages so far" : _firstVisit ? "first read" : "the saved index");
 				}
 			}
+
+			if (later is not null && snapshot is not null)
+			{
+				SpotlightLater = ShowSpotlightLater(snapshot, later); // the re-review: the page first, the Spotlight after
+			}
 		}
 		finally
 		{
@@ -810,13 +1019,19 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	}
 
 	/// <param name="pinnedOnDemand">1.7.3: the pinned collections of kinds no longer published (Saved shows them).</param>
-	private void ShowLocked(IReadOnlyList<SmartCollection> made, IReadOnlyList<SmartCollection> pinnedOnDemand)
+	/// <param name="lineup">1.8 (P1-1): the week's lineup: This week's row, the first of Made by Nixie.</param>
+	private void ShowLocked(IReadOnlyList<SmartCollection> made, IReadOnlyList<SmartCollection> pinnedOnDemand, Lineup lineup)
 	{
 		MadeByNixieCount = made.Count;
 		var rows = new List<CollectionsRow>();
 		var names = CollectionNames.DisplayAll(_boxSets);
 		var server = _boxSets.Select((x, i) => CollectionTile.Server(x, names[i])).ToList();
 		var playlists = _playlists.Select(x => CollectionTile.Server(x, x.Name ?? "")).ToList();
+		// 1.8 (P1-1): a collection This week holds is the lineup's everywhere on the page (its titles turned for the day or best
+		// first: one mosaic for one collection, in This week and in its own row)
+		_lineupDate = lineup == Lineup.Empty ? _lineupDate : lineup.Day.Date;
+		var chosen = lineup.Collections.ToDictionary(x => x.Id);
+		made = [.. made.Select(x => chosen.GetValueOrDefault(x.Id) ?? x)];
 		var nixie = made.Select(CollectionTile.Made).ToList();
 		var pinned = made.Where(x => _favorites.Contains(x.Id)).Concat(pinnedOnDemand).Select(CollectionTile.Made);
 		var saved = _saved.Select(CollectionTile.Made).Concat(pinned).ToList();
@@ -831,6 +1046,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 				_ when Place.Kind is { } kind => [.. nixie.Where(x => x.Nixie!.Kind == kind)],
 				_ => nixie,
 			};
+			grid = [.. SortDirections.Apply(grid, GridReversed)]; // 1.8: the grid's direction (its reverse toggle)
 			// 1.7.1 (review M1): the same tiles take the newer contents in place (the keyboard stays on its tile)
 			if (grid.Count == GridTiles.Count && grid.Select(t => t.Title).SequenceEqual(GridTiles.Select(t => t.Title)))
 			{
@@ -860,6 +1076,15 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		Add(SectionTitle(CollectionsSection.Server), CollectionsSection.Server, null, server);
 		Add(SectionTitle(CollectionsSection.Playlists), CollectionsSection.Playlists, null, playlists);
 		var heading = "Made by Nixie";
+		// 1.8 (P1-1): This week first: the week's lineup (ten at most, best first), Home's rows among them. Never a See all: it
+		// is the whole lineup
+		var week = lineup.Collections.Select(CollectionTile.Made).ToList();
+		if (week.Count > 0)
+		{
+			Add(ThisWeekTitle, CollectionsSection.MadeByNixie, null, week, heading);
+			heading = "";
+		}
+
 		var picks = nixie.Where(x => SmartCollectionKinds.Picks.Contains(x.Nixie!.Kind)).ToList();
 		if (picks.Count > 0)
 		{
@@ -894,26 +1119,29 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		// 1.7.1: row by row: a row that is the same stays (with its tiles, and the keyboard on one of them), a new or changed
 		// one goes in its place. A first read's pages, then its people pass, add rows while the page shows; making them all
 		// again sent the keyboard to Back
-		static bool Same(CollectionsRow a, CollectionsRow b) => a.Title == b.Title && a.HasSeeAll == b.HasSeeAll && a.Heading == b.Heading
-			&& a.Tiles.Select(t => t.Title).SequenceEqual(b.Tiles.Select(t => t.Title));
+		// 1.8 (BH-180-M1): the same row is its title, section, kind, heading and See all, whatever its tiles: it stays and takes
+		// the newer tiles in place (CollectionsRow.Take). This week changes whenever the lineup does (the people step, the day's
+		// read, the Spotlight after the page), and a row made again for it sent the keyboard on its tile to Back
 		for (var i = 0; i < rows.Count; i++)
 		{
-			if (i < Rows.Count && Same(Rows[i], rows[i]))
+			if (i < Rows.Count && Rows[i].IsRow(rows[i]))
 			{
+				Rows[i].Take(rows[i]);
 				continue;
 			}
 
 			var later = -1;
 			for (var k = i + 1; k < Rows.Count && later < 0; k++)
 			{
-				later = Same(Rows[k], rows[i]) ? k : -1;
+				later = Rows[k].IsRow(rows[i]) ? k : -1;
 			}
 
 			if (later >= 0)
 			{
 				Rows.Move(later, i);
+				Rows[i].Take(rows[i]);
 			}
-			else if (i < Rows.Count && !rows.Skip(i + 1).Any(r => Same(Rows[i], r)))
+			else if (i < Rows.Count && !rows.Skip(i + 1).Any(r => Rows[i].IsRow(r)))
 			{
 				Rows[i] = rows[i];
 			}
@@ -926,16 +1154,6 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		while (Rows.Count > rows.Count)
 		{
 			Rows.RemoveAt(Rows.Count - 1);
-		}
-
-		// 1.7.1 (review M1): a row that stayed takes the newer contents of its tiles (a first read's "Highly rated" kept its first
-		// page's 80 films through the whole read, in its count and when opened)
-		for (var i = 0; i < rows.Count; i++)
-		{
-			if (!ReferenceEquals(Rows[i], rows[i]))
-			{
-				Rows[i].Update(rows[i]);
-			}
 		}
 
 		FocusRow = Place.Section == CollectionsSection.All ? Rows.FirstOrDefault() : Rows.FirstOrDefault(x => x.Section == Place.Section) ?? Rows.FirstOrDefault();

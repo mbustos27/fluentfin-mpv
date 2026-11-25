@@ -131,6 +131,75 @@ public sealed class RowPagingTests
 	public void AfterACardLeaves_TheFocusStaysInTheRow(int focused, int removed, int count, int expected) =>
 		Assert.Equal(expected, RowPaging.FocusAfterRemoval(focused, removed, count));
 
+	// Nixie 1.8 (the re-review): a card replaced where it is (Home's Made by Nixie row taking a new lineup's collection in place)
+	[Theory]
+	[InlineData(2, 2, 5, 2)]  // the focused card replaced: the card in its place
+	[InlineData(1, 3, 5, -1)] // another one replaced: the focus stays where it is
+	[InlineData(-1, 0, 5, -1)] // no card of the row remembered
+	public void AfterACardIsReplaced_TheFocusGoesToTheCardInItsPlace(int focused, int replaced, int count, int expected) =>
+		Assert.Equal(expected, RowPaging.FocusAfterReplace(focused, replaced, count));
+
+	// Nixie 1.8 (BH-180-M1): a row taking its newer tiles in place (This week when the people come in): the remembered card
+	// is the same card at its new place
+	[Theory]
+	[InlineData(2, 0, 1, 3)]   // one put in before it: one later
+	[InlineData(2, 2, 2, 4)]   // two put in at its place: it is pushed on
+	[InlineData(2, 3, 1, 2)]   // one put in after it: where it was
+	[InlineData(-1, 0, 1, -1)] // none remembered
+	public void AfterCardsArePutIn_TheRememberedCardIsTheSameCard(int remembered, int at, int added, int expected) =>
+		Assert.Equal(expected, RowPaging.IndexAfterInsert(remembered, at, added));
+
+	[Theory]
+	[InlineData(3, 3, 0, 0)] // it moved: its new place
+	[InlineData(3, 0, 5, 2)] // one before it moved past it: one nearer
+	[InlineData(3, 5, 1, 4)] // one after it moved before it: one later
+	[InlineData(3, 4, 6, 3)] // one after it moved further: where it was
+	public void AfterACardMoves_TheRememberedCardIsTheSameCard(int remembered, int from, int to, int expected) =>
+		Assert.Equal(expected, RowPaging.IndexAfterMove(remembered, from, to));
+
+	[Fact]
+	public void ARowTakingItsTilesInPlace_KeepsTheKeyboardOnItsCard()
+	{
+		// ShelfRow follows the remembered card through cards put in and moved (BH-180-M1), and a moved card with the keyboard
+		// keeps it
+		var row = File.ReadAllText(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "Controls", "ShelfRow.xaml.cs")));
+		var changed = row[row.IndexOf("private void Source_CollectionChanged", StringComparison.Ordinal)..];
+		changed = changed[..changed.IndexOf("\n\t}", StringComparison.Ordinal)];
+		Assert.Contains("_lastIndex = RowPaging.IndexAfterInsert(_lastIndex, e.NewStartingIndex, e.NewItems?.Count ?? 1);", changed, StringComparison.Ordinal);
+		Assert.Contains("_lastIndex = RowPaging.IndexAfterMove(_lastIndex, e.OldStartingIndex, e.NewStartingIndex);", changed, StringComparison.Ordinal);
+		Assert.Contains("Refocus(at, _lastIndex, \"a moved card's focus\");", changed, StringComparison.Ordinal);
+		// the Collections page's rows: a ShelfRow over the row's tiles (an observable list since 1.8)
+		var page = File.ReadAllText(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "Views", "CollectionsPage.xaml")));
+		var template = page[page.IndexOf("x:DataType=\"vm:CollectionsRow\"", StringComparison.Ordinal)..];
+		Assert.Contains("ItemsSource=\"{x:Bind Tiles}\"", template[..template.IndexOf("</DataTemplate>", StringComparison.Ordinal)], StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public void ARowsReplacedCard_HandsTheKeyboardOn_AndHomesNixieRowsTakeANewCollectionInPlace()
+	{
+		// ShelfRow: a Replace of its items, like a Remove, keeps the keyboard in the row (RefocusReplaced, after the repeater
+		// has made the new card)
+		var row = File.ReadAllText(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "Controls", "ShelfRow.xaml.cs")));
+		var changed = row[row.IndexOf("private void Source_CollectionChanged", StringComparison.Ordinal)..];
+		changed = changed[..changed.IndexOf("\n\t}", StringComparison.Ordinal)];
+		Assert.Contains("RefocusReplaced(root, e.OldStartingIndex);", changed, StringComparison.Ordinal);
+		var refocus = row[row.IndexOf("private void RefocusReplaced", StringComparison.Ordinal)..];
+		Assert.Contains("RowPaging.FocusAfterReplace(_lastIndex, replaced, Count)", refocus, StringComparison.Ordinal);
+		Assert.Contains("FocusIndex(index, state);", refocus, StringComparison.Ordinal);
+
+		// every theme's Home binds a Nixie row's words one way: the row stays (its cards, the keyboard), its collection changes
+		foreach (var page in new[] { "Views/HomePage.xaml", "Themes/Cinematic/Views/CinematicHomePage.xaml", "Themes/DriveIn/Views/DriveInHomePage.xaml", "Themes/Editorial/Views/EditorialHomePage.xaml" })
+		{
+			var xaml = File.ReadAllText(AppVersionTests.FindUp(Path.Combine(["ui", "FluentFin", .. page.Split('/')])));
+			var template = xaml[xaml.IndexOf("NixieHomeRowViewModel", StringComparison.Ordinal)..];
+			template = template[..template.IndexOf("</DataTemplate>", StringComparison.Ordinal)];
+			Assert.DoesNotContain("{x:Bind Title}", template, StringComparison.Ordinal);
+			Assert.Contains("{x:Bind Title, Mode=OneWay}", template, StringComparison.Ordinal);
+			Assert.DoesNotContain("Collection)}", template, StringComparison.Ordinal); // a function of the collection, one way too
+			Assert.Contains("{x:Bind Items, Mode=OneWay}", template, StringComparison.Ordinal);
+		}
+	}
+
 	// ---- Nixie 1.7.4 (the rows stream): a season's episodes past the window's edge could not be reached ----------------
 
 	// the plain wheel over a row: the page's while the page can move that way, the row's when it can't

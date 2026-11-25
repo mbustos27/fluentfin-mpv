@@ -131,6 +131,36 @@ public sealed record BuildContext(IndexSnapshot Index, DateTimeOffset Now, IRead
 
 	/// <summary>1.7.3 (P0-1): what each builder counted: its candidates, those past its floor, those past its cap.</summary>
 	public BuildGates Gates { get; init; } = new();
+
+	// 1.8 (P1-4, stream t): the award facts the tiles' badges say, made once a context (as the matcher)
+	private (CanonicalTitles For, global::FluentFin.Core.Outside.OutsideListsSnapshot Outside, AwardFacts Facts)? _awards;
+
+	/// <summary>
+	/// 1.8 (P1-4): the titles' award facts (Wikidata's award lists, matched to <see cref="Titles"/>); empty while those lists
+	/// are off. <see cref="Make.Of(BuildContext, string, SmartCollectionKind, string, ReasonLine, bool, IReadOnlyList{IndexEntry}, string?, string?)"/>
+	/// makes each collection's badges of them.
+	/// </summary>
+	public AwardFacts Awards
+	{
+		get
+		{
+			if (!Outside.Lists.Any(x => x.Kind == global::FluentFin.Core.Outside.OutsideListKind.Award))
+			{
+				return AwardFacts.Empty;
+			}
+
+			var titles = Titles;
+			if (_awards is { } made && ReferenceEquals(made.For, titles) && ReferenceEquals(made.Outside, Outside))
+			{
+				return made.Facts;
+			}
+
+			var facts = AwardFacts.Of(Outside.Lists, Matcher);
+			_awards = (titles, Outside, facts);
+			return facts;
+		}
+	}
+	// end 1.8
 }
 
 /// <summary>
@@ -204,6 +234,24 @@ internal static class Make
 			Cover = [.. items.Where(x => x.PrimaryTag is not null).Concat(items.Where(x => x.PrimaryTag is null)).Take(4)],
 			Only = items.Select(x => x.Kind).Distinct().Count() == 1 ? items[0].Kind : null,
 		};
+
+	// 1.8 (P1-4, stream t): the shared way a builder makes a Made by Nixie collection: its title, its reason line, and the
+	// badges of its titles' award facts. Streams a (anchors) and s (Spotlight) make theirs through this too
+	/// <summary>
+	/// 1.8 (P1-4): a Made by Nixie collection of these titles, in this order: its title (<see cref="NixieTitles"/>'s words for
+	/// the 1.8 slots), its reason line (one or two facts and a count, <see cref="ReasonLine"/>), the award badges of its titles
+	/// (<see cref="BuildContext.Awards"/>; <paramref name="award"/>: the award a collection of an award is of, whose badge it
+	/// doesn't show), and its cover. <paramref name="why"/>: the Collection page's line under its summary; null, the reason's
+	/// facts.
+	/// </summary>
+	public static SmartCollection Of(BuildContext context, string id, SmartCollectionKind kind, string title, ReasonLine reason, bool hasOwnOrder,
+		IReadOnlyList<IndexEntry> items, string? why = null, string? award = null) =>
+		Of(id, kind, title, why ?? reason.FactsText, hasOwnOrder, items) with
+		{
+			Reason = reason,
+			Badges = context.Awards.BadgesFor(items.Select(x => x.Id), award),
+		};
+	// end 1.8
 
 	/// <summary>By name, the way a library lists them.</summary>
 	public static List<IndexEntry> ByName(IEnumerable<IndexEntry> items) =>

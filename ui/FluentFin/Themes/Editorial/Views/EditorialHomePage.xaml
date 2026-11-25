@@ -20,6 +20,7 @@
     xmlns:media="using:CommunityToolkit.WinUI.Media"
     xmlns:root="using:FluentFin"
     xmlns:ui="using:CommunityToolkit.WinUI"
+    xmlns:sc="using:FluentFin.Core.SmartCollections"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
     Background="{ThemeResource EditorialGroundBrush}"
@@ -487,15 +488,16 @@
                 <ItemsControl x:Name="NixieShelves" IsTabStop="False" ItemsSource="{x:Bind ViewModel.NixieRows}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:NixieHomeRowViewModel">
+                            <!--  1.8 (P1-4): the caption beside the title: "Made by Nixie", the reason line and the award badges  -->
                             <Grid Margin="0,22,0,0">
                                 <ec:EditorialShelf
-                                    Caption="{x:Bind Kicker}"
+                                    Caption="{x:Bind sc:NixieTileWords.RowSubtitle(Kicker, Collection), Mode=OneWay}"
                                     HasSeeAll="True"
                                     IsNarrow="{Binding ElementName=Page, Path=IsNarrow}"
                                     ItemsSource="{x:Bind Items, Mode=OneWay}"
                                     SeeAll="NixieSeeAll"
                                     Tag="{x:Bind}"
-                                    Title="{x:Bind Title}" />
+                                    Title="{x:Bind Title, Mode=OneWay}" />
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

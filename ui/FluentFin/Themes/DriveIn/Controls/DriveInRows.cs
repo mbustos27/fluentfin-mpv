@@ -92,6 +92,9 @@ public static class DriveInRows
 			VerticalAlignment = VerticalAlignment.Center,
 			FontSize = 14,
 			Foreground = (Brush)Application.Current.Resources["GlassTextSecondaryBrush"],
+			// 1.8 (P1-4): a Made by Nixie row's line says its reason too: one line, cut short at the header's end
+			TextWrapping = TextWrapping.NoWrap,
+			TextTrimming = TextTrimming.CharacterEllipsis,
 		};
 		row.SetValue(DressProperty, new RowDress(sign, subtitle));
 		Place(row);
@@ -108,7 +111,7 @@ public static class DriveInRows
 			return;
 		}
 
-		if (dress.Sign.Parent is StackPanel { Parent: Grid } placed && ReferenceEquals(placed.Parent, header))
+		if (dress.Sign.Parent is Grid { Parent: Grid } placed && ReferenceEquals(placed.Parent, header))
 		{
 			title.Visibility = Visibility.Collapsed;
 			return;
@@ -116,8 +119,13 @@ public static class DriveInRows
 
 		Detach(dress.Sign);
 		Detach(dress.Subtitle);
-		var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18, VerticalAlignment = VerticalAlignment.Center };
+		// 1.8 (P1-4): the sign at its own width, the line in what is left (a horizontal stack gave it all it asked: a long
+		// line ran on under See all)
+		var line = new Grid { ColumnSpacing = 18, VerticalAlignment = VerticalAlignment.Center };
+		line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+		line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 		line.Children.Add(dress.Sign);
+		Grid.SetColumn(dress.Subtitle, 1);
 		line.Children.Add(dress.Subtitle);
 		title.Visibility = Visibility.Collapsed;
 		Grid.SetColumn(line, 0);

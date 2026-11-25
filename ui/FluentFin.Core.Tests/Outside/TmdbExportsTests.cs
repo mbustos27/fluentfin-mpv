@@ -247,10 +247,10 @@ public sealed class TmdbExportsTests
 
 		var mummy = Assert.Single(on, x => x.TmdbCollection == "1733");
 		Assert.Equal("The Mummy", mummy.Title);
-		Assert.Equal("Your films in TMDb's “The Mummy Collection”, in release order", mummy.Why);
+		Assert.Equal("Films in TMDb's “The Mummy Collection”, in release order", mummy.Why); // 1.8 (P1-4): no "Your"
 		Assert.Equal("Alien films", Assert.Single(on, x => x.TmdbCollection == "8091").Title); // TMDb's list has no name for it
 		Assert.Equal("The Mummy", Assert.Single(off, x => x.TmdbCollection == "1733").Title);
-		Assert.Equal("Your films that TMDb lists in one collection, in release order", Assert.Single(off, x => x.TmdbCollection == "1733").Why);
+		Assert.Equal("Films that TMDb lists in one collection, in release order", Assert.Single(off, x => x.TmdbCollection == "1733").Why);
 	}
 
 	[Theory]

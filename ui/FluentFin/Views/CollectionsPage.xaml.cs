@@ -373,4 +373,7 @@ public sealed partial class CollectionsPage : Page
 			ViewModel.SeeAll(row);
 		}
 	}
+
+	// 1.8: See all's direction button: the grid runs the other way (the button keeps the keyboard)
+	private void GridDirection_Click(object sender, RoutedEventArgs e) => ViewModel.ReverseGrid();
 }

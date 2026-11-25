@@ -118,13 +118,13 @@ public sealed class TrendingCollectionsTests
 
 		var row = TrendingBuilder.HomeRow(Library, lists)!;
 
-		Assert.Equal("Trending in your library", row.Title);
+		Assert.Equal("Trending on this server", row.Title);
 		Assert.Equal([Severance.Id, Dune.Id, Matrix.Id], row.ItemIds);
 		Assert.Equal("Trakt: watched right now · TMDb: this week", row.Why);
 		Assert.Null(row.Only);
 		Assert.Equal(3, row.Cover.Count);
-		Assert.Equal("Trending in your library", new NixieHomeRowViewModel(row).Title);
-		Assert.Equal("TRENDING IN YOUR LIBRARY", new NixieHomeRowViewModel(row).SignTitle);
+		Assert.Equal("Trending on this server", new NixieHomeRowViewModel(row).Title);
+		Assert.Equal("TRENDING ON THIS SERVER", new NixieHomeRowViewModel(row).SignTitle);
 
 		Assert.Null(TrendingBuilder.HomeRow(Library, TrendingSnapshot.Empty));
 		Assert.Null(TrendingBuilder.HomeRow(Library, new TrendingSnapshot([Read(OutsideSourceId.Trakt, TrendingList.Trending, ListedKind.Movie, T(1, ListedKind.Movie, tmdb: "1"))], 1)));

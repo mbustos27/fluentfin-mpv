@@ -32,6 +32,21 @@ public enum SmartCollectionKind
 	Anticipated = 102,
 	BoxOffice = 103,
 	// end 1.7 trending
+
+	// 1.8 (P1-2, P1-3; stream t's shared model): the anchored slots and the weekly Spotlight, numbered apart as the trending
+	// kinds are (Home's saved page keeps a kind by its number)
+	/// <summary>1.8: "Next in Mission: Impossible": the next film of a franchise the user has started (stream a).</summary>
+	NextIn = 200,
+
+	/// <summary>1.8: "More like Heat": titles like one the user finished (stream a; the report's "Because you watched").</summary>
+	MoreLike = 201,
+
+	/// <summary>1.8: "More from Denis Villeneuve": a person of a title the user finished (stream a).</summary>
+	MoreFrom = 202,
+
+	/// <summary>1.8: "Spotlight: Jean-Pierre Melville": the week's person or studio (stream s).</summary>
+	Spotlight = 203,
+	// end 1.8
 }
 
 /// <summary>
@@ -63,10 +78,42 @@ public sealed record SmartCollection(string Id, SmartCollectionKind Kind, string
 	/// <see cref="HasOwnOrder"/> alone means release order (a franchise).
 	/// </summary>
 	public bool InListOrder { get; init; }
+
+	/// <summary>
+	/// 1.8 (BH-180-m1): a pin Nixie no longer makes (last week's Spotlight, a pick from what the user watched that moved on): Saved
+	/// keeps it by its title, said to have ended (no titles), until the user unpins it.
+	/// </summary>
+	public bool Ended { get; init; }
 	// end 1.7 trending
 
 	/// <summary>"12 films", "3 shows", "8 titles".</summary>
 	public string CountText => SmartCollectionKinds.CountText(ItemIds.Count, Only);
+
+	// 1.8 (P1-4, stream t): the reason line and the award badges every Made by Nixie tile shows
+	/// <summary>
+	/// 1.8: the tile's and the Home row's reason line: one or two facts, then the count (and an end date): "TMDb keyword
+	/// “heist” · 14 titles, 12 unwatched". Builders set it through <c>Make.Of</c>. Null in a collection saved before 1.8
+	/// (Home's saved page) and in a saved filter: <see cref="ReasonText"/> says the count alone.
+	/// </summary>
+	public ReasonLine? Reason { get; init; }
+
+	/// <summary>1.8: the tile's award badges ("3 Best Picture winners"), at most <see cref="AwardFacts.MostBadges"/>; none without Wikidata's lists.</summary>
+	public IReadOnlyList<CollectionBadge> Badges { get; init; } = [];
+
+	/// <summary>1.8: the reason line as the tile shows it; the count alone (<see cref="CountText"/>) where there is none.</summary>
+	public string ReasonText => Reason?.Text ?? CountText;
+
+	/// <summary>1.8: the badges' words on one line, for Narrator ("" with none).</summary>
+	public string BadgesText => string.Join(", ", Badges.Select(x => x.Text));
+
+	/// <summary>
+	/// 1.8: a tile's Narrator name, what the tile shows in its order: "Heists, made by Nixie, keyword, TMDb keyword “heist”, 12
+	/// titles, 10 unwatched, 2 Best Picture winners". <see cref="AutomationName"/> stays the short one (a library's preset chip
+	/// shows the name alone).
+	/// </summary>
+	public string TileAutomationName =>
+		$"{Title}, made by Nixie, {SmartCollectionKinds.Singular(Kind).ToLowerInvariant()}, {Reason?.Spoken ?? CountText}{(Badges.Count > 0 ? ", " + BadgesText : "")}";
+	// end 1.8
 
 	/// <summary>Narrator: "Heists, made by Nixie, keyword, 12 films".</summary>
 	public string AutomationName => $"{Title}, made by Nixie, {SmartCollectionKinds.Singular(Kind).ToLowerInvariant()}, {CountText}";
@@ -93,6 +140,19 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.HighlyRated, SmartCollectionKind.UnfinishedSeries, SmartCollectionKind.Seasonal, SmartCollectionKind.ShortFilms,
 	];
 
+	/// <summary>1.8 (BH-180-M2): the kinds made of what the user watched (stream a), and the week's Spotlight (stream s).</summary>
+	public static IReadOnlyList<SmartCollectionKind> FromWhatYouWatched { get; } =
+	[
+		SmartCollectionKind.NextIn, SmartCollectionKind.MoreLike, SmartCollectionKind.MoreFrom, SmartCollectionKind.Spotlight,
+	];
+
+	/// <summary>
+	/// 1.8 (BH-180-M2): every kind Settings > Collections has a switch for: the page's kinds (awards follow Wikidata's switch),
+	/// the picks, and 1.8's. Every one of them off is Made by Nixie off.
+	/// </summary>
+	public static IReadOnlyList<SmartCollectionKind> Switched { get; } =
+		[.. PageOrder.Where(x => x != SmartCollectionKind.Award), .. Picks, .. FromWhatYouWatched];
+
 	/// <summary>The eyebrow's word: "Franchise".</summary>
 	public static string Singular(SmartCollectionKind kind) => kind switch
 	{
@@ -117,6 +177,12 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.Anticipated => "Anticipated",
 		SmartCollectionKind.BoxOffice => "Box office",
 		// end 1.7 trending
+		// 1.8 (stream t's shared model)
+		SmartCollectionKind.NextIn => "Next in a franchise",
+		SmartCollectionKind.MoreLike => "More like a title",
+		SmartCollectionKind.MoreFrom => "More from a person",
+		SmartCollectionKind.Spotlight => "Spotlight",
+		// end 1.8
 		_ => "Collection",
 	};
 
@@ -144,6 +210,12 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.Anticipated => "Most anticipated",
 		SmartCollectionKind.BoxOffice => "Box office this week",
 		// end 1.7 trending
+		// 1.8 (stream t's shared model)
+		SmartCollectionKind.NextIn => "Next in a franchise",
+		SmartCollectionKind.MoreLike => "More like",
+		SmartCollectionKind.MoreFrom => "More from",
+		SmartCollectionKind.Spotlight => "Spotlight",
+		// end 1.8
 		_ => "Collections",
 	};
 
