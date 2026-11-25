@@ -112,7 +112,9 @@ any collection's order can be reversed.
   four themes, Collections 35 of 35, the item pages' buttons 46 of 46); two Back cells were slow only under load; the
   rows at 2560 × 1392 didn't run (the large monitor was off); and one Drive-in stress run hit the Windows input
   crash already listed in the known issues.
-- The upgrade, in Windows Sandbox as a standard user: <Sandbox>.
+- The upgrade, in Windows Sandbox as a standard user, right after publishing (8:22 to 8:36 AM): passed, every check.
+  1.8.0 installs over 1.7.5 and keeps its data; Restart to update installs quietly and opens Nixie again (the helper's
+  new per-folder lock in its first real run); and 1.7.5's own Restart to update brings 1.8.0, which says "Updated".
 
 **For a hand check** (off-screen runs can't do these): Windows' text size at 125 % and 150 % on Made by Nixie's tiles,
 and Narrator itself on This week and the direction button.
