@@ -6,153 +6,65 @@ below is low severity, an accepted cost of the contract, or not verified yet. Ea
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Fix queue (next fix release)
-For 1.7.5 now (every remaining fix and the basics gate): 1.7.4 was the basics release (its section) and took none of
-this queue. 1.7.3 took Made by Nixie's four P0s, 1.7.1's queue, the rule 11 sweep and the rename's code constants
-(its section), so 1.7.0's queue below waits for 1.7.5, with what 1.7.3 left (just below).
-1.6.1 took what it could of the queue it was given, and what is left of it stays below, after 1.7.0's own.
+For the next fix release now: 1.7.5 took this whole queue but the lines below (its section lists each item with its fix
+and test); its bug hunt's queued items are first below, and what 1.7.5 itself left is in its section's Left. 1.7.4 was
+the basics release (its section) and took none of it; 1.7.3 took Made by Nixie's four P0s, 1.7.1's queue, the rule 11
+sweep and the rename's code constants (its section).
 
-From 1.7.3 (its streams, their reviews and the integration, 2026-11-22; no Blocker, and M1's one Major was fixed before
-the build):
-- **BH-171-m5** (1.7.1's queue; not taken in 1.7.3): a library that changes every day (most big servers) still means a
-  titles read about once a start. Read only what was added since the saved newest (`MinDateCreated`) instead.
-- Stream I's review (Minors):
-  - Played episodes that keep failing hold back a library change's read. `LibraryIndex.cs:365-373` picks the plays-only
-    read before the check, and `CheckOnce` (`:450`) counts it as "read lately", so a change the check confirmed waits for
-    the day's read, up to 24 h; 1.7.2 read it within the hour. The reviewer reproduced it. Fix: take the plays read only
-    when no check is due.
-  - The reading line's "about" total can be well off. The check counts each title once across all libraries, but the
-    per-library total counts a shared title in each (`IndexPages.cs:303`, `IndexRead.cs:63`), so the line reads "of about
-    34,006", then "of 37,173". A skipped mixed library inflates it too. Fix: say "titles" while the total is only "about".
-  - A failed upgrade read isn't retried until a restart: `LibraryIndex.cs:502-505` clears the old-format flag when the
-    whole read starts, not when it finishes, so 1.7.2's entries (no `LibraryIds`) stay until a restart past the hour or
-    the day's read. (Since the 1.7.3 fix round the first start after the update reads at once whatever 1.7.2's note
-    says, and Acclaimed comes from the old index meanwhile; a restart within the hour of a failed 1.7.3 read still waits.)
-  - Later, not a fault: `LibraryIds` costs about 1.8 MB on 34,000 titles; writing it only for titles in two or more
-    libraries would save that.
-- Stream B's review (Minors):
-  - `LoadState.cs:258` counts a `JsonException` (a captive portal or proxy page answering 200 with HTML) and Kiota's
-    `InvalidOperationException` for a text/html content type as Nixie's own fault: the user sees "Nixie couldn't show this
-    page… restart Nixie", though it's the connection. The reach is small, since `JellyfinClient` swallows most of these.
-    Fix: classify them as the connection.
-  - The 5xx copy rarely shows: `JellyfinClient` returns null on a 5xx and most pages swallow the error, so a 5xx there
-    still gets the connection wording. Only a throw that reaches `LoadState.RunAsync` gets the server's or Nixie's words.
-  - `tools\release\live-release-check.ps1:41` accepts 200 for an unknown API version silently. Print a warning when it
-    happens.
-- Stream M1's review (its Major and two Minors were fixed before the build: the 1.7.3 section):
-  - `Find` collapses the whole index on every call (`SmartCollectionCatalog.cs:99`): about 170 ms cold per pin on 36,000
-    entries, since `PinnedOnDemand` calls it once per pin. Build the collapsed titles once per batch.
-- Stream M2's review (Minors):
-  - `CollectionSettings.cs:207-210`: the "N removed" count can be logged twice, and the file written once per pin. Home's
-    background call (`HomeViewModel.Nixie.cs:109`) and the Collections page's (`CollectionsViewModel.cs:468`) can run
-    together on a first visit, and `gone++` counts a pin already gone. Nothing is lost. Fix: `SetFavorite` returns a
-    bool, or one locked store call removes them all.
-  - `NixiePresets.cs:214, 275-297`: the presets strip builds its decade, genre-mix and country collections itself,
-    skipping M1's gate counter and copying `BuildAll`'s catch. Use `SmartCollectionCatalog.BuildKinds(own, now,
-    {Decade, GenreMix, Country})`.
-- Found at the integration:
-  - `IndexOnABigServerTests.AFirstReadThatStopped_SaysSo_UnderTheRowsItMade` failed run alone at 1.7.2's `2406079b` too:
-    a read's end doesn't wait for the pending show of its pages' rows, so "Nixie couldn't finish reading…" can show for a
-    moment with no rows over it. The test now waits for the rows; awaiting the pending show before `IsReadStopped` in
-    `CollectionsViewModel.ReadIndex` would close it in the page.
-  - The README's Collections screenshot (`docs\screenshots\collections.webp`, its alt text "such as Short films") shows
-    1.7.2's collections: retake it.
-  - `ui\FluentFin.Core\ViewModels\CollectionViewModel.Nixie.cs:220` (Save as playlist refused with 403) says "Ask its
-    administrator.": right to name the server's side, but the app says "the server's owner" elsewhere.
-  - `tools\release\upgrade-test.ps1:105` downloads Seaglass 1.1.3 through the old repository name (GitHub redirects it).
+**Fixed in 1.7.5** (its section): everything 1.7.3 left (BH-171-m5; streams I's, B's, M1's and M2's Minors; the
+integration's four), the 1.7.0 bug hunt's BH-170-q2, q3 and q5, Drive-in's item board under 1400 px, the 1.6.1 bug
+hunt's BH-161-q1 to q4, a window opened while the copy's last one is still closing (`ClaimWindow`), Home's row names,
+the 1.5.1 bug hunt's BH-151-m4 and m8, the skip rule mid-episode (`refresh_rules`), the sign-in ending's words, the
+Collections page's arrival focus and Save as playlist's check by name. Settled with no change to the app: Check now
+after the release notes (the harness's click missed the button out of view), Trakt's empty-body GET with
+`Content-Type` (Trakt takes it: 1.7.5's live check) and `CollectionViewModel.Nixie.cs:220` (1.7.3 had already fixed
+it). ShelfRow's keyboard jump has its cause (a UI Automation scroll only) and moved to 1.7.5's Left. Drive-in's Up next
+count was fixed in 1.7.3 (its stream C).
 
-From the 1.7.0 bug hunt (`docs\reports\Bug hunt 2026-11-22 (1.7.0).md`; no Blocker; its Major BH-170-M1 and q1, q4 were
-fixed before the build):
-- **BH-170-q2** `tools\live\live_trending_sources.ps1:55`: Trakt's live check builds its own `HttpWebRequest`, not the
-  app's request (`OutsideSource.Request`: an empty body with `Content-Length: 0` and `Content-Type: application/json`,
-  gzip only, redirects followed by hand). The app's own GET has never met real Trakt; give the Trakt and TMDb legs a
-  `LiveTrending` test category through `OutsideHub`, as stream K's live check does.
-- **BH-170-q3** `ui\FluentFin.Core\Outside\TrendingSources.cs:218-223`: `IsActive` is checked, then the list is written
-  to the cache and held; a switch turned off between the two (Forget, on the UI thread) leaves that list on disk and held
-  until its maximum age (Trakt a day, TMDb trending 7 days), shown again at once if the source is turned back on.
-  PRIVACY.md says turning them off deletes their lists. A window of milliseconds, reasoned only; fix with a per-source
-  generation that Forget bumps (or the write and Forget under one lock).
-- **BH-170-q5** `ui\FluentFin.Core\Outside\OutsideLists.cs` (`Same`): compares only the counts of Wikidata's lists and
-  of TMDb's keyword names, so a refresh with as many titles but other ones isn't published until a restart. Compare the
-  items (or a hash of each cached list).
-
-From the repository polish (2026-11-22, seen while taking 1.7.0's screenshots):
-- Drive-in: Home's Up next board counts what it doesn't show. With Next Up empty or short but Continue Watching
-  not, the board's link reads "All of Up next (3)" over fewer cards (`docs\screenshots\home-drive-in.webp` shows one).
-  The count and the cards must come from the same list. Add a test with Next Up empty and Continue Watching full.
-  (1.7.3's stream C takes it; it merges after this integration.)
-
-From the 1.7 streams and their reviews (2026-11-21; each fixed what its review sent back before the merge):
-- Drive-in: `ui\FluentFin\Themes\DriveIn\Controls\ItemStage.cs:104`: under 1400 px wide the item board's 20 px top margin
-  puts its top row of lights under the 48 px top bar (seen at 1100x900). Found by stream U.
-- Trakt: `ui\FluentFin.Core\Outside\OutsideSource.cs:347-353` puts Trakt's required `Content-Type: application/json` on
-  an empty body, the only way .NET sends that header on a GET. The live check built its own requests (BH-170-q2 above),
-  so that GET has not met real Trakt yet, and a proxy that refuses a GET with a body would refuse it. Found by stream T.
-- Trakt's box office is asked again daily, though it changes once a week: Trakt's lists are kept at most a day
-  (`ui\FluentFin.Core\Outside\TraktLists.cs`, `FreshUntil`, its Use Policy), so it is one request a day while Trakt is on.
-  Found by stream T; not a fault, noted so nobody "fixes" it into a week-old list.
-- Wikidata's lists have few Golden Globe, BAFTA and César winners (Wikidata's own gaps); the Awards row shows what it has.
-  Found by stream K's live check.
-
-From the 1.6.1 bug hunt (`docs\reports\Bug hunt 2026-11-21 (1.6.1).md`; no Blocker, no Major):
-- **BH-161-q1** `ui\FluentFin.Core\Services\JellyfinClient_Search.cs:165-167`, `ui\FluentFin.Core\ViewModels\PersonItemsViewModel.cs:105`:
-  "With <name>" asks for at most 200 episodes, so a person's own long-running show can fill the cap and their older
-  guest roles disappear, with no hint that some were left out.
-- **BH-161-q2** `ui\FluentFin.Core\InstallDeviceId.cs:156`: a `device-id.json` with a duplicate key throws; `Current`'s
-  fallback then skips `ClaimWindow`, so two windows share one id again, and the file is never repaired (only a
-  hand-edited or oddly broken file; every other bad file is handled).
-- **BH-161-q3** `ui\FluentFin.Core\ViewModels\PersonItemsViewModel.cs:131`: once the cap is hit, every guest show reads
-  "in N+ episodes", even shows whose episodes all arrived, not only the oldest.
-- **BH-161-q4 (nit)** `backend\jellyfin_mpv_shim\skip_analyse.py:77`: the DLL search flags go in as `mode`, which
-  Windows ignores; it works only because Python's default flags match.
-
-Found by the 1.6.1 review (stream C, 2026-11-21):
-- `ui\FluentFin.Core\InstallDeviceId.cs` (`ClaimWindow`): a window opened while the copy's last one is still closing (Restart
-  to update reopening Nixie before the old process has ended, or a close and a quick start) finds the first slot still held
-  and signs in as the copy's second window: a device of its own on the server, which a per-device allow list refuses. The
-  next start is the first window again.
-
-Found by the 1.5 reviews (2026-11-20); not fixed in 1.5, 1.5.1 or 1.6.1.
-- **Home's row names are not in sentence case** (button review L6): "Continue Watching" and "Next Up" style names where the
-  rest of the app says "Continue watching". Held back in 1.5 because the harness finds rows by name (`then-search.ps1`,
-  `drive.ps1`'s Home step, the keys matrix): rename the rows and the scripts' names together. Left out of 1.5.1 and 1.6.1
-  too: 61 names in 16 harness scripts and the keys matrix in four themes, more than a fix release's hour.
-
-From the 1.5.1 bug hunt (`docs\reports\Bug hunt 2026-11-21 (1.5.1).md`):
-- **BH-151-m4** `backend\jellyfin_mpv_shim\intro_sources.py:258` (`_save`): a 1.5.0 backend saving learned-intros.json
-  drops 1.5.1's "moves" marks (a 1.5.0 portable copy beside 1.5.1, or a downgrade).
-- **BH-151-m8 (the rest)** `backend\jellyfin_mpv_shim\player_reporting.py:432` (`send_timeline`): the sign-in ending
-  mid-playback refuses the progress and Stopped reports. 1.6.1 says so in the player (Sign in again), but that
-  playback's place and watched state are still lost: after Sign in again, the app could send the last position it saw
-  (`RecentPlays` has it); a new server call, with its own live check.
-
-Left out of 1.5.1, 1.6.1 and 1.7.0 (a feature):
-- **Music in search, with playback** (BH-151-M2): songs and albums were taken out of search because nothing plays them.
-
-Found at the 1.6 integration:
-- `ui\FluentFin\Controls\UpdateSettingsPanel.xaml.cs` (Settings' Check now), then-update's full flow in Classic: after the
-  release notes closed (Esc on "Open the release page"), the run's Check now started no check (no "[update] checked"
-  line), so its checksum-mismatch step could not run. Not re-checked: 1.6.1 makes the notes start on Close (the part of
-  this line it fixed), and the 1.6.0 bug hunt found Esc closes them from every stop. At 1.6.1's final pass the full
-  flow passed in Classic (40/40) and in Drive-in (40/40); the Restart to update flow in Drive-in failed this step once
-  under load (the notes closed, then Check now made no check for about two minutes; the next step's Check now worked)
-  and passed it on its rerun (31/31). So it is intermittent, not gone: watch it in the next full-flow runs.
-
-From the 1.6.1 streams (2026-11-21; each fixed what its review sent back before the merge):
-- Skipping: `backend\jellyfin_mpv_shim\bridge_skip.py` (`refresh_rules`): a rule that took over the server's Intro or
-  Outro becomes "Commercial" ("Skip extra") after any Add, Yes or Forget mid-episode (the server's segment it replaced
-  is gone from the list), and forgetting such a rule mid-episode doesn't bring the server's intro back until the next
-  item.
-- Sign-in ended: `ui\FluentFin.Core\Admin\ServerPower.cs:54` and the library scan and delete notices have no words for
-  an ended sign-in yet, and the played and favourite toggles spring back with nothing said.
-- Two windows of one copy (each its own device id): unit tests only (the window slots); no harness run starts a second
-  window.
-- `ui\FluentFin\Views\CollectionsPage.xaml.cs:41-56`: the Libraries page's Collections tile sometimes opens the
-  Collections page with the keyboard left on Back (one "could not take", no retry; Cinematic, and Drive-in at 1920 and
-  1100).
-- ShelfRow (`ItemsRepeater`): the keyboard on a tile jumps to the page's first focusable control when its row scrolls
-  out of view (seen on the Collections page in Classic and Editorial).
-- Save as playlist (also review A): another user's public playlist with the same name reads "Already in your
-  playlists": the check for an earlier save goes by name.
+Still queued:
+- From the 1.7.5 bug hunt (`docs\reports\Bug hunt 2026-11-24 (1.7.5).md`, on `5853c835`; its new Major, BH-175-M1, was
+  fixed before the build: the 1.7.5 section):
+  - **BH-175-M2 (Major, older: 1.7.3 the same)**: a film page opened from a collection costs 6 to 15 MB of private
+    bytes that never come back, though no page stays alive. Collection, film, Back, 25 rounds in Classic: about 12.4 MB
+    a round on 1.7.5's candidate (334 to 643 MB), about 15 MB on 1.7.3, and 6 to 8 MB a round once BH-175-M1 was
+    fixed. The cause isn't found: native memory, or managed memory no page holds (decoded pictures, the backdrop's
+    composition surfaces, a static cache). Take a memory snapshot over 20 rounds (WPR, or `dotnet-gcdump` and VMMap);
+    the leak check should then bound private bytes over N rounds (say, under 3 MB a round after the first five).
+  - BH-175-m3 (Minor, reasoned): a title removed from a film or show library while one is added to a library the index
+    skips (a mixed library) keeps the removed title in Made by Nixie until the day's read. The server's check counts
+    films and shows in every library (`JellyfinClient_Index.cs:105-121`), the titles saved since are read from the
+    indexed libraries only (`:135-140`), so `before + added == after` holds (`IndexRead.cs:249`). Fix: count the check
+    over the indexed libraries only, or read incrementally only when every library is indexed. Check: a fifth case in
+    `ALibraryChange_TheTitlesSavedSinceCantExplain_ReadsEveryTitle`.
+  - BH-175-m4 (Minor, reasoned): closing during a film and reopening at once with a saved password can lose the resume
+    position. The close frees the window's device slot first (`CloseSequence.cs:24`), so the new copy takes the same
+    device id; signing in by name ends the older sessions of that device and user, and the closing copy's Stopped
+    report is refused. Its recovery (`RecentPlays._owed`, `:140`) lives in memory and dies with that process. Fix: free
+    the slot after the backend's reports (`WaitForReportsAsync`), or resume a saved token before signing in by name.
+    Check: g4's lifecycle quick restart with a password sign-in and a film playing.
+  - BH-175-q1 (nit, harness): the leak counter (`NavigationService.CountLivePages`, `:833`) counts a page kept whole
+    once per visit ("LibraryPage 37" after 74 moves), so a leak check on Home, a library or search would fail falsely.
+    Skip an instance already held.
+  - BH-175-q2 (nit): `LoadState.RefreshBehindAsync` checks its run only for `Set(outcome)`; `MovieViewModel.Returned`
+    and `SeriesViewModel.Returned` write before that, so an older refresh behind that ends last overwrites a newer one.
+  - BH-175-q3 (nit): `NavigationService.Replay` publishes old changes again to every listener, and
+    `RecentPlays.OnUserDataChanged` drops a place still owed on any change, so a Back to a page kept from before a mark
+    can drop a refused stop's place before Sign in again sends it.
+  - BH-175-q4 (nit, fake): the fake server ignores `MinDateLastSaved`, so no harness or gate run takes the incremental
+    read, and only the throwaway 12.4 was checked to honour the filter, not 10.11. Fix: the fake honours it, and
+    `LiveIndexTests` gets the 10.11 QA server.
+- From the 1.7 streams (2026-11-21), noted, not faults:
+  - Trakt's box office is asked again daily, though it changes once a week: Trakt's lists are kept at most a day
+    (`ui\FluentFin.Core\Outside\TraktLists.cs`, `FreshUntil`, its Use Policy), so it is one request a day while Trakt
+    is on. Found by stream T; noted so nobody "fixes" it into a week-old list.
+  - Wikidata's lists have few Golden Globe, BAFTA and César winners (Wikidata's own gaps); the Awards row shows what it
+    has. Found by stream K's live check.
+- Left out of 1.5.1, 1.6.1, 1.7.0 and 1.7.5 (a feature):
+  - **Music in search, with playback** (BH-151-M2): songs and albums were taken out of search because nothing plays
+    them.
+- From the 1.6.1 streams:
+  - Two windows of one copy (each its own device id): unit tests only (the window slots). No harness run opens a second
+    window; since 1.7.5 the gate's lifecycle check restarts with the old copy still in its close (one device id).
 
 ## Hand checks, recorded
 From 1.5, one line per check and release: pass, fail, or not run. They need a real desktop and real hands (off-screen
@@ -211,6 +123,282 @@ runs post keys and cannot move the real cursor or hear sound).
   - A real tap and a double tap on a saved server's "…" (More options) on the server list: the menu opens with Remove
     and nothing else, and the server's sign-in doesn't open under it (the hook clicks through the automation peer, not
     WinUI's tap; `RowButtonTapTests` checks the button keeps both): not run, for the owner.
+
+- **1.7.5** (the basics gate runs off-screen at this PC's 96 dpi and posts its input; these need a real desktop):
+  - A display at 150 % scale (DPI) for what is drawn over video or laid out by size: the player's controls, rows and
+    their arrows, the top bar, the sign-in pages (the gate can't set the scale off-screen): not run, for the owner.
+  - Windows' text size (Settings > Accessibility > Text size) at 125 % and 150 % on tiles and cards: names and counts
+    whole, nothing cut or overlapping (changing it changes the owner's desktop, so no off-screen run does): not run,
+    for the owner.
+  - A real right-click on each card kind and on an item page: its menu, nothing opened under it (off-screen the menu
+    key and gamepad Menu raise the same `ContextRequested`; the pointer hook has no right button): not run, for the
+    owner.
+  - A precision touchpad's two-finger sideways swipe on a row, and its coasting at a page's end (the harness posts a
+    tilt wheel, as a legacy touchpad sends it): not run, for the owner.
+
+## Nixie 1.7.5: Back is instant, every remaining fix, and the basics gate
+- **Merged** (2026-11-24, `wip/rel-1.7.5` from main's `d0a61039`: `c7b5f72d`, 1.7.4 plus docs, with the roadmap's
+  repair): eight streams cut from `c7b5f72d`. The fix streams merged after their reviews and again after their fix
+  rounds; the gate streams merged as they finished, and again with the bugs their checks found, with one combined
+  review of their app fixes and the runner after (below). fx1 (`487c47f1`, its Minors `88481d60`), fx2 (`ce9e8b31`,
+  its Major and Minors `5793c559`), back (`ece995d8`, its Majors `c4208db6`, its re-review's Blocker `05892548`), g3
+  (`de76a2cc`, the Undo notice `30b2b876`), fx3 (`8168e622`, its Blocker `6e2a5f84`), g4 (`cff4fed5`, its three bugs
+  `3aa0c91b`), g2 (`76c06d06`, More options `e72e3fb9`), g1 (`34f39c6b`, Switch user `5853c835`). back took
+  `wip/174-back`'s own commits by cherry-pick (`caba80c7..5689ed6e`, now `948a2540..820dd524`): its merge base was
+  before 1.7.4, so a merge would have replayed 1.7.4 against itself.
+  - Conflicts: fx3's and back's new `Ui175Tests.cs` (an add/add at fx3's merge, a rename at back's second): fx3's keeps
+    the name, back's is `Ui175BackTests`. The rest merged by itself: fx1's additions to fx2's `JellyfinClient_Index.cs`
+    and `IJellyfinClient.cs`, and one line of `build-release.ps1` (the LiveTrending category left out of the release
+    build, as LiveOutside and LiveIndex); fx2's changes to `ItemUserData.cs` and `UndoToast.cs`, which the brief gave
+    fx3 by mistake (fx3 never touched them).
+  - g3's manifest had a 0x04 byte where `checks\4` was (an edit ate the backslash and the 4); `run-gate.ps1 -List`
+    refused it, and `38a7b853` put it back.
+- **1.7.3's closing guard on every new timer and frame handler** (`UiDispatch.Tick`, `App.IsClosing`): back's timers,
+  now held by their pages, do nothing once the app is closing (the search results' place and the Collections page's
+  arrival focus tick through `UiDispatch.Tick`; Home's restore, in four themes, checks `App.IsClosing` first). fx3 put
+  the frame-driven callbacks outside the player page (`Storyboard.Completed` and `ImageOpened` of Home's heroes,
+  Cinematic's preview stage, the backdrop's fades and pictures, a picture's fade in, the theme switch's fade) through
+  `UiDispatch.Frame` and `UiDispatch.Routed`; no `CompositionTarget.Rendering` handler exists outside the player page,
+  whose three were guarded already. `Ui173Tests` scans every `Rendering`, `Completed`
+  and `ImageOpened` handler (17) with comments stripped (a guard named only in a comment passed before). The close's
+  watch (`CloseWatch`, below) is a thread pool timer that only logs.
+- **Fixed in 1.7.5, from the fix queue** (each with a test that fails with its fix reverted):
+  - BH-171-m5 (fx1): a library's change is read as the titles the server saved since the index's last read, less a
+    day (`MinDateLastSaved`: 12.4's `/Items` has no `MinDateCreated`, and `DateCreated` can be a file's), merged into
+    the saved index. Every title is read as before when the check's count isn't explained, the libraries changed, the
+    index is an older revision, a page failed, or more than 5 pages came. The throwaway 12.4 (25,736 films) honours
+    the filter: 0.21 s in 2 requests, against 9.5 s in 28 for every title. One request a library (23 on the owner's
+    server, against about 57 for every title). Its review's Minor (a removal hidden behind an older-dated addition, the
+    count the same) is why it reads by the date saved, not added.
+  - Stream I's Minors (fx1): the plays-only read only when no check is due (`00916b90`); "titles" while the total is
+    only "about" (`IndexProgress.Text`, Core); the old-format flag cleared once a read of every title is in, with a read
+    begun this run holding the retry for the hour (`db6d0a84`); `LibraryIds` saved only for titles in two or more
+    libraries (`ce99c788`).
+  - M1's and M2's Minors (fx1, first, for 1.8's builders): `Find` collapses an index once a batch (one collapse for 8
+    pins on 36,000 entries; reverted, 8); `RetiredCollections.ForgetAsync` is one locked store call (said once, the file
+    written once; reverted, 6 times); `NixiePresets.For` makes the strip's kinds through `BuildKinds`.
+  - BH-170-q2, q3, q5 (fx1): `LiveTrendingSourcesTests` (category LiveTrending) through the app's own requests: 22 of 22
+    answered 200, and Trakt takes the empty-body GET with `Content-Type` (`OutsideSource.cs:347-353` stays). Keys
+    checked by length only; the guards never print one (its review's Minor). A per-source generation that `Forget`
+    moves, with the cache cleared under the same lock (its review's Minor). `OutsideLists.Same` compares names, words
+    and items.
+  - B's Minors and the 5xx copy (fx2): `AnswerTrace` (the load's answers, seen by the innermost handler) and
+    `LoadState.CauseOf`: a 200 with HTML (a `JsonException`, or Kiota's exception for a text/html answer) or a 511 is
+    the connection, and a page that swallowed a 5xx gets the server's words (`CheckServer`). `LoadStateAnswerTests`.
+    `live-release-check.ps1` warns on a 200 for an unknown API version; `upgrade-test.ps1` has the new repository name
+    (its address checked, the script not run).
+  - The integration's four: `CollectionsViewModel.ReadIndex` waits for its pages' pending show before `IsReadStopped`
+    (back, `CollectionsReadStoppedTests`); the README's Collections screenshot retaken from 1.7.4's page, with its alt
+    text (fx3); the 403 copy already said "the server's owner" in 1.7.3, now pinned by a test (fx2); `upgrade-test.ps1`
+    (above).
+  - Drive-in's item board (fx3): its top is 40 px at every width (`ItemStage.BoardMargin`); `Ui175Tests` checks its
+    lights from 1100 to 2560 px (1100, 1280 and 1399 fail with the old 20 px).
+  - BH-161-q1, q3 (back): "With <name>" pages a person's episodes (200, then 500 at a time, up to 2,200), shows its
+    first page at once and reads the rest behind it (stopped when the page is left, read on by Back), and says "or more"
+    by each show's own first year (one `GetItemsByIds` request). `PersonEpisodesTests`.
+  - BH-161-q2 and `ClaimWindow` (fx2): a duplicate key is read as its last value and the file written again
+    (`ReadLastWins`); `Current` claims a window slot whatever the id's source; the close frees the window's slot first
+    (`ReleaseWindow` at the start of `CloseSequence.RunAsync`). `CloseSequenceDeviceSlotTests`. The gate's lifecycle
+    check restarts twice, once with the old copy still closing: one device id.
+  - BH-161-q4 and BH-151-m4 (fx2): the DLL search flags go in as `winmode`; the skip store (`skip_rules.py`, which
+    replaced intro_sources' save in 1.6) keeps unknown keys, a newer format number and a show with only unknown marks.
+  - `bridge_skip.refresh_rules` (fx2): a rule's segment keeps what it replaced, and `skip_rules.taken_over` gives it
+    back before `add_rules`.
+  - BH-151-m8 (fx2): `RecentPlays` keeps a play the server refused for an ended sign-in and sends its place (`SetPlace`)
+    after a new sign-in of the same server and user. Its review's Major (a place refused after Sign in again was held
+    and written up to 12 h later, at an unrelated sign-in): a refusal notes the sign-in's generation, a stop refused
+    after a newer sign-in is sent at once, and the item's next play or a mark drops what is pending. Live check
+    (`tools\qa-servers\live-175-owner-and-place.ps1`) on QA 12.4.0 and 10.11.11.
+  - The sign-in ending's words (fx2): `ServerPower.NotTaken` (restart and shut down; the restart's polling stops), the
+    scan, delete and scheduled task notices, and the toggles' reason in the Undo notice (`ItemUserData.RefusedText`):
+    an ended sign-in, the server's 5xx, or the connection. "Sign in again with Switch user in the account menu." where
+    no Sign in again button is near (its review's Minor). `SignInEndedWordsTests`.
+  - Save as playlist (fx2): an earlier save is found by its id first (`SavedPlaylists`), and a playlist of that name
+    counts only if it is the user's own (`IsOwnPlaylist`: one they can edit that isn't shared with them).
+  - Home's row names (fx3): "Continue watching" in Classic's and Drive-in's Home (the row, Classic's loading title, See
+    all's grid), the card menu's "Remove from Continue watching", the removal notice, the shortcuts' help and Settings,
+    with the harness scripts that find them. `HomeRowNameTests` (XAML, code and TextBlocks).
+  - Check now after the release notes (fx3): the harness's, not the app's. In each failing then-update run the harness
+    never clicked: the notes' screenshots resized the window and left Check now out of view, where the harness's finder
+    skips it. then-update scrolls it into view now; a loop of 20: 20 checks sent in Classic.
+  - The Collections page's arrival focus (back): its retry timer held by the page, 40 tries, and a line when they stop
+    (`[focus] CollectionsPage: the arrival focus stops trying after N ms: <why>`). Under load, 28 of 28 in Drive-in and
+    Cinematic at 1920 and 1100 px wide, every first try taking the tile: the race didn't happen in those runs, so only
+    `Ui175BackTests` checks the fix.
+  - 1.7.4's two Back lines (back): search results shown by Back are searched again behind them when they may be out of
+    date (`SearchBackRefreshTests`), and a big library left mid-read is kept and reads on from where it stopped
+    (`PageKeepTests`).
+- **Back is instant** (back, from `wip/174-back`): the view models of the last four pages left (`PageKeep`, keyed by
+  their history entry and the session), given back to the page Back or Forward makes (`IKeptOnBack.Returned`),
+  refreshed behind only when stale (a change counted meanwhile, or kept over 5 minutes). 1.7.5 adds Home, the
+  libraries and the search results kept whole by the frame (`NavigationCacheMode`), each used only for its own history
+  entry and dropped on a new Home visit, R, a theme switch, sign-in and sign-out. The place's line, `[perf] back:
+  <Page>'s place put back in N ms`, names its steps (page loaded, scroll asked, view at place, card made, page kept
+  whole). `NIXIE_HARNESS_LEAKS=1` logs the live pages after each navigation (`then-175-leak.ps1`).
+  - Its review's three Majors: a big library dropped a page that came as it was left (1,000 of 1,200 on Back); a kept
+    Collections page never read its pins, saved filters or settings again (a removed saved filter stayed);
+    `SeasonPillFocus` and two more handlers kept every series page alive. The re-review's Blocker: `NavigationService`
+    cleared the cache, then noted the dropped page, so Movies, Shows, Back showed Shows' cards under Movies' title,
+    idle, with no Try again (a library's folder and a second search too); and its Minors (Home dropped by any library
+    or search visit, a person's read behind not stopped on leave). Each fixed with a test that fails without it. The
+    leak check: 50 rounds of series and episode keep 2 series pages (Classic and Drive-in); with the fixes reverted, 51.
+  - Off-screen, `back-gate.ps1` (every answer held 2.5 s, the limit 1.2 s): its 6:45 PM run on `eb638b6d` had 63 of 68
+    cells, with samesearch failing in all four themes (the Back key did nothing while the keyboard was in the search box:
+    fixed, `1f6df4e4`, `BackKeysInTextTests`) and Editorial's film page at 1.8 s (fixed, `a980ca05`: 263 ms). The final
+    grid on `971d5595`: every cell within 1.2 s in all four themes on a quiet run. Under two Android emulators' load,
+    128 of 140; the 9 over 1.2 s logged their page shown within 20 ms (load) and passed on quieter runs. Closest to the
+    limit: a film page (809 ms quiet, rebuilt on Back) and the Collections page (about 1.0 s in Drive-in and Editorial).
+    The release gate runs every Back cell in four themes at 1280×720 and maximised (`manifest\back.psd1`); the arrival
+    and leak checks are nightly.
+- **The basics gate** (g1 to g4; rule 12): `tools\gate\run-gate.ps1` runs each manifest's checks
+  (`tools\gate\manifest\g1.psd1` to `g4.psd1`; the pattern in `tools\gate\README.md`), each check in each of its themes
+  a job in its own hidden PowerShell through `run-offscreen.ps1`'s slots, longest first by `timings.json`.
+  verify-package runs it (its Gate run; `-GateSlots 5` on a quiet machine, else 3; a budget of 2 h). 30 checks, 70
+  jobs on every release build; 7 variants (10 jobs: extra themes and sizes) are `Tier = 'nightly'` (`-Nightly`).
+  drive.ps1's end-of-run close checks the exit code (1.7.4's Left; on 1.7.3 it caught a `0xC0000005` at a close).
+  - g1, class 1: the sign-in methods (password, Quick Connect, a saved user picked) across a close, an abrupt end and
+    an update; a wrong password; a sign-in revoked on the server; Sign out and back in; two users and switching; Quick
+    Connect remembered; the closes; the self-test.
+  - g2, classes 2 and 3: two servers added, switched, removed through their "…" by mouse, keyboard and gamepad, the one
+    in use removed and re-added; the saved server's menu; every menu and context menu on every card kind and page
+    (each item does what it says, nothing else happens, Escape closes it with the keyboard back); Continue watching's.
+  - g3, classes 4 and 5: every row to its last card at full size (1280 x 720 nightly), the top bar lit on each page,
+    every entry, the way up, search, Collections, the scroll stress, each item page's buttons kept after R, the trailer.
+    The fake server's real shape (`FAKESERVER_REAL_SHAPE=1`): seasons of 13 and 24 episodes, long names, a film with a
+    cast of 48, a person in 40 films, a box set of 40 and a library of 5,000.
+  - g4, classes 6 to 8: playback, the player's controls after each interruption, mpv's own controls, every Settings
+    switch across a restart, a theme switch on a series', a season's and a film's page, minimise, offline and two quick
+    restarts, the hud, the keys overlay, the update check at start.
+  - Revert checks: on the 1.7.3 build, signin-methods and signin-qc-remember fail (Quick Connect forgotten at the
+    restart), servers 5 of 52 (where 1.7.4's fixes live), topbar 7 of 36 (a show's pages from Home lit Home), rows 13 of
+    24 (Cinematic at 2576 x 1408), playback-basics, and lifecycle offline in Editorial (the film page's buttons behind
+    its message); with 1.7.4's bars settle reverted, player-controls fails; on 1.7.4's code, item-buttons fails Back
+    under the Undo notice in all four themes, and the theme switch crashed 3 of 3.
+  - 1.7.4's gaps closed: Cinematic and Editorial at full size, 2576 x 1408 (rows 105 of 105 and 64 of 64); the server
+    menu's flake after Escape (menus found by their popups' own window handles: 33 of 33 in each theme).
+- **Real bugs the gate found, fixed before the build** (each with its test and the gate's check):
+  - The Undo notice held the window's keys for its 10 s: Back, R and the rest did nothing after a season or show was
+    marked (`WindowShortcuts.HasOpenPopup` asks `ArrivalFocus.CountsAsMenu`; `PageRefreshTests`). g3.
+  - A non-admin's More options on a series' and a season's page did nothing (`JellyfinFlyoutConverter.ApplyPageMenu`
+    in the five headers; `PageMenuTests`, 6 fail with the headers reverted). g2.
+  - Editorial: Escape on an episode's menu put the keyboard on Up next's episode (back's `EditorialEpisodeGrid` guard;
+    the menus check fails without it). g2.
+  - A theme switch on a Drive-in film or series page ended Nixie ("Cannot find a Resource with the Name/Key
+    DriveInBoardTextBrush"): `ThemeResources` shows the page again with the new dictionary, whoever chose it, and
+    keeps the outgoing one at the lowest priority until the next switch. `ThemeSwitchTests`; 25 of 25 pairs in each
+    theme. g4.
+  - A film page showed its content behind "Couldn't load this movie" (Editorial: Play, Watched, Favourite, an empty
+    Audio list): every theme's film page hides it (`ItemRowConverters.ItemContent`, `G4FixTests`). g4.
+  - At 1280 x 720 an item page opened from Home arrived scrolled, its crumbs under the top bar: Play taking the keyboard
+    brought itself into view (`ItemPagePlace.HoldTop`). g3, fixed by back.
+  - Switch user ended a Quick Connect session, so switching back needed a new code. Decided: Switch user keeps the
+    leaving user's saved sign-in, only Sign out forgets it, and a saved user picked from the list signs in at once.
+    `QuickConnectRememberedTests` (3; all fail with the fix reverted); signin-methods 28 of 28. g1.
+- **Fixed before the build, from the 1.7.5 bug hunt** (`docs\reports\Bug hunt 2026-11-24 (1.7.5).md`, on `5853c835`):
+  - BH-175-M1 (Major, new in 1.7.5): every Back to a film page kept the old film page alive, and a return from the
+    player the same (MoviePage 7, 12 and 22 after 5, 10 and 20 rounds of a film, More like this, Back, in Classic and
+    Drive-in; 10 to 13 MB each). Back keeps the film's view model and hands it to each new page, and the "More like
+    this" row (`ShelfRow` over `MovieViewModel.Similar`) subscribed to its `CollectionChanged` and never let go. The row
+    now hears its items only from its Loaded to its Unloaded (`LoadedSourceWatch`, held by `WhileLoaded.Hold`; fx3,
+    `635af517`, merged in `c640d4ed`). `Ui175Tests`: rows that showed a kept collection and left are collected, and a
+    kept page shown again hears its items once (both fail with Unloaded not letting go). `then-175-leakfilm.ps1`:
+    MoviePage 3 from round 5 to 20 in Classic, 3 throughout in Drive-in. Private bytes still grow 6 to 8 MB a round:
+    BH-175-M2, older, queued.
+- **The crash trail** (fx3): `UiTrail` keeps the last things done in the window (navigation keys by name, "typing" in
+  a text box with no count and never a character; the wheel, presses, focus moves and pages by type and `x:Name`, no
+  titles), written with every first-chance line. XAML's `UnhandledException` and
+  `CoreApplication.UnhandledErrorDetected` log the exception's type, HRESULT, XAML's message, the stack and the trail
+  (`CrashTrail`); what happens next is unchanged. Its review's Blocker, fixed before the build and never released: the
+  first version noted every key, so a first-chance line after a refused password held its last characters.
+  `before-175-trailkeys.ps1`: 6 of 6; 4 of 6 on the first version, whose trail held the whole test password.
+- **Two crashes seen under stress, both pre-existing**: neither happened more on 1.7.5 than on 1.7.4, and neither came
+  in fx3's A/B. In Cinematic at 2560 x 1392, three scroll stress runs on 1.7.4 (`e6e3f6cf`) and three on 1.7.5
+  (`8168e622`) were all clean; at 1280 x 720, Drive-in and Cinematic on 1.7.5 were clean (14 of 14 each). No run had a
+  WER event.
+  - The fail-fast `0xc0000409` (`FAST_FAIL_FATAL_APP_EXIT`, code 7) in `Microsoft.UI.Input.dll` 10.0.27200.1054
+    +0x4e49f came once, at 3:44 PM, in an fx3 build's Cinematic scroll stress at 2560 x 1392 (the season page's mixed
+    bursts: posted wheel, UI Automation jumps, Page Down, End, Home). That build was 1.7.4 with fx3's work to 2:20 PM.
+    It is the one such crash among 230 of Nixie's on this PC in ten days. The trail's wheel note asked the input stack
+    for the pointer then; it no longer does.
+  - `0xc000027b` in `Microsoft.UI.Xaml.dll` +0x3a9dbd is 1.7.3's Drive-in library crash (a stowed `E_UNEXPECTED`). It
+    came twice on 2026-11-24 (3:21 PM and 3:55 PM) on g4's build, whose app code is 1.7.4's. fx3's scroll stress in
+    Drive-in at 2560 x 1392: 14 of 14, no crash.
+  - The crash trail can't log them: a native fail-fast ends the process before any handler runs. Only the Application
+    log's WER events and a Report.wer remain (no dump). A first-chance line just before would carry the last things
+    done in the window.
+- **A close took 25 s, once** (g4's settings run, Drive-in, after the switches on Settings): `MainWindow.Close()` took
+  24,999 ms with nothing logged in between and nothing in Windows' Application log; not again in two more runs (1.3 s,
+  5.0 s). Cause not found. The close now logs the page it closes on, the window's Closed handlers done, its content
+  unloaded, and every 3 s while it lasts "still closing after N ms; the last step: …" (`Services\CloseWatch.cs`,
+  `G4FixTests`).
+- **The gate-fix review** (the gate streams' app fixes and the runner, after the merge): two Majors in the new Switch user code, fixed
+  before the build (`03f1cf25`): picking a saved user sent a password the server had refused through the typed path,
+  never forgetting it, so three picks could lock the account; and the kept user's live connection stayed open after
+  Switch user, so a cast could play with no page. Six Minors in the gate, fixed: a later PASS hid an earlier FAIL, a
+  crash after the last check passed a run, part selectors leaked from the shell, a non-admin's missing More options
+  passed on the film page, one close step ran outside its try, and verify-package could leave the gate out quietly.
+  Every other review of 1.7.5 (fx1, fx2, back and its re-review, fx3, the bug hunt) had its Blockers and Majors fixed
+  before the build, each with a test that fails without its fix.
+- **Suites:** the release build (`44a43a10`): Core 5,724 passed; UI 1,846 of 1,847 (one timing test passed alone);
+  backend 571. verify-package's package runs: 142 checks, 0 failed. Defender: no threats (folder, MSI, zip).
+- **The release gate on the final package** (the jobs that failed on the first, rerun, 2:00 to 3:00 AM): menus,
+  topbar, playback-basics and lifecycle 4 of 4 themes; back 133 of 140 cells. Six of the seven misses were the check's
+  reading under load (the app logged each page shown in 4 to 33 ms). The seventh, Editorial's library at max: Back put
+  the scroll back to 1,253 px in 543 ms, then the page moved to 302 px as the focused card (the one left) was brought
+  into view, so the card is in view but the scroll isn't the one left. A Minor for the next release.
+- **Since 1.5, found by the gate's lifecycle check:** a start ends ("an install is under way") when another copy's
+  update helper holds the install lock, even one that isn't this copy's; fixed for 1.8 (`c5d80392`: a start ends only
+  for an install of its own copy).
+- **The release gate's first run** (verify-package on the first 1.7.5 build, 9:55 PM to 1:20 AM): 55 of 74 jobs passed, in
+  204.9 min on 3 slots shared with two TV emulator gates, so well over the 2 h budget. Triage of the 19 failed jobs:
+  - One app bug, fixed before the release build (`3b2452a7`): after playback, Back to a kept season page showed the
+    episode's old progress ("1% watched" for 20 %), because Back's replay missed the play's own update.
+    `playback-basics` 56 of 56 in four themes on the fix.
+  - Check bugs, fixed (`bdeaef8f`, `98c3ec2d`, `a2f8186b`, `1a604967`, `db10eff5`): the top bar's lit-tab read,
+    Back's sign-out log filter, Cinematic's tracks panel, the quick restart's wait (the new copy was at Home, signed in;
+    the close now takes about 0.2 s), and the menus check when Nixie's player controls don't show.
+  - Load: Back cells at 2.5–4.7 s whose app log shows the page shown in 6–29 ms.
+  - Environment: the 2560 × 1440 monitor dropped off twice, so the rows checks at "max" ran at 1936 × 1048, and one
+    Drive-in menus run and one Cinematic restart lost their window as it dropped. `run-gate.ps1` now retries a run
+    that a monitor change ended.
+- **Left:**
+  - The rows checks at 2560 × 1392 didn't run on the release package (the large monitor kept dropping off); every other
+    size passed. Rerun them at max once that monitor stays on.
+  - Back with a popup open (the search box's suggestions) is ignored in about 1 of 17 samesearch cells, here and on
+    the back branch; the check now names the popup. A Minor for the next fix release.
+  - The gate's 2 h budget needs a quiet machine: with the TV gates running it took 205 min.
+  - The gate's real time isn't measured yet. g1's full run (80 jobs on 3 slots, 5:49 PM) got no slot (fx3's run and
+    the TV gates' two emulators held them) and was ended at 6:05 PM. The plan's estimate, from each job's measured time:
+    about 73 min on 5 slots, 122 on 3. The TV gates hold a desktop slot for each emulator's whole life. <gate result and
+    time>.
+  - `back-gate.ps1` isn't in the gate yet (no `manifest\back.psd1`; g3 left its slot).
+  - A library shown by Back isn't asked again when it may be out of date (it would be a read of the whole library: rule
+    3); R reads it. A library left before its first page came loads again on Back.
+  - A folder in a library has no Back check: the fake server has no folder, and the re-review's Blocker reached a
+    library's folder too (its fix covers it; no run shows it).
+  - "With <name>" wasn't timed on a real server with a person past 200 episodes (none of ours has one).
+  - Signing out and into another server while Home is still filling can save the first server's Home page as the
+    second's, shown at the next visit until it refreshes (`HomeViewModel.SaveShown` reads the session when it saves,
+    not when the fill began). A short window, since before 1.7.5; fixed in 1.8.
+  - The change read (fx1) costs one request a library (23 on the owner's server). A removal at the same time as an
+    addition in a library the index skips (the count matches) isn't caught until the day's read (BH-175-m3, queued),
+    nor a change while this PC's clock is more than a day ahead of the server's. The fake server ignores
+    `MinDateLastSaved` and answers every title (BH-175-q4, queued).
+  - Three paths keep the connection's words on a 5xx (fx2): the series page's episode list, `ServerFolderPicker` (an
+    administrator's), and calls through Flurl (not traced). No harness check of the toggles' notice (the fake server
+    can't refuse a favourite). `SignedIn()` after the new API client in `Initialize`: reasoned, not tested.
+  - A UI Automation scroll of a row (Narrator's scroll, not the wheel) moves the keyboard to the page's first stop;
+    telling it from Narrator's own SetFocus isn't possible at that point. fx3's guard against it also refused
+    Narrator's SetFocus to that stop, worse for a Narrator user than the move, which no mouse, wheel, keyboard or
+    gamepad user meets, so the guard was dropped (`3ff61efe`, merged in `d8d00130`): `ShelfRow` is as it was before
+    `86902122`, and `Ui175Tests` checks that no row cancels a focus move. then-175-fx3 (13 of 13) checks the wheel, a
+    resize, the arrows and Narrator's SetFocus to the first stop, and says the scroll's move. Other pages whose grid is
+    in a ScrollView (a library, a collection, search results, a person's titles) may do the same to a card.
+  - The scroll stress ran at 2560 x 1392 in all four themes, and at 1280 x 720 in Drive-in and Cinematic; Classic and
+    Editorial at 1280 x 720 weren't run (the slots).
+  - 150 % DPI can't be set off-screen (every monitor here is 96 dpi): the gate runs at this PC's scale and says so. A
+    right-click and Shift+F10 can't be posted off-screen (the menu key and gamepad Menu raise the same
+    `ContextRequested`), nor a real tap after a click. Hand checks, 1.7.5.
 
 ## Nixie 1.7.4: the basics
 - **Merged** (2026-11-23, `wip/rel-1.7.4` from main's `2075a75e`, 1.7.3 as released): `wip/174-signin`, `wip/174-hud`

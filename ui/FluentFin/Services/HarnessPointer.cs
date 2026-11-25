@@ -41,7 +41,10 @@ public static class HarnessPointer
 		/// high contrast raise it) while the player shows: tools\ui-harness\offscreen\then-174-hud.ps1's theme part.
 		/// </summary>
 		GlassChanged = 5,
-		/// <summary>Nixie 1.7.4: the next layout theme chosen in place while the player shows (what Settings' choice does).</summary>
+		/// <summary>
+		/// Nixie 1.7.4: the next layout theme chosen in place while the player shows (what Settings' choice does). 1.7.5 (g4): a
+		/// high word of 1 to 4 chooses that theme (<see cref="Themes.LayoutThemeId"/> + 1), for every pair of themes.
+		/// </summary>
 		NextTheme = 6,
 		/// <summary>
 		/// Nixie 1.7.4: the player's bars' fades stopped where they are, as the compositor stops one short (the player at the
@@ -124,7 +127,8 @@ public static class HarnessPointer
 
 			if (kind is Kind.NextTheme && App.GetService<ThemeService>() is { } themes)
 			{
-				var next = (Themes.LayoutThemeId)(((int)(themes.ActiveId ?? Themes.LayoutThemeId.DriveIn) + 1) % Enum.GetValues<Themes.LayoutThemeId>().Length);
+				var count = Enum.GetValues<Themes.LayoutThemeId>().Length;
+				var next = high > 0 && high <= count ? (Themes.LayoutThemeId)(high - 1) : (Themes.LayoutThemeId)(((int)(themes.ActiveId ?? Themes.LayoutThemeId.DriveIn) + 1) % count);
 				Log().LogInformation("[harness] the layout theme chosen: {Theme} ({Changed})", next, themes.Choose(next) ? "shown" : "not shown");
 				return;
 			}

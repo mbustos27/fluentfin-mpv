@@ -179,6 +179,10 @@ def refresh_rules(bridge, series):
                       if getattr(s, "source", None) == skip_rules.SOURCE_RULE}
             kept = [s for s in video.intros
                     if getattr(s, "source", None) != skip_rules.SOURCE_RULE]
+            # 1.7.5: what the rules took over comes back first: a rule kept
+            # takes its Intro or Outro over again, a forgotten one's returns
+            kept += [s for s in skip_rules.taken_over(video.intros)
+                     if not any(s is k for k in kept)]
             video.intros[:] = kept
             if key is not None:
                 skip_rules.add_rules(video, Intro, key, skip_rules.store())

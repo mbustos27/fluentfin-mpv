@@ -683,5 +683,30 @@ class NoMpvExeTest(unittest.TestCase):
                             for line in logs.output), logs.output)
 
 
+class LoadFlags(unittest.TestCase):
+    """1.7.5 (BH-161-q4): libmpv's DLL search flags reach Windows as
+    ``winmode`` (LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR and _DEFAULT_DIRS: the
+    DLLs libmpv needs come from its own folder). Passed second, as 1.6
+    did, they were ``mode``, which Windows ignores."""
+
+    @unittest.skipUnless(os.name == "nt", "the flags are Windows'")
+    def test_the_search_flags_are_winmode(self):
+        from jellyfin_mpv_shim import skip_analyse
+
+        class Dll:
+            def __getattr__(self, name):
+                function = mock.Mock(name=name)
+                function.return_value = 1
+                return function
+
+        with mock.patch.object(skip_analyse.ctypes, "CDLL",
+                               return_value=Dll()) as load:
+            skip_analyse.Libmpv("C:\\nowhere\\libmpv-2.dll")
+        load.assert_called_once()
+        args, kwargs = load.call_args
+        self.assertEqual(args, ("C:\\nowhere\\libmpv-2.dll",))
+        self.assertEqual(kwargs, {"winmode": 0x00000100 | 0x00001000})
+
+
 if __name__ == "__main__":
     unittest.main()

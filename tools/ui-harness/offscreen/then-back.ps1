@@ -69,10 +69,10 @@ Open-Nav 'Home'
 Start-Sleep -Milliseconds 2500
 [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
 Start-Sleep -Milliseconds 800
-$seeAll = Find-Ui -Name 'See all Continue Watching' -Type 'Hyperlink'
+$seeAll = Find-Ui -Name 'See all Continue watching' -Type 'Hyperlink'
 if ($seeAll) {
     [void](Invoke-Element $seeAll)
-    [void](Wait-Ui -Name 'Continue Watching' -Type 'List' -Seconds 10)
+    [void](Wait-Ui -Name 'Continue watching' -Type 'List' -Seconds 10)
     Start-Sleep -Milliseconds 1500
     $gridFirst = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, 'BaseItemDtoCard'))) | Where-Object { -not $_.Cached.IsOffscreen }) | Select-Object -First 1
     if ($gridFirst) { [void][OffscreenUi]::SetFocus($gridFirst); Start-Sleep -Milliseconds 600 }

@@ -85,7 +85,7 @@
                     <TextBlock
                         Margin="{StaticResource SmallTopBottomMargin}"
                         Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                        Text="Continue Watching" />
+                        Text="Continue watching" />
                     <StackPanel Orientation="Horizontal">
                         <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
                         <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
@@ -98,7 +98,7 @@
 
                 <lc:ShelfRow
                     x:Name="ContinueRow"
-                    Header="Continue Watching"
+                    Header="Continue watching"
                     HasSeeAll="True"
                     ItemsSource="{x:Bind ViewModel.ContinueItems, Mode=OneWay}"
                     SeeAll="ContinueSeeAll"

@@ -35,7 +35,36 @@ public static class ThemeResources
 		Show(service.Active);
 	}
 
-	private static void OnActiveChanged(object? sender, EventArgs e) => Show(_service?.Active);
+	/// <summary>
+	/// 1.7.5 (g4, the basics gate's theme switch): what the last switch did with the page shown (<see cref="ReloadShownPage"/>).
+	/// </summary>
+	public static ThemeReload LastReload { get; private set; } = ThemeReload.None;
+
+	private static void OnActiveChanged(object? sender, EventArgs e)
+	{
+		Show(_service?.Active);
+		LastReload = ReloadShownPage();
+		_log?.LogInformation("Layout theme {Theme}: the page shown {Reload}", _service?.ActiveId, LastReload);
+	}
+
+	/// <summary>
+	/// 1.7.5 (g4): the page shown goes to the new theme's view in the same turn as its dictionary, whoever chose the theme
+	/// (Settings and "Choose a look" through <see cref="ThemeSwitcher"/>, or any other caller of <see cref="ThemeService.Choose"/>).
+	/// A page of the old theme left in the window measured against the new dictionary and ended Nixie at the next layout pass
+	/// ("Cannot find a Resource with the Name/Key DriveInBoardTextBrush": Drive-in's film page, switched in place).
+	/// </summary>
+	private static ThemeReload ReloadShownPage()
+	{
+		try
+		{
+			return App.GetService<FluentFin.Contracts.Services.INavigationService>() is NavigationService navigation ? navigation.ReloadForTheme() : ThemeReload.None;
+		}
+		catch (Exception ex)
+		{
+			_log?.LogWarning(ex, "The page shown could not be shown again in the new layout theme");
+			return ThemeReload.None;
+		}
+	}
 
 	/// <summary>Puts <paramref name="theme"/>'s dictionary in the slot; a dictionary that does not load leaves the slot empty (the shared look).</summary>
 	public static void Show(ILayoutTheme? theme)
@@ -46,8 +75,10 @@ public static class ThemeResources
 			return;
 		}
 
+		var outgoing = Current;
 		slot.MergedDictionaries.Clear();
 		Current = null;
+		KeepBehind(outgoing);
 		if (theme is not null)
 		{
 			try
@@ -63,6 +94,43 @@ public static class ThemeResources
 		}
 
 		Applied?.Invoke(null, EventArgs.Empty);
+	}
+
+	/// <summary>1.7.5 (g4): the dictionary of the theme switched away from, at the bottom of the app's resources.</summary>
+	private static ResourceDictionary? s_behind;
+
+	/// <summary>
+	/// 1.7.5 (g4): the outgoing theme's dictionary is kept first of the app's merged dictionaries, below every other (XAML looks
+	/// the last merged up first), so only its own keys resolve there: what an element of that theme still in the window asks
+	/// for at its next measure (Drive-in's film and series pages ended Nixie, "Cannot find a Resource with the Name/Key
+	/// DriveInBoardTextBrush", when the theme changed under them). The new theme's and the shared keys still win everywhere
+	/// else. It is replaced at the next switch.
+	/// </summary>
+	private static void KeepBehind(ResourceDictionary? outgoing)
+	{
+		try
+		{
+			if (Application.Current?.Resources is not { } resources)
+			{
+				return;
+			}
+
+			if (s_behind is null)
+			{
+				s_behind = new ResourceDictionary();
+				resources.MergedDictionaries.Insert(0, s_behind);
+			}
+
+			s_behind.MergedDictionaries.Clear();
+			if (outgoing is not null)
+			{
+				s_behind.MergedDictionaries.Add(outgoing);
+			}
+		}
+		catch (Exception ex)
+		{
+			_log?.LogWarning(ex, "The outgoing layout theme's dictionary could not be kept behind the new one");
+		}
 	}
 
 	/// <summary>The active theme's resource <paramref name="key"/> (its dictionary's, then its merged ones'), null when it has none.</summary>

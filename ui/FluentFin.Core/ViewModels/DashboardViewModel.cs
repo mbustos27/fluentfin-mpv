@@ -187,7 +187,7 @@ public partial class DashboardViewModel : ObservableObject, INavigationAware
 	{
 		Notice = await jellyfinClient.ScanAllLibraries()
 			? new ServerNotice(ServerPowerState.None, "Scan started", "The server is looking for new and changed files in every library. Scheduled tasks shows its progress.", NoticeKind.Success)
-			: new ServerNotice(ServerPowerState.Failed, "The scan didn't start", "The server didn't accept the request.", NoticeKind.Error);
+			: new ServerNotice(ServerPowerState.Failed, "The scan didn't start", Admin.ServerPower.NotTaken("The server didn't accept the request."), NoticeKind.Error);
 	}
 
 	private async Task<bool> Asked(ConfirmPrompt prompt) => Confirm is { } confirm && await confirm(prompt);

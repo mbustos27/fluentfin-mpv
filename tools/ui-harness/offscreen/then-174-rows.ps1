@@ -10,6 +10,8 @@
 # outer size. Pages: the big series' Season 1 (13 episodes, 16 people with long names), the series page, Home, Collections, the
 # showcase film, the Movies library (its presets), search results ("the"); "cast" checks the season page's names; "topbar"
 # the bar's lit tab on an item page reached from Home. Every list of UI Automation whose items lie on one line is a row.
+# Nixie 1.7.5 (the basics gate, g3): with FAKESERVER_REAL_SHAPE=1, "season24" (a season of 24 episodes with long names) and
+# "film" (a long title, a cast of 48); RG_MAX_MIN='2560x1392' fails a "max" smaller than that (the big monitor gone).
 # For each row that runs past its end, each input from the row's start:
 #   keys      End, then Home and Right to the last (the keyboard on the row's first item, as Tab leaves it)
 #   tab       Tab out of the row and Shift+Tab back: the row's remembered (last) item, in view
@@ -600,7 +602,7 @@ function Rg-PageRows {
     [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0); Start-Sleep -Milliseconds 400
     $out = @($names)
     # (the item pages' rows all count: the season's strip, its episodes, its cast; the limit is for Home and the like)
-    if ($rgPerPage -gt 0 -and $rgPage -notin @('season', 'series')) { $out = @($out | Select-Object -First $rgPerPage) }
+    if ($rgPerPage -gt 0 -and $rgPage -notin @('season', 'series', 'season24', 'film')) { $out = @($out | Select-Object -First $rgPerPage) }
     Say "rows174 ($rgTag $rgSize $rgPage): rows $($out -join ' | ')"
     $out
 }
@@ -614,25 +616,43 @@ function Rg-TestPage {
 }
 
 # ---- the pages --------------------------------------------------------------------------------------------------------------
-function Rg-OpenSeries {
-    Open-Library $rgBs.library
+# (Nixie 1.7.5, g3: -Series the real-shaped series of FAKESERVER_REAL_SHAPE, -Season its Season 2 of 24 episodes)
+function Rg-OpenSeries($Series = $rgBs) {
+    Open-Library $Series.library
     Start-Sleep -Milliseconds 1200
-    $card = Wait-Until { Find-MediaCard $rgBs.name } -Seconds 30 -PollMs 200
+    $card = Wait-Until { Find-MediaCard $Series.name } -Seconds 30 -PollMs 200
     if (-not $card) { return $false }
     [void](Invoke-Element $card)
     $full = Wait-Until { Find-Ui -Name 'Full details' -Type 'Button' -Contains } -Seconds 4 -PollMs 150
     if ($full) { [void](Invoke-Element $full) }
-    [bool](Wait-Until { Find-Ui -Name 'Season 1 details' -Type 'Hyperlink' -OffscreenToo } -Seconds 20 -PollMs 200)
+    # (a show in progress opens on its Up next's season: any season's link)
+    [bool](Wait-Until { Rg-SeasonLink } -Seconds 20 -PollMs 200)
 }
-function Rg-OpenSeason {
-    if (-not (Rg-OpenSeries)) { return $false }
+function Rg-SeasonLink([int]$Season = 0) {
+    $l = Find-Ui -Name 'Season ' -Type 'Hyperlink' -Contains -OffscreenToo
+    if ($l -and $l.Current.Name -match $(if ($Season) { "^Season $Season details$" } else { '^Season \d+ details$' })) { $l }
+}
+function Rg-OpenSeason($Series = $rgBs, [int]$Season = 1) {
+    if (-not (Rg-OpenSeries $Series)) { return $false }
     # (the link can be remade as the page fills in: found again, and tried twice)
     for ($try = 0; $try -lt 2; $try++) {
-        $link = Wait-Until { Find-Ui -Name 'Season 1 details' -Type 'Hyperlink' -OffscreenToo } -Seconds 10 -PollMs 200
+        $link = Wait-Until { Rg-SeasonLink $Season } -Seconds 4 -PollMs 200
+        if (-not $link) {
+            # another season shown: its tab in the season picker first ("Season 2", Editorial's "Season 2, 5 of 24 watched")
+            $tab = $null
+            foreach ($type in 'TabItem', 'ListItem', 'Button') {
+                $ct = [System.Windows.Automation.ControlType]::$type
+                $tab = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $ct))) |
+                        Where-Object { $_.Cached.Name -match "^Season $Season(,|$)" }) | Select-Object -First 1
+                if ($tab) { break }
+            }
+            if ($tab) { [void](Invoke-Element $tab) }
+            $link = Wait-Until { Rg-SeasonLink $Season } -Seconds 10 -PollMs 200
+        }
         if (-not $link) { return $false }
         try { [void](Invoke-Element $link); break } catch { Start-Sleep -Milliseconds 500 }
     }
-    $ok = [bool](Wait-Until { [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Mark Season 1 of ', '') } -Seconds 20 -PollMs 200)
+    $ok = [bool](Wait-Until { [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, "Mark Season $Season of ", '') } -Seconds 20 -PollMs 200)
     Start-Sleep -Seconds 3
     $ok
 }
@@ -676,6 +696,8 @@ function Rg-Lit { $p = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id); if (
 
 # the season's cast as the fake server lists it (FAKESERVER_BIG_SERIES: its long names, library.py's LONG_CAST)
 $rgCast = @(if ($rgBs -and $rgBs.PSObject.Properties['cast']) { $rgBs.cast })
+# Nixie 1.7.5 (g3): the real-shaped titles (FAKESERVER_REAL_SHAPE=1; pages season24 and film), $null when off
+$rgReal = if ($fixture.PSObject.Properties['real_shape']) { $fixture.real_shape } else { $null }
 
 if (-not $rgBs) { Check "rows174 ($rgTag): the fake server's big series (FAKESERVER_BIG_SERIES=24x13)" $false 'the fixture has no big_series'; return }
 Say "rows174 ($rgTag): sizes $($rgSizes -join ', '); pages $($rgPages -join ', '); depth $rgDepthAsked"
@@ -686,10 +708,26 @@ foreach ($rgSize in $rgSizes) {
     Start-Sleep -Milliseconds 1500
     $wr = Rg-Window
     Say "rows174 ($rgTag): window $rgSize -> $([int]$wr.Width) x $([int]$wr.Height)"
+    # Nixie 1.7.5 (the basics gate, g3): "max" is the friend's 2560 x 1392 only on a 2560 x 1440 monitor; when that monitor is
+    # gone (1.7.4's integration: Cinematic and Editorial never ran at 2560) the run says so and fails, never passes smaller
+    if ($rgSize -eq 'max' -and $env:RG_MAX_MIN) {
+        $rgMin = $env:RG_MAX_MIN -split 'x'
+        $rgPage = '(window)'
+        Rg-Record '(window)' 'size' $(if ($wr.Width -ge [int]$rgMin[0] - 24 -and $wr.Height -ge [int]$rgMin[1] - 24) { 'pass' } else { 'fail' }) "maximised: $([int]$wr.Width) x $([int]$wr.Height) (at least $($env:RG_MAX_MIN) wanted: the 2560 x 1440 monitor)"
+    }
     foreach ($rgPage in $rgPages) {
         try {
             switch ($rgPage) {
                 'season' { if (Rg-OpenSeason) { Rg-TestPage } else { Rg-Record 'Episodes' 'found' 'fail' 'the season page did not open' } }
+                # Nixie 1.7.5 (g3, FAKESERVER_REAL_SHAPE): a season of 24 episodes with long names, and a film with a cast of 48
+                'season24' {
+                    if (-not $rgReal) { Rg-Record 'Episodes' 'found' 'fail' 'the fixture has no real_shape (FAKESERVER_REAL_SHAPE=1)' }
+                    elseif (Rg-OpenSeason $rgReal.series 2) { Rg-TestPage } else { Rg-Record 'Episodes' 'found' 'fail' 'the 24-episode season page did not open' }
+                }
+                'film' {
+                    if (-not $rgReal) { Rg-Record 'Cast & crew' 'found' 'fail' 'the fixture has no real_shape (FAKESERVER_REAL_SHAPE=1)' }
+                    else { Open-Library $rgReal.film.library; Open-Card $rgReal.film.name; [void](Wait-ItemPage $rgReal.film.name); Start-Sleep -Seconds 3; Rg-TestPage }
+                }
                 'cast' { if (Rg-OpenSeason) { Rg-TestCast } else { Rg-Record 'Cast & crew' 'found' 'fail' 'the season page did not open' } }
                 'series' { if (Rg-OpenSeries) { Start-Sleep -Seconds 2; Rg-TestPage } else { Rg-Record '(series)' 'found' 'fail' 'the series page did not open' } }
                 'home' { Open-Nav 'Home'; Start-Sleep -Seconds 4; Rg-TestPage }

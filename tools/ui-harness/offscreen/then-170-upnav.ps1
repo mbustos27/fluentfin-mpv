@@ -23,6 +23,11 @@ function Up-Focus { $f = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); if
 function Up-Describe($f) { if ($f) { "$($f.type) '$($f.name)' id=$($f.automationId)" } else { 'nothing' } }
 function Up-Crumb([string]$Id) { Find-Ui -Id $Id }
 function Up-Trail { [pscustomobject]@{ Library = (Up-Crumb 'TrailEyebrow'); Series = (Up-Crumb 'TrailSeries'); Season = (Up-Crumb 'TrailSeason') } }
+# Nixie 1.7.5 (the basics gate, g3): since 1.7.4 an item page reached from Home lights its library's tab when the bar has one
+# (TopNavigation.LibraryTab), and the library crumb shows only when the bar does not say the library already
+# (TopTabs.EyebrowFor): the way up starts at the library crumb, or at the lit tab and then the series crumb
+function Up-Lit { $p = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id); if (-not $p) { return '' }; @($p.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem))) | Where-Object { $sp = $null; $_.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$sp) -and $sp.Current.IsSelected } | ForEach-Object { $_.Current.Name }) -join ',' }
+function Up-First { $e = Up-Crumb 'TrailEyebrow'; if ($e) { $e } else { Up-Crumb 'TrailSeries' } }
 function Up-Name($e) { if ($e) { try { $e.Current.Name } catch { '' } } else { '' } }
 # the words the button shows (its label, a Text inside it), as the user reads them
 function Up-Words($e) {
@@ -94,7 +99,8 @@ Check 'upnav: the series crumb is a button named "Go to series <series>"' ((Up-N
 Check 'upnav: ... showing the series'' name' ((Up-Words $upTrail.Series) -eq $upSeries) (Up-Words $upTrail.Series)
 Check 'upnav: the season crumb is a button named "Go to Season <n>"' ((Up-Name $upTrail.Season) -eq "Go to $upSeasonWord") (Up-Name $upTrail.Season)
 Check 'upnav: ... showing "Season <n>"' ((Up-Words $upTrail.Season) -eq $upSeasonWord) (Up-Words $upTrail.Season)
-Check 'upnav: the library crumb leads them (reached from Home)' ([bool]$upTrail.Library) "'$(Up-Name $upTrail.Library)'"
+$upLitNow = Up-Lit
+Check 'upnav: the library crumb leads them, or the bar lights the library (reached from Home)' ([bool]$upTrail.Library -or ($upLitNow -and $upLitNow -ne 'Home')) "crumb '$(Up-Name $upTrail.Library)'; lit '$upLitNow'"
 Check 'upnav: on arrival the keyboard is on the page''s Play, as before' ($upArrival -and $upArrival.name -match '^(Play|Resume)') (Up-Describe $upArrival)
 $upPlayName = if ($upArrival -and $upArrival.name -match '^(Play|Resume)') { $upArrival.name } else { $null }
 Up-Layout 'episode' $upPlayName
@@ -107,17 +113,18 @@ for ($upI = 0; $upI -lt 4; $upI++) {
     if ($upF -and $upF.automationId -eq 'TrailSeason') { break }
 }
 Check 'upnav: keyboard first, Shift+Tab from Play reaches the season crumb' ((Up-Focus).automationId -eq 'TrailSeason') ($upBackwards -join ' -> ')
-[void][OffscreenUi]::SetFocus((Up-Crumb 'TrailEyebrow')); Up-Settle 400
+[void][OffscreenUi]::SetFocus((Up-First)); Up-Settle 400
 $upStops = @()
-for ($upI = 0; $upI -lt 4; $upI++) { Key 0x09; Up-Settle 350; $upStops += (Up-Focus) }
-Check 'upnav: Tab from the library crumb goes to the series crumb, then the season crumb' ($upStops[0].automationId -eq 'TrailSeries' -and $upStops[1].automationId -eq 'TrailSeason') (($upStops | ForEach-Object { Up-Describe $_ }) -join ' -> ')
+if (-not (Up-Crumb 'TrailEyebrow')) { $upStops += (Up-Focus) }   # (no library crumb: the walk starts on the series crumb)
+for ($upI = $upStops.Count; $upI -lt 4; $upI++) { Key 0x09; Up-Settle 350; $upStops += (Up-Focus) }
+Check 'upnav: Tab from the first crumb goes to the series crumb, then the season crumb' ($upStops[0].automationId -eq 'TrailSeries' -and $upStops[1].automationId -eq 'TrailSeason') (($upStops | ForEach-Object { Up-Describe $_ }) -join ' -> ')
 $upNext = @($upStops[2..3] | Where-Object { $_ -and $_.name -match '^(Play|Resume)' })
 Check 'upnav: ... then the title''s actions (Play within two Tabs)' ($upNext.Count -ge 1) (($upStops[2..3] | ForEach-Object { Up-Describe $_ }) -join ' -> ')
 Shot "upnav-$upTag-episode-keyboard"
 
 # --- Enter on the series crumb: the series page; Back: the episode, the keyboard on the crumb -----------------------------
-[void][OffscreenUi]::SetFocus((Up-Crumb 'TrailEyebrow')); Up-Settle 300
-Key 0x09; Up-Settle 400
+[void][OffscreenUi]::SetFocus((Up-First)); Up-Settle 300
+if (Up-Crumb 'TrailEyebrow') { Key 0x09; Up-Settle 400 }
 Check 'upnav: the series crumb has the keyboard' ((Up-Focus).automationId -eq 'TrailSeries') (Up-Describe (Up-Focus))
 $upT = Get-Epoch
 Key 0x0D
@@ -184,8 +191,8 @@ foreach ($upW in $upSizes) {
     [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0); Up-Settle 600
     Up-Layout "episode at $upW" $upPlayName
     Shot "upnav-$upTag-episode-$upW"
-    [void][OffscreenUi]::SetFocus((Up-Crumb 'TrailEyebrow')); Up-Settle 250
-    Key 0x09; Up-Settle 500
+    [void][OffscreenUi]::SetFocus((Up-First)); Up-Settle 250
+    if (Up-Crumb 'TrailEyebrow') { Key 0x09 }; Up-Settle 500
     Shot "upnav-$upTag-episode-$upW-focus"
 }
 [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080); Up-Settle 800

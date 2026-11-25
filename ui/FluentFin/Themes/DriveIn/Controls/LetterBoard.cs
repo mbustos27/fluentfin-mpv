@@ -35,7 +35,7 @@ public sealed partial class LetterBoard : ContentControl
 
 /// <summary>
 /// Drive-in: a row's marquee header, a letter board with bulbs along its top and bottom and the row's name in the display
-/// face, upper case. A level-2 heading for Narrator, named in the row's own words (<see cref="Text"/>: "Continue Watching");
+/// face, upper case. A level-2 heading for Narrator, named in the row's own words (<see cref="Text"/>: "Continue watching");
 /// the board shows <see cref="DisplayText"/>, the same in capitals. Styled by DriveInMarqueeStyle (DriveIn.xaml).
 /// </summary>
 public sealed partial class MarqueeSign : Control
@@ -57,7 +57,7 @@ public sealed partial class MarqueeSign : Control
 	public static readonly DependencyProperty DisplayTextProperty =
 		DependencyProperty.Register(nameof(DisplayText), typeof(string), typeof(MarqueeSign), new PropertyMetadata(""));
 
-	/// <summary>The row's name as it is said and as the harness and Narrator find it ("Continue Watching").</summary>
+	/// <summary>The row's name as it is said and as the harness and Narrator find it ("Continue watching").</summary>
 	public string Text { get => (string)GetValue(TextProperty); set => SetValue(TextProperty, value); }
 
 	/// <summary>What the board shows: <see cref="Text"/> in capitals.</summary>

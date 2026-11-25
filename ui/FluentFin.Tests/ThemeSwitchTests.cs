@@ -75,6 +75,35 @@ public sealed class ThemeSwitchTests
 	}
 
 	[Fact]
+	public void TheDictionarySwap_ShowsThePageAgain_InTheSameTurn_WhoeverChoseTheTheme()
+	{
+		// 1.7.5 (g4, the basics gate's theme switch): a theme chosen outside ThemeSwitcher (the dev hook; a later shortcut or
+		// restore) swapped the dictionary and left the old theme's page in the window: Drive-in's film page measured against the
+		// new keys at the next layout pass and ended Nixie (DriveInBoardTextBrush not found). The swap reloads the page itself.
+		var resources = Source("Services", "ThemeResources.cs");
+		var changed = resources.IndexOf("private static void OnActiveChanged", StringComparison.Ordinal);
+		Assert.True(changed > 0);
+		var body = resources[changed..resources.IndexOf('}', changed)];
+		var show = body.IndexOf("Show(_service?.Active);", StringComparison.Ordinal);
+		var reload = body.IndexOf("LastReload = ReloadShownPage();", StringComparison.Ordinal);
+		Assert.True(show >= 0 && reload > show, "the new dictionary first, then the page shown again in its view");
+		Assert.Contains("navigation.ReloadForTheme()", resources);
+
+		// and the outgoing theme's dictionary stays, below every other dictionary, for whatever of that theme is still measured
+		// (fxmid-d: the reload alone still left Drive-in's series page ending Nixie at the switch to Cinematic)
+		var showAt = resources.IndexOf("public static void Show(", StringComparison.Ordinal);
+		var clear = resources.IndexOf("slot.MergedDictionaries.Clear();", showAt, StringComparison.Ordinal);
+		Assert.True(resources.IndexOf("var outgoing = Current;", showAt, StringComparison.Ordinal) is > 0 and var kept && kept < clear);
+		Assert.True(resources.IndexOf("KeepBehind(outgoing);", showAt, StringComparison.Ordinal) > clear);
+		Assert.Contains("resources.MergedDictionaries.Insert(0, s_behind);", resources);
+
+		// and the switcher reloads nothing a second time: it reads what the swap did
+		var switcher = Source("Services", "ThemeSwitcher.cs");
+		Assert.DoesNotContain("ReloadForTheme()", switcher);
+		Assert.Contains("themes.Choose(id) ? ThemeResources.LastReload : ThemeReload.None", switcher);
+	}
+
+	[Fact]
 	public void TheHandoff_GivesTheViewModel_ToOneRequestOfItsExactType()
 	{
 		var vm = new FakeViewModel();

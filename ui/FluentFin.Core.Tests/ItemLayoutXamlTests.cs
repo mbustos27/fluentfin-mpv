@@ -96,7 +96,9 @@ public sealed class ItemLayoutXamlTests
 		var code = Code("FluentFin/Controls/ItemHero.xaml.cs");
 
 		Assert.NotEqual("{StaticResource ItemHeroHeight}", (string?)FindByName(hero, "HeroGrid").Attribute("Height"));
-		Assert.Contains("HeroGrid.Height = height;", code);
+		// Nixie 1.7.5: the share, or more when its words need it (HeroLayout.Fit)
+		Assert.Contains("HeroGrid.Height = HeroLayout.Fit(_shareHeight, ", code);
+		Assert.Contains("_shareHeight = height;", code);
 		Assert.Contains("var height = HeroLayout.Height(XamlRoot?.Size.Height ?? 0, HeightShare);", code);
 		Assert.Contains("root.Changed += OnRootChanged;", code);
 	}
@@ -205,7 +207,9 @@ public sealed class ItemLayoutXamlTests
 	public void TheHerosMoreMenu_LeavesOutWatchedAndFavorite_WhichAreButtonsBesideIt()
 	{
 		// 1.2.0 merge (items x library): the menu itself without the toggles is the library's ItemMenu test of includeToggles
-		Assert.Contains("new JellyfinFlyoutConverter { IncludeToggles = false }.Convert(dto", Code("FluentFin/Controls/ItemHero.xaml.cs"));
+		// 1.7.5: made through ApplyPageMenu (the button only with something in it), which leaves the toggles out
+		Assert.Contains("JellyfinFlyoutConverter.ApplyPageMenu(MoreButton, dto)", Code("FluentFin/Controls/ItemHero.xaml.cs"));
+		Assert.Contains("new JellyfinFlyoutConverter { IncludeToggles = false }.Convert(dto", Code("FluentFin/Converters/JellyfinFlyoutConverter.cs"));
 	}
 
 	private static string Code(string repoRelativePath) => File.ReadAllText(Path.Combine(RepoRoot, repoRelativePath));

@@ -76,7 +76,9 @@ public sealed class CinematicStageTests
 		var page = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Themes", "Cinematic", "Views", "CinematicLibraryPage.xaml.cs"));
 
 		Assert.DoesNotContain("Stage.Current is null &&", page);
-		Assert.Contains("ViewModel.Items).CollectionChanged += (_, _) => QueueStage();", page);
+		// Nixie 1.7.4: on every change while the page is shown (WhileLoaded: Back hands a kept view model to a new page)
+		Assert.Contains("NotifyCollectionChangedEventHandler itemsChanged = (_, _) => QueueStage();", page);
+		Assert.Contains("WhileLoaded.Hold(this, () => items.CollectionChanged += itemsChanged, () => items.CollectionChanged -= itemsChanged);", page);
 		var scrolled = page.Replace("\r\n", "\n");
 		var onScroll = scrolled[scrolled.IndexOf("GridScroller.ViewChanged += (_, _) =>", StringComparison.Ordinal)..];
 		Assert.Contains("QueueStage();", onScroll[..onScroll.IndexOf("};", StringComparison.Ordinal)]);

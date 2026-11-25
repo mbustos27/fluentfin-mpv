@@ -122,7 +122,22 @@ command set and a PATH of Windows' own folders only:
   keep running past the moment it would restart to install, and with the marker the switch must get past that gate (the
   unzipped copy is portable, so it is refused later and nothing is ever installed).
 
-Each run records every process FluentFin starts and every DLL they load (`tools\release\proc_audit.py`) and fails on
+- **the basics gate** (1.7.5, [design rule 12](DESIGN-RULES.md)): `tools\gate\run-gate.ps1` on the package's
+  `app\Nixie.exe`, off-screen through `run-offscreen.ps1`'s slots, every check of `tools\gate\manifest\*.psd1` in the themes
+  it names: sign-in and sessions, servers, every menu, rows, the top bar and the way up, item pages, playback and the
+  player's controls, settings, lifecycle (`tools\gate\README.md`). The checks that need the harness's dev hooks run on a
+  Debug build of the same checkout (`-GateDevExe <Nixie.exe>`, else the gate builds one with the package's libmpv). A
+  failed job fails the verify, with its one-line reason; the grid is `<Out>\Gate\gate.md`.
+  **Run it on a quiet machine** (no other stream's off-screen run, no TV emulator: each holds a slot): the gate then takes
+  5 slots (`-GateSlots`, through the harness's lock as `NIXIE_HARNESS_PARALLEL=5`); otherwise it takes the usual 3 and
+  says so. Its budget is **2 hours** of real time; the plan line before its jobs gives the expected time (each job's own
+  time from `tools\gate\timings.json`) and says when it is over. Every check of classes 1 to 8 runs on every release
+  build; only extra themes and sizes of a check (`Tier = 'nightly'`) wait for the nightly run,
+  `tools\gate\run-gate.ps1 -Nightly`. After a full run on a quiet machine, `-SaveTimings` refreshes `timings.json`
+  (commit it). On its own: `tools\gate\run-gate.ps1 -Exe <Nixie.exe> -Out <scratch> -Python <venv python> [-Build]`
+  (`-List` shows the checks and their expected minutes).
+
+Each run but the gate's records every process FluentFin starts and every DLL they load (`tools\release\proc_audit.py`) and fails on
 anything from a dev checkout, a Python install or the build folder, on a token in a command line, or on a file written
 into the package folder. Then look at the screenshots it saved (`<Out>\<run>\shots\`, `<Out>\SelfTest\selftest.png`).
 

@@ -226,4 +226,33 @@ public sealed class SignInEndedLeftoverTests : IDisposable
 			client.StopWebSocket();
 		}
 	}
+
+	/// <summary>
+	/// 1.7.5 (the review's Major): Switch user keeps the leaving user's session on the server, but this app stops using it:
+	/// its websocket closes (it stayed open: Play On listed Nixie, and a cast reached a detached player) and nothing is sent
+	/// to end it (no /Sessions/Logout, which would end the saved sign-in).
+	/// </summary>
+	[Fact]
+	public async Task LeaveSession_ClosesTheWebsocket_AndEndsNothingOnTheServer()
+	{
+		using var server = new FakeJellyfin();
+		server.Start();
+		var client = new JellyfinClient(new CoreListLogger<JellyfinClient>(), Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(),
+			Mock.Of<IDeviceProfileFactory>(), Mock.Of<ISettings>(), TestHomeCache.Unused());
+		await client.Initialize(server.BaseUrl, new AuthenticationResult { AccessToken = "token-175-kept", ServerId = "fake-server", User = new UserDto { Id = Guid.NewGuid(), Name = "alice" } });
+		try
+		{
+			Assert.True(client.WebSocketRunning);
+			var before = server.ApiRequests.Count;
+
+			client.LeaveSession();
+
+			Assert.False(client.WebSocketRunning);
+			Assert.DoesNotContain(server.ApiRequests.Skip(before), r => r.Path.Contains("Logout", StringComparison.OrdinalIgnoreCase));
+		}
+		finally
+		{
+			client.StopWebSocket();
+		}
+	}
 }

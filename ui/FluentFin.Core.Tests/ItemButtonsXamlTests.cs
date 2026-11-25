@@ -78,7 +78,7 @@ public sealed class ItemButtonsXamlTests
 		// the More menu's "Mark as watched" text is the item's state: made again after a change, not once on load
 		var apply = Regex.Match(Code("FluentFin/Controls/ItemHero.xaml.cs"), @"private void ApplyUserData\(\)[\s\S]*?\n\t}").Value;
 
-		Assert.Contains("MoreButton.Flyout = ", apply);
+		Assert.Contains("JellyfinFlyoutConverter.ApplyPageMenu(MoreButton, dto);", apply); // 1.7.5: the menu and the button's visibility
 		Assert.Contains("WatchedButton.IsChecked = dto?.UserData?.Played;", apply);
 	}
 

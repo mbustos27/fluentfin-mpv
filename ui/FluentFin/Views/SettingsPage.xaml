@@ -124,7 +124,7 @@
                     </ctk:SettingsCard>
                     <!--  1.5 fixes: rewatching in Up next and Continue Watching (the owner's 1.5 choice: on by default), on this PC only  -->
                     <ctk:SettingsCard
-                        Description="Up next and Continue Watching show the next episode of a show you're watching again. Only on this PC."
+                        Description="Up next and Continue watching show the next episode of a show you're watching again. Only on this PC."
                         Header="Include shows I'm rewatching"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE8EE;}">
                         <ToggleSwitch AutomationProperties.Name="Include shows I'm rewatching" IsOn="{x:Bind ViewModel.IncludeRewatching, Mode=TwoWay}" />
@@ -805,7 +805,7 @@
                         IsClickEnabled="True" />
                     <!--  1.5 fixes (the button review's L1, L2; WCAG 2.1.4): single-letter keys can be turned off  -->
                     <ctk:SettingsCard
-                        Description="N goes to Up next and C to Continue Watching. Turn off if you press them by accident (speech input, for example)."
+                        Description="N goes to Up next and C to Continue watching. Turn off if you press them by accident (speech input, for example)."
                         Header="Letter keys on Home"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE8D2;}">
                         <ToggleSwitch AutomationProperties.Name="Letter keys on Home" IsOn="{x:Bind ViewModel.HomeLetterKeys, Mode=TwoWay}" />

@@ -29,7 +29,7 @@ public sealed record NixiePreset(string Id, string Label, string AutomationName,
 /// Settings left out.
 /// </summary>
 /// 1.7.3 (the owner's answer 3): no directors, actors, studios or networks; decades, genre mixes and countries stay here as
-/// filters, though Nixie no longer publishes them as collections (<see cref="StripOnly"/>).
+/// filters, though Nixie no longer publishes them as collections (<see cref="StripOnlyKinds"/>).
 public static class NixiePresets
 {
 	public const int Most = 12;
@@ -46,14 +46,12 @@ public static class NixiePresets
 	];
 
 	/// <summary>
-	/// 1.7.3: the kinds only the strip makes (they are not published: the catalog's <c>BuildAll</c> leaves them out). Fix round
-	/// (BH-173-m2): each has its Settings switch again (<see cref="CollectionsSettingsViewModel.LibraryFilters"/>), and one turned
-	/// off is left out (1.7.2's switches governed the strip too; the first 1.7.3 build brought them all back).
+	/// 1.7.3: the kinds only the strip makes (they are not published: the catalog's <c>BuildAll</c> leaves them out), in the
+	/// strip's order (their Settings switches). Fix round (BH-173-m2): each has its Settings switch again
+	/// (<see cref="CollectionsSettingsViewModel.LibraryFilters"/>), and one turned off is left out (1.7.2's switches governed the
+	/// strip too; the first 1.7.3 build brought them all back). 1.7.5: made by the catalog's builders (<see cref="For"/>).
 	/// </summary>
-	internal static IReadOnlyList<Builders.ISmartCollectionBuilder> StripOnly { get; } = [new Builders.DecadeBuilder(), new Builders.GenreMixBuilder(), new Builders.CountryBuilder()];
-
-	/// <summary>Fix round (BH-173-m2): the kinds of <see cref="StripOnly"/>, in the strip's order (their Settings switches).</summary>
-	public static IReadOnlyList<SmartCollectionKind> StripOnlyKinds { get; } = [.. StripOnly.Select(x => x.Kind)];
+	public static IReadOnlyList<SmartCollectionKind> StripOnlyKinds { get; } = [SmartCollectionKind.Decade, SmartCollectionKind.GenreMix, SmartCollectionKind.Country];
 
 	// their ids' first part, as their builders make them ("decade:movie:1980", "genres:movie:comedy+horror", "country:france")
 	private static readonly string[] StripOnlyPrefixes = ["decade:", "genres:", "country:"];
@@ -85,10 +83,12 @@ public static class NixiePresets
 
 		// 1.7.3: the published kinds the strip shows, then the strip's own (decades, genre mixes, countries). Fix round's
 		// re-review (BH-173-M2's other half): every title of each rule, never a collection's display cap, as a saved filter of
-		// the chip keeps (Under 90 minutes + Comedy showed 0 titles in the library, and 80 once saved)
-		var all = SmartCollectionCatalog.BuildAll(SmartCollectionCatalog.PublishedBuilders, own, now, boxedFranchises, kindsOff, Outside.OutsideListsSnapshot.Shared,
-				SmartCollectionCatalog.Log, census: false, whole: true)
-			.Where(x => SmartCollectionCatalog.Published.Contains(x.Kind)).Concat(StripOnlyFor(own, now, kindsOff));
+		// the chip keeps (Under 90 minutes + Comedy showed 0 titles in the library, and 80 once saved).
+		// 1.7.5 (fx1; M2's review of 1.7.3): both in one build of the catalog's (BuildKinds), less the kinds turned off: its gate
+		// counter and its catch, and the library's titles collapsed once (the strip's own kinds had a context, a loop and a catch
+		// of their own, and collapsed the titles again)
+		var kinds = SmartCollectionCatalog.Published.Concat(StripOnlyKinds).Where(x => kindsOff?.Contains(x) != true).ToHashSet();
+		var all = SmartCollectionCatalog.BuildKinds(own, now, kinds, boxedFranchises, Outside.OutsideListsSnapshot.Shared, whole: true).Where(x => kinds.Contains(x.Kind));
 		// one of each kind first (the strip shows a mix, not twelve franchises), then the rest in the same order
 		var byKind = all.GroupBy(x => x.Kind).OrderBy(g => Place(g.Key)).Select(g => g.ToList()).ToList();
 		var picked = new List<SmartCollection>();
@@ -113,37 +113,6 @@ public static class NixiePresets
 
 		return int.MaxValue;
 	}
-
-	// 1.7.3: the strip's own kinds of these titles; a builder that throws leaves out its kind only, said once in the app's log
-	// (its kind and the exception's type: no titles), as the catalog does for the published ones
-	private static List<SmartCollection> StripOnlyFor(IndexSnapshot own, DateTimeOffset now, IReadOnlySet<SmartCollectionKind>? kindsOff)
-	{
-		var context = new Builders.BuildContext(own, now, new HashSet<string>()) { Outside = Outside.OutsideListsSnapshot.Shared, Whole = true }; // as a saved filter
-		var made = new List<SmartCollection>();
-		foreach (var builder in StripOnly)
-		{
-			if (kindsOff?.Contains(builder.Kind) == true)
-			{
-				continue; // fix round (BH-173-m2): turned off in Settings
-			}
-
-			try
-			{
-				made.AddRange(builder.Build(context).Where(x => x.ItemIds.Count > 0).ToList()); // all of it here: a throw is part way through
-			}
-			catch (Exception ex)
-			{
-				if (SmartCollectionCatalog.Log is { } log && StripSaid.GetOrCreateValue(log).TryAdd(builder.Kind, 0))
-				{
-					log.LogWarning("Made by Nixie: the library presets' {Kind} couldn't be made ({Error}); the other kinds still are", builder.Kind, ex.GetType().Name);
-				}
-			}
-		}
-
-		return made;
-	}
-
-	private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ILogger, System.Collections.Concurrent.ConcurrentDictionary<SmartCollectionKind, byte>> StripSaid = new();
 
 	/// <summary>The longest label a strip chip takes (the strip scrolls with up to twelve of them).</summary>
 	public const int LabelMost = 24;

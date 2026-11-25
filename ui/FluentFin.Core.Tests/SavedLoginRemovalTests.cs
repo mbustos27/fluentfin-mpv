@@ -98,4 +98,52 @@ public sealed class SavedLoginRemovalTests : IDisposable
 		Assert.False(await HasPage(ServerUrl, Bob));
 		Assert.True(await HasPage("https://other.example", Alice));
 	}
+	/// <summary>
+	/// 1.7.5 (the bug hunt, reproduced): Switch user keeps a remembered Quick Connect session alive on the server; Remove server
+	/// forgot it without ending it, and then nothing could. Each kept session is ended first (EndKeptSessions), while the
+	/// server and its saved sign-ins are still there, then they are forgotten.
+	/// </summary>
+	[Fact]
+	public async Task RemoveServer_EndsTheSessionsKeptForItsSavedSignIns_First()
+	{
+		var (settings, sessions, servers) = WithSessions();
+		var stillThere = false;
+		sessions.Setup(x => x.EndKeptSessions(_server, It.IsAny<IEnumerable<SavedUser>>()))
+			.Callback(() => stillThere = servers.Contains(_server) && _server.Users.Count == 2).Returns(Task.CompletedTask);
+
+		await settings.DeleteServerCommand.ExecuteAsync(_server);
+
+		sessions.Verify(x => x.EndKeptSessions(_server, It.Is<IEnumerable<SavedUser>>(u => u.Select(y => y.Username).SequenceEqual(new[] { "alice", "bob" }))), Times.Once);
+		Assert.True(stillThere, "the kept sessions were ended after the server was forgotten");
+		Assert.DoesNotContain(_server, servers);
+	}
+
+	/// <summary>1.7.5 (the bug hunt): Remove on one saved sign-in ends its kept session first, then forgets it.</summary>
+	[Fact]
+	public async Task RemoveSavedUser_EndsItsKeptSession_First()
+	{
+		var (settings, sessions, _) = WithSessions();
+		var alice = _server.Users[0];
+		var stillThere = false;
+		sessions.Setup(x => x.EndKeptSessions(_server, It.IsAny<IEnumerable<SavedUser>>()))
+			.Callback(() => stillThere = _server.Users.Contains(alice)).Returns(Task.CompletedTask);
+
+		Assert.True(await settings.RemoveSavedUser(_server, alice));
+
+		sessions.Verify(x => x.EndKeptSessions(_server, It.Is<IEnumerable<SavedUser>>(u => u.Single() == alice)), Times.Once);
+		Assert.True(stillThere, "the kept session was ended after the sign-in was forgotten");
+		Assert.DoesNotContain(alice, _server.Users);
+	}
+
+	private (SettingsViewModel Settings, Mock<IJellyfinAuthenticationService> Sessions, ObservableCollection<SavedServer> Servers) WithSessions()
+	{
+		var servers = new ObservableCollection<SavedServer>([_server, _otherServer]);
+		var settings = new Mock<ISettings>();
+		settings.SetupGet(x => x.Servers).Returns(servers);
+		var backend = new Mock<IMpvBackend>();
+		backend.SetupGet(x => x.StatusChanged).Returns(Observable.Never<MpvBackendStatus>());
+		var sessions = new Mock<IJellyfinAuthenticationService>();
+		var vm = new SettingsViewModel(settings.Object, backend.Object, Mock.Of<IJellyfinClient>(), _cache, sessions: sessions.Object) { Confirm = _ => Task.FromResult(true) };
+		return (vm, sessions, servers);
+	}
 }

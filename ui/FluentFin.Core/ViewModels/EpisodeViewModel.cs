@@ -6,7 +6,7 @@ using Jellyfin.Sdk.Generated.Models;
 
 namespace FluentFin.Core.ViewModels;
 
-public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalCommands commands) : ObservableObject, INavigationAware
+public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalCommands commands) : ObservableObject, INavigationAware, IKeptOnBack
 {
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(PlayLabel), nameof(HasResumePoint))]
@@ -83,6 +83,40 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 	public LoadState State { get; } = new("this episode");
 
 	public Task OnNavigatedFrom() => Task.CompletedTask;
+
+	// ---- Nixie 1.7.4: Back shows the episode's page as it was (IKeptOnBack) ---------------------------------------------------
+
+	public bool CanKeep => State.IsLoaded && Dto is not null;
+
+	/// <summary>
+	/// Back or Forward shows the page as it was (the tracks picked stay picked). When something may have changed since (a play,
+	/// a watch state), the episode is asked again behind it: its watch state, favourite and resume point (Play's label) in place.
+	/// </summary>
+	public async Task Returned(object parameter, bool stale)
+	{
+		if (!stale || Dto?.Id is not { } id)
+		{
+			return;
+		}
+
+		var shown = Dto;
+		await State.RefreshBehindAsync(async () =>
+		{
+			var fresh = await jellyfinClient.GetItem(id);
+			if (fresh is null)
+			{
+				return LoadMessages.CouldNotLoad("this episode");
+			}
+
+			if (KeptCards.RefreshItem(shown, fresh))
+			{
+				OnPropertyChanged(nameof(PlayLabel));
+				OnPropertyChanged(nameof(HasResumePoint));
+			}
+
+			return LoadOutcome.Loaded;
+		});
+	}
 
 	// fluentfin-mpv: whether the user changed a picker after the page chose its defaults. The mpv player sends a track pick
 	// only then; otherwise the backend's remembered tracks and language defaults apply. The other players are unchanged.

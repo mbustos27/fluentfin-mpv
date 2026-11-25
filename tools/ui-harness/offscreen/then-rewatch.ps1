@@ -266,7 +266,7 @@ try {
             $script:page = 'player'
             $rwStopAt2 = Rw-PlayFor $rwPlay2 $rwPlayAt2
             # Home's rows are lists named after them (any theme); the player's own "Up next" is a button
-            $rwHome2 = Wait-Until { foreach ($n in 'Continue Watching', 'Up next') { if (Find-Ui -Name $n -Type 'List') { return $true } } } -Seconds 20 -PollMs 150
+            $rwHome2 = Wait-Until { foreach ($n in 'Continue watching', 'Up next') { if (Find-Ui -Name $n -Type 'List') { return $true } } } -Seconds 20 -PollMs 150
             Check "rewatch: the player's Back landed on Home" ([bool]$rwHome2)
             $script:page = 'home'
             $rwSeen2 = Rw-WaitHome $rwExpect2 $rwCardEp $rwStopAt2

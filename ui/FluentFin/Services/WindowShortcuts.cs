@@ -230,23 +230,15 @@ public static class WindowShortcuts
 	}
 
 	/// <summary>A menu, flyout or dialog is open: the keys and buttons are theirs. Tooltips do not count.</summary>
-	private static bool HasOpenPopup(XamlRoot? xamlRoot)
-	{
-		if (xamlRoot is null)
-		{
-			return false;
-		}
+	private static bool HasOpenPopup(XamlRoot? xamlRoot) =>
+		xamlRoot is not null && VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot).Any(p => HoldsTheKeys(p.IsOpen, p.Child, p.Tag));
 
-		foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot))
-		{
-			if (popup.IsOpen && popup.Child is not ToolTip)
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
+	/// <summary>
+	/// Nixie 1.7.5 (the basics gate, g3): whether an open popup holds the window's keys and mouse buttons: a menu, flyout or
+	/// dialog does; a tooltip and the 10 s Undo notice after a season or series is marked (UndoToast) do not, as for a page's
+	/// arrival (<see cref="ArrivalFocus.CountsAsMenu"/>). Back, R, / and the rest did nothing while the notice showed.
+	/// </summary>
+	internal static bool HoldsTheKeys(bool isOpen, object? child, object? tag) => ArrivalFocus.CountsAsMenu(isOpen, child, tag);
 
 	/// <summary>The shortcut sheet ("?"): one at a time, and not over another dialog or menu.</summary>
 	public static async void ShowHelp(XamlRoot? xamlRoot)

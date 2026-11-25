@@ -95,8 +95,11 @@ namespace FluentFin.Core.Contracts.Services
 		/// <summary>Nixie 1.5: the films and shows a person is in, newest first ("With Ava Abara").</summary>
 		Task<BaseItemDtoQueryResult?> GetPersonItems(Guid personId);
 
-		/// <summary>1.6.1 (BH-150-m3): the episodes a person is credited on, newest first, at most <paramref name="limit"/>, with the total.</summary>
-		Task<BaseItemDtoQueryResult?> GetPersonEpisodes(Guid personId, int limit);
+		/// <summary>
+		/// 1.6.1 (BH-150-m3): the episodes a person is credited on, newest first, at most <paramref name="limit"/> from
+		/// <paramref name="start"/> (1.7.5, BH-161-q1: the next page), with the total.
+		/// </summary>
+		Task<BaseItemDtoQueryResult?> GetPersonEpisodes(Guid personId, int start, int limit);
 		// end 1.5 search
 
 		// 1.6 collections (JellyfinClient_Index.cs; docs/research/smart-collections-data.md): the library index's pages, the
@@ -106,6 +109,13 @@ namespace FluentFin.Core.Contracts.Services
 
 		/// <summary>Nixie 1.6: the same page with People only (its own pass: People cost about 3.5 times the index).</summary>
 		Task<BaseItemDtoQueryResult?> GetLibraryPeoplePage(BaseItemDto library, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
+
+		/// <summary>
+		/// Nixie 1.7.5 (BH-171-m5): a page of a library's index, only the titles the server saved since <paramref name="since"/>
+		/// (MinDateLastSaved: a title added, whatever its DateCreated, or changed). 12.4's /Items has no MinDateCreated, and a
+		/// title's DateCreated can be its file's.
+		/// </summary>
+		Task<BaseItemDtoQueryResult?> GetLibraryIndexPageSavedSince(BaseItemDto library, DateTimeOffset since, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
 
 		/// <summary>Nixie 1.7.1: how many films and shows the user has and the newest one added ("25736:&lt;id&gt;"), to tell whether the saved index is current; null when not known.</summary>
 		Task<string?> GetIndexCheck(CancellationToken cancellationToken);
@@ -124,6 +134,12 @@ namespace FluentFin.Core.Contracts.Services
 
 		/// <summary>Nixie 1.6: "Save as playlist": a playlist of the user's own with these items; the server's no as a status.</summary>
 		Task<PlaylistCreation> CreatePlaylist(string name, IReadOnlyList<Guid> ids);
+
+		/// <summary>
+		/// Nixie 1.7.5: whether the playlist is one of the user's own (or shared with them): true; another user's public one: false;
+		/// null when the server couldn't say.
+		/// </summary>
+		Task<bool?> IsOwnPlaylist(Guid playlistId);
 		// end 1.6 collections
 
 		Task<BaseItemDto?> GetItem(Guid id);
@@ -181,6 +197,12 @@ namespace FluentFin.Core.Contracts.Services
 		/// </summary>
 		Task<UserItemDataDto?> SetUserData(Guid id, bool played, long positionTicks);
 
+		/// <summary>
+		/// Nixie 1.7.5 (BH-151-m8): an item's place after a play whose Stopped report was refused: watched or not, its resume
+		/// point, and when it was last played. The server's answer, or null.
+		/// </summary>
+		Task<UserItemDataDto?> SetPlace(Guid id, bool played, long positionTicks, DateTimeOffset lastPlayed);
+
 		Task<bool> Authenticate(string code);
 
 		/// <summary>Seaglass 1.1.4: approves another device's Quick Connect code, and how it went.</summary>
@@ -203,6 +225,13 @@ namespace FluentFin.Core.Contracts.Services
 		Task Stop();
 
 		Task Logout();
+
+		/// <summary>
+		/// 1.7.5 (the review's Major): Switch user kept this user's session on the server (their saved sign-in goes on with
+		/// it), but this app stops using it: the websocket closes (no Play On, no remote control or cast reaching it) and
+		/// nothing is sent to the server (no /Sessions/Logout).
+		/// </summary>
+		void LeaveSession();
 
 		Task<int> BitrateTest();
 

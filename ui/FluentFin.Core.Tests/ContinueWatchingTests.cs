@@ -93,7 +93,7 @@ public sealed class ContinueWatchingTests : IDisposable
 		Assert.Equal(["A", "C"], Names(home.ContinueItems));
 		Assert.Equal([(b.Id!.Value, 0L)], _resumeSet);
 		Assert.True(home.Notice is { CanUndo: true });
-		Assert.Equal("Removed B from Continue Watching", home.Notice!.Message);
+		Assert.Equal("Removed B from Continue watching", home.Notice!.Message);
 
 		_resumeAnswer.SetResult(true);
 		await removing;
@@ -219,7 +219,7 @@ public sealed class ContinueWatchingTests : IDisposable
 		Assert.Same(home, ContinueWatchingRows.RowOf(home.ContinueItems[0].Dto));
 		Assert.Null(ContinueWatchingRows.RowOf(new BaseItemDto { Id = a.Id, Name = "A" })); // the same item's card in another row
 		Assert.Contains(ItemMenu.For(a, null, includePlay: true, canEditSegments: false, inContinueWatching: true).SelectMany(x => x),
-			x => x.Command == ItemMenuCommand.RemoveFromContinueWatching && x.Text == "Remove from Continue Watching");
+			x => x.Command == ItemMenuCommand.RemoveFromContinueWatching && x.Text == "Remove from Continue watching");
 
 		await home.OnNavigatedFrom();
 		Assert.Null(ContinueWatchingRows.RowOf(home.ContinueItems[0].Dto));

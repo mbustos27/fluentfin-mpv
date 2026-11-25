@@ -23,6 +23,9 @@ public sealed partial class HomePage : Page
 	public HomePage()
 	{
 		InitializeComponent();
+		// Nixie 1.7.5: kept whole by the frame for Back (its rows, its scroll, the card left from, at once); a new visit makes it anew
+		// (NavigationService.KeptWhole)
+		NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Enabled;
 		ShowNotice(ViewModel.Notice);
 
 		_noticeTimer = DispatcherQueue.CreateTimer();
@@ -122,6 +125,9 @@ public sealed partial class HomePage : Page
 		return false;
 	}
 
+	// Nixie 1.7.5: Back's restore, held while it waits for the rows
+	private Microsoft.UI.Dispatching.DispatcherQueueTimer? _restoreTimer;
+
 	/// <summary>
 	/// Back: once the rows are there (the saved page shows at once; else when they load, at most a few seconds), the page goes
 	/// back to how far down it was and the card that was left gets the focus (not the title bar, where it used to land).
@@ -135,7 +141,9 @@ public sealed partial class HomePage : Page
 
 		_restore = null;
 		var started = System.Diagnostics.Stopwatch.GetTimestamp();
-		var timer = DispatcherQueue.CreateTimer();
+		// Nixie 1.7.5: held by the page while it waits (a timer only a local holds can be collected before it ticks)
+		_restoreTimer?.Stop();
+		var timer = _restoreTimer = DispatcherQueue.CreateTimer();
 		timer.Interval = TimeSpan.FromMilliseconds(50);
 		timer.Tick += (t, _) =>
 		{
@@ -151,12 +159,13 @@ public sealed partial class HomePage : Page
 				return;
 			}
 
-			if (PageScroller.ScrollableHeight < place.Offset - 1 && ViewModel.IsLoading && waited < TimeSpan.FromSeconds(4))
+			if (HomePlace.Waits(PageScroller.ScrollableHeight, place.Offset, ViewModel.IsLoading, waited)) // Nixie 1.7.4: laid out too
 			{
 				return; // the rows are not all there yet
 			}
 
 			t.Stop();
+			FluentFin.Services.NavigationService.PlaceStep(this, PageScroller.ScrollableHeight >= place.Offset - 1 ? "rows tall enough" : "rows short"); // 1.7.5
 			PageScroller.ChangeView(null, Math.Min(place.Offset, PageScroller.ScrollableHeight), null, disableAnimation: true);
 			PageScroller.UpdateLayout();
 			// Nixie 1.4.0 (review of wip/140-fix2): Back's card takes the keyboard by the app's one arrival rule (not once the user
@@ -166,6 +175,8 @@ public sealed partial class HomePage : Page
 				FluentFin.Controls.ShelfRow.Shown.FirstOrDefault(r => r.Header == header && IsMine(r))?
 					.FocusItem(x => x is BaseItemViewModel vm && vm.Id == id, Microsoft.UI.Xaml.FocusState.Programmatic);
 			}
+
+			FluentFin.Services.NavigationService.PlacePutBack(this, "place"); // Nixie 1.7.5 (rule 10): Back's place, its time
 		};
 		timer.Start();
 	}
@@ -332,7 +343,7 @@ public sealed partial class HomePage : Page
 	// Seaglass scrolling: "See all" on a row. Recently Added opens its library; Continue Watching and Next Up, which have no
 	// library of their own, open their items as a grid.
 	private void ContinueSeeAll(object sender, EventArgs e) =>
-		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Continue Watching", [.. ViewModel.ContinueItems]));
+		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Continue watching", [.. ViewModel.ContinueItems]));
 
 	private void NextUpSeeAll(object sender, EventArgs e) =>
 		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Up next", [.. ViewModel.NextUpItems]));

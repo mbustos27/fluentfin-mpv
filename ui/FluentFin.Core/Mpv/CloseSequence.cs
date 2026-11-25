@@ -17,10 +17,15 @@ public static class CloseSequence
 	public static readonly TimeSpan InterruptedReportTimeout = TimeSpan.FromSeconds(2);
 
 	public static Task RunAsync(IJellyfinClient jellyfinClient, MpvPlaybackService mpvPlayback, ILogger logger,
-								TimeSpan? upstreamStopTimeout = null, TimeSpan? interruptedReportTimeout = null) =>
-		Task.WhenAll(
+								TimeSpan? upstreamStopTimeout = null, TimeSpan? interruptedReportTimeout = null)
+	{
+		// 1.7.5: the window is gone for the user: its device slot is free for a window opened meanwhile (Restart to update, a
+		// quick start), which is then the same device on the server, not a second window's
+		InstallDeviceId.ReleaseWindow();
+		return Task.WhenAll(
 			StopUpstreamPlaybackAsync(jellyfinClient, logger, upstreamStopTimeout ?? UpstreamStopTimeout),
 			StopMpvAsync(mpvPlayback, logger, interruptedReportTimeout ?? InterruptedReportTimeout));
+	}
 
 	private static async Task StopUpstreamPlaybackAsync(IJellyfinClient jellyfinClient, ILogger logger, TimeSpan timeout)
 	{

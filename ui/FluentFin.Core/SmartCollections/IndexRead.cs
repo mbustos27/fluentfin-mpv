@@ -107,8 +107,172 @@ internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogg
 		[.. pages.Items().Select(x => IndexEntry.From(x.Item, _libraries[x.Libraries[0]].Id!.Value, x.Libraries.Count > 1 ? x.Libraries.Select(l => _libraries[l].Id!.Value) : null)).OfType<IndexEntry>()];
 
 	// 1.7.3 (BH-171-q1): how many films and shows the server's check counted ("25736:<id>"); null when it didn't answer
-	private static int? CountOf(string? check) =>
+	internal static int? CountOf(string? check) =>
 		check?.Split(':')[0] is { } count && int.TryParse(count, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n > 0 ? n : null;
+
+	// 1.7.5 (fx1, BH-171-m5)
+	/// <summary>The first page of a library's titles saved since the last read; the pages after it are <see cref="SavedSincePageMost"/> each.</summary>
+	public const int SavedSincePageFirst = 100;
+
+	/// <summary>The size of a library's titles saved since the last read, past its first page.</summary>
+	public const int SavedSincePageMost = 1000;
+
+	/// <summary>
+	/// The most pages a library's titles saved since the last read are read in: more than this (a big import, the server's
+	/// metadata refreshed) is read whole, as before.
+	/// </summary>
+	public const int SavedSincePagesMost = 5;
+
+	/// <summary>
+	/// How long before the saved index's read the titles saved since are asked from: the read's own time is this PC's clock,
+	/// the server's save dates its own, and a title saved during the read may have come after its page.
+	/// </summary>
+	public static readonly TimeSpan SavedSinceMargin = TimeSpan.FromDays(1);
+
+	/// <summary>
+	/// Whether a library change may be read as the titles saved since the last read (<see cref="AddedAsync"/>), from what is
+	/// known before asking: both counts, no fewer titles than before, an index of this revision with its read's date. Else every
+	/// title is read at once.
+	/// </summary>
+	public static bool MayBeAdded(IndexSnapshot known, int? was, int? now) =>
+		was is { } before && now is { } after && after >= before && known.BackingKnown && known.ReadAt > DateTimeOffset.MinValue + SavedSinceMargin;
+
+	/// <summary>
+	/// Nixie 1.7.5 (BH-171-m5): a library change the server's check confirmed, read as only the titles each library's server
+	/// saved since the saved index was read (MinDateLastSaved, from its <see cref="IndexSnapshot.ReadAt"/> less
+	/// <see cref="SavedSinceMargin"/>), merged into <paramref name="known"/> (a title it had is taken as the server has it now).
+	/// A title added is saved when it is added, whatever its DateCreated (a file's own date, years back, on a server that dates
+	/// by the file): the first build read newest first by DateCreated and missed it, so a removal at the same time hid behind
+	/// it (the 1.7.5 review). A library that changed every day meant a read of every title about once a start. Null, with why,
+	/// when that can't be all that changed, and every title is read as before: the check's count didn't move by exactly the
+	/// titles found (a title removed, or one added in a library the index skips), the libraries changed, the index is of an
+	/// older revision, a page failed, or more than <see cref="SavedSincePagesMost"/> pages of a library were saved since.
+	/// </summary>
+	/// <param name="was">The count of the check the saved index was compared with.</param>
+	/// <param name="now">The count of the check that found the change.</param>
+	/// <param name="check">The check that found the change: the merged index's.</param>
+	public async Task<(IndexSnapshot? Index, string Why)> AddedAsync(IndexSnapshot known, int? was, int? now, string check, CancellationToken cancellationToken)
+	{
+		if (was is not { } before || now is not { } after)
+		{
+			return (null, "the server's counts aren't known");
+		}
+
+		if (after < before)
+		{
+			return (null, "titles were removed");
+		}
+
+		if (!known.BackingKnown)
+		{
+			return (null, "the saved index is of an older revision");
+		}
+
+		var since = known.ReadAt - SavedSinceMargin;
+		var views = await client.GetUserViewsOrNull().ConfigureAwait(false);
+		if (views is null)
+		{
+			return (null, "the libraries couldn't be read");
+		}
+
+		cancellationToken.ThrowIfCancellationRequested();
+		_libraries = [.. views.Where(v => v.Id is not null && JellyfinClient.IndexKinds(v) is not null)];
+		if (!_libraries.Select(l => l.Id!.Value).ToHashSet().SetEquals(known.Libraries.Select(l => l.Id)))
+		{
+			return (null, "the libraries changed");
+		}
+
+		// each library's titles saved since, two libraries at a time: one request a library when few were
+		var found = new List<BaseItemDto>?[_libraries.Count];
+		var requests = 0;
+		await Parallel.ForEachAsync(Enumerable.Range(0, _libraries.Count), new ParallelOptions { MaxDegreeOfParallelism = IndexPages.AtOnce, CancellationToken = cancellationToken },
+			async (library, token) =>
+			{
+				var mine = new List<BaseItemDto>();
+				var (start, limit) = (0, SavedSincePageFirst);
+				int? total = null;
+				for (var page = 0; page < SavedSincePagesMost; page++)
+				{
+					Interlocked.Increment(ref requests);
+					if (await client.GetLibraryIndexPageSavedSince(_libraries[library], since, start, limit, page == 0, token).ConfigureAwait(false) is not { Items: { } items } answer)
+					{
+						return; // a page that failed: read whole (found[library] stays null)
+					}
+
+					total ??= answer.TotalRecordCount;
+					mine.AddRange(items);
+					start += items.Count;
+					if (items.Count < limit || (total is { } all && start >= all))
+					{
+						found[library] = mine;
+						return;
+					}
+
+					limit = SavedSincePageMost;
+				}
+
+				// more than SavedSincePagesMost pages saved since: read whole
+			}).ConfigureAwait(false);
+		if (found.Any(x => x is null))
+		{
+			return (null, "a library's titles saved since couldn't be read, or there are too many");
+		}
+
+		// each title once, with every library it came in (as a read's pages: P0-2)
+		var libraryOf = new Dictionary<Guid, List<int>>();
+		var items = new List<BaseItemDto>();
+		for (var library = 0; library < found.Length; library++)
+		{
+			foreach (var item in found[library]!.Where(x => x.Id is not null))
+			{
+				if (!libraryOf.TryGetValue(item.Id!.Value, out var libraries))
+				{
+					libraryOf[item.Id.Value] = libraries = [];
+					items.Add(item);
+				}
+
+				if (!libraries.Contains(library))
+				{
+					libraries.Add(library);
+				}
+			}
+		}
+
+		var at = new Dictionary<Guid, int>(known.Entries.Count);
+		for (var i = 0; i < known.Entries.Count; i++)
+		{
+			at.TryAdd(known.Entries[i].Id, i);
+		}
+
+		// every title added since is among them (whatever its DateCreated), so the count moving by exactly those says none went
+		var added = items.Count(x => !at.ContainsKey(x.Id!.Value));
+		if (before + added != after)
+		{
+			return (null, $"{added} titles added since the last read, but the server's count moved by {after - before}");
+		}
+
+		var entries = known.Entries.ToList();
+		foreach (var item in items)
+		{
+			var mine = libraryOf[item.Id!.Value].Select(l => _libraries[l].Id!.Value).ToList();
+			if (at.TryGetValue(item.Id.Value, out var i))
+			{
+				// a title the index had, saved again (changed): as the server has it now, in every library it was in
+				var had = entries[i];
+				var libraries = new[] { had.LibraryId }.Concat(had.LibraryIds).Concat(mine).Distinct().ToList();
+				entries[i] = IndexEntry.From(item, had.LibraryId, libraries.Count > 1 ? libraries.Skip(1) : null) ?? had;
+			}
+			else if (IndexEntry.From(item, mine[0], mine.Count > 1 ? mine.Skip(1) : null) is { } entry)
+			{
+				entries.Add(entry);
+			}
+		}
+
+		log?.LogInformation("Library index: {Added} titles added and {Changed} changed since the last read, read in {Requests} requests (every title was not read)",
+			added, items.Count - added, requests);
+		return (known with { Entries = entries, Check = check }, "");
+	}
+	// end 1.7.5
 
 	/// <summary>
 	/// 1.7.3 (BH-171-M1's other half): the played episodes alone, for an index whose own didn't come

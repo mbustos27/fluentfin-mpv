@@ -9,7 +9,7 @@ namespace FluentFin.Core.ViewModels;
 
 /// <param name="seriesEpisodes">1.2.0: the app's kept episodes for Play's label (SeriesEpisodes); a page of its own when
 /// none is given.</param>
-public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpisodes? seriesEpisodes = null) : ObservableObject, INavigationAware
+public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpisodes? seriesEpisodes = null) : ObservableObject, INavigationAware, IKeptOnBack
 {
 	private readonly SeriesEpisodes _seriesEpisodes = seriesEpisodes ?? SeriesEpisodes.ForOnePage(jellyfinClient);
 
@@ -36,6 +36,51 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		_left = true;
 		ItemUserData.Changed -= OnUserDataChanged;
 		return Task.CompletedTask;
+	}
+
+	// ---- Nixie 1.7.4: Back shows the series' page as it was (IKeptOnBack) ----------------------------------------------------
+
+	public bool CanKeep => State.IsLoaded && Dto is not null;
+
+	/// <summary>
+	/// Back or Forward shows the page as it was: the season it showed, its episodes, Play's label. When something may have changed
+	/// since (an episode watched or marked, a play), the series, its seasons and the shown season's episodes are asked again
+	/// behind it: the same seasons and episodes keep their cards and rows (a watch state shows on its row), Play's label follows.
+	/// It listens to watch states again once that is done (its own refresh is not a change to answer).
+	/// </summary>
+	public async Task Returned(object parameter, bool stale)
+	{
+		_left = false;
+		if (stale && Dto?.Id is { } id)
+		{
+			var shown = Dto;
+			await State.RefreshBehindAsync(async () =>
+			{
+				var seasons = JellyfinClient.GetItems(shown);
+				var episodes = SelectedSeason is { } season ? _seriesEpisodes.GetList(season, fresh: true) : null;
+				var play = UpdatePlayTarget(id, reset: false);
+				await UpdateSeries(id);
+				if (await seasons is { Items: { } list } && !(Seasons is { } cards && KeptCards.Refresh([.. cards], list)))
+				{
+					await UpdateSeasons(Dto, seasons);
+				}
+
+				if (episodes is not null && await episodes is { Items: { } rows } && !KeptCards.RefreshRecords(Episodes, rows))
+				{
+					Episodes = [.. rows];
+				}
+
+				await play;
+				return LoadOutcome.Loaded;
+			});
+		}
+
+		// (not once the page was left meanwhile: a page not shown would hear every change for as long as the app runs)
+		ItemUserData.Changed -= OnUserDataChanged;
+		if (!_left)
+		{
+			ItemUserData.Changed += OnUserDataChanged;
+		}
 	}
 
 	/// <summary>

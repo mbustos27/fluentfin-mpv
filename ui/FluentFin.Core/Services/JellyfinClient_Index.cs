@@ -42,9 +42,15 @@ public partial class JellyfinClient
 	public Task<BaseItemDtoQueryResult?> GetLibraryPeoplePage(BaseItemDto library, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken) =>
 		IndexPage(library, PeopleFields, startIndex, limit, withTotal, cancellationToken, lean: true); // 1.7.1: lean
 
+	// 1.7.5 (fx1, BH-171-m5): the same page, of the titles the server saved since a time (MinDateLastSaved; /Items has no
+	// MinDateCreated, and a title's DateCreated can be its file's, years back)
+	public Task<BaseItemDtoQueryResult?> GetLibraryIndexPageSavedSince(BaseItemDto library, DateTimeOffset since, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken) =>
+		IndexPage(library, IndexFields, startIndex, limit, withTotal, cancellationToken, savedSince: since);
+
 	// 1.7.1 (the index on a big server): the people pass asks for the people and the id only: no images (the index pass has
 	// the poster's tag) and no user data, which cut its answer by about a quarter on the throwaway 25,736-film server
-	private async Task<BaseItemDtoQueryResult?> IndexPage(BaseItemDto library, ItemFields[] fields, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken, bool lean = false)
+	private async Task<BaseItemDtoQueryResult?> IndexPage(BaseItemDto library, ItemFields[] fields, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken, bool lean = false,
+		DateTimeOffset? savedSince = null)
 	{
 		try
 		{
@@ -53,6 +59,7 @@ public partial class JellyfinClient
 				var query = x.QueryParameters;
 				query.SortBy = [ItemSortBy.SortName, ItemSortBy.ProductionYear];
 				query.SortOrder = [SortOrder.Ascending, SortOrder.Ascending];
+				query.MinDateLastSaved = savedSince; // 1.7.5 (BH-171-m5): null for every title
 				query.Fields = fields;
 				if (lean)
 				{
@@ -277,6 +284,38 @@ public partial class JellyfinClient
 		}
 
 		return new BaseItemDtoQueryResult { Items = all, TotalRecordCount = total ?? all.Count, StartIndex = 0 };
+	}
+
+	/// <summary>
+	/// Nixie 1.7.5 (the 1.6.1 review): whether the playlist is the user's (<c>GET /Playlists/{id}/Users/{userId}</c>, 10.9 and
+	/// later): the owner gets 200 (its own permission, CanEdit); a user it is shared with, 200 with their share; another user's
+	/// public playlist, 404 ("User permissions not found"), and one they may not see, 404 or 403. Null when the server didn't
+	/// answer (Save then goes by the name, as before). The review: a playlist only shared with the user is not theirs: a
+	/// read-only share answers CanEdit false; an editing share answers as the owner does (CanEdit true), so the playlist's own
+	/// shares (<c>GET /Playlists/{id}</c>, which never lists its owner) tell them apart.
+	/// </summary>
+	public async Task<bool?> IsOwnPlaylist(Guid playlistId)
+	{
+		try
+		{
+			var permission = await _jellyfinApiClient.Playlists[playlistId].Users[UserId].GetAsync();
+			if (permission is not { CanEdit: true })
+			{
+				return false;
+			}
+
+			var playlist = await _jellyfinApiClient.Playlists[playlistId].GetAsync();
+			return playlist is not null && playlist.Shares?.Any(x => x.UserId == UserId) != true;
+		}
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 403 or 404)
+		{
+			return false;
+		}
+		catch (Exception ex)
+		{
+			logger.LogInformation("Save as playlist: whose playlist it is couldn't be read: {Error}", ex.Message);
+			return null;
+		}
 	}
 
 	/// <summary>

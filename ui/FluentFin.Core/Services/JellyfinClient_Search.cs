@@ -150,9 +150,9 @@ public partial class JellyfinClient
 	/// 1.6.1 (BH-150-m3; the review): the episodes a person is credited on (Jellyfin credits a guest star there only), newest
 	/// first, at most <paramref name="limit"/> of them with their total: the page shows one card per show, so a show's regular
 	/// cast on a big server isn't hundreds of episodes thrown away. No extra fields: an episode's show (its id, name and poster
-	/// tag) comes with it.
+	/// tag) comes with it. 1.7.5 (BH-161-q1): from <paramref name="start"/>, so the page can ask for the next ones.
 	/// </summary>
-	public async Task<BaseItemDtoQueryResult?> GetPersonEpisodes(Guid personId, int limit)
+	public async Task<BaseItemDtoQueryResult?> GetPersonEpisodes(Guid personId, int start, int limit)
 	{
 		try
 		{
@@ -164,8 +164,9 @@ public partial class JellyfinClient
 				query.IncludeItemTypes = [BaseItemKind.Episode];
 				query.SortBy = [ItemSortBy.ProductionYear, ItemSortBy.SortName];
 				query.SortOrder = [SortOrder.Descending, SortOrder.Ascending];
+				query.StartIndex = start > 0 ? start : null;
 				query.Limit = limit;
-				query.EnableTotalRecordCount = true;
+				query.EnableTotalRecordCount = start <= 0; // 1.7.5 (review Minor 4): the total is asked once, with the first page
 				query.ImageTypeLimit = 1;
 				query.EnableImageTypes = [ImageType.Primary];
 			});

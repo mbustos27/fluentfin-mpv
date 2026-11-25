@@ -179,10 +179,31 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 		var server = Server!;
 		try
 		{
-			error = await jellyfinAuthenticator.Authenticate(server, Username.Trim(), Password, KeepMeLoggedIn);
-			if (error is null)
+			// 1.7.5 (the basics gate; the review's Major): a saved sign-in of this name with no password typed (a saved user picked
+			// from the list, or the name typed) signs in as the start does: a Quick Connect token with no code, a saved password
+			// sent once. A password or a token the server refuses (401) is forgotten there and the page says "The saved
+			// sign-in to ... no longer works" (sent as a typed password, a refused one went again at every pick, and Jellyfin
+			// disables an account after a few: only the server's owner can enable it again)
+			if (string.IsNullOrEmpty(Password) && SavedSignIns.Saved(server, Username) is { } saved)
 			{
-				ForgetIfUnticked(server, Username);
+				if (await jellyfinAuthenticator.Authenticate(server, saved, CancellationToken.None))
+				{
+					error = null;
+					ForgetIfUnticked(server, Username);
+					navigationService.NavigateTo<ShellViewModel>();
+				}
+				else
+				{
+					error = jellyfinAuthenticator.SavedSignInProblem ?? $"Couldn't sign in to {ServerName}. Try again, or use Quick Connect.";
+				}
+			}
+			else
+			{
+				error = await jellyfinAuthenticator.Authenticate(server, Username.Trim(), Password, KeepMeLoggedIn);
+				if (error is null)
+				{
+					ForgetIfUnticked(server, Username);
+				}
 			}
 		}
 		catch (Exception ex)
@@ -443,4 +464,15 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 
 	// 174-signin: a saved Quick Connect sign-in has no password (an empty one is no DPAPI blob: Unprotect threw)
 	public string Unprotect(byte[] protectedBytes) => protectedBytes.Length == 0 ? "" : protectedBytes.Unprotect(settingsService.GetEntropyBytes());
+
+	/// <summary>
+	/// 1.7.5: a saved user taken from the username box's list (LoginPage): signed in at once with their saved sign-in, never
+	/// as a typed password (the review's Major: a refused one was sent again at every pick). The password box stays empty.
+	/// </summary>
+	public Task SignInAs(SavedUser saved)
+	{
+		Username = saved.Username;
+		Password = "";
+		return Login();
+	}
 }

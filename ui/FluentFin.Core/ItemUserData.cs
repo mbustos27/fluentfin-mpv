@@ -44,6 +44,32 @@ public static class ItemUserData
 	public static event EventHandler<UndoOffer>? UndoOffered;
 
 	/// <summary>
+	/// 1.7.5 (the 1.6.1 streams): a Watched or Favourite toggle the server didn't take springs back; this says why, in the
+	/// window's notice (UndoToast, no Undo): the sign-in ended, the server had a problem, or the connection
+	/// (<see cref="RefusedText"/>). Raised on the thread that asked.
+	/// </summary>
+	public static event EventHandler<string>? Refused;
+
+	/// <summary>
+	/// 1.7.5: why a toggle sprang back, after what it couldn't do (<paramref name="what"/>: "Couldn't mark Lost, S1 E4 as
+	/// watched"): an ended sign-in (Sign in again), the server's own error (a 5xx: <paramref name="trace"/>), else the connection.
+	/// </summary>
+	public static string RefusedText(string what, Services.AnswerTrace? trace)
+	{
+		var server = ViewModels.LoadMessages.ServerName();
+		return ViewModels.LoadMessages.ActionFailed(what, trace is { ServersFault: true }
+			? $"{what}: {server} had a problem answering just now. Try again; if it keeps happening, its owner may need to know."
+			: $"{what}: {AppIdentity.Name} couldn't reach {server} just now. Check this PC's connection, then try again.");
+	}
+
+	/// <summary>1.7.5: "Couldn't mark Lost, S1 E4 as watched", "Couldn't add Heat to your favourites".</summary>
+	internal static string PlayedNotTaken(BaseItemDto dto, bool played) => $"Couldn't mark {ItemLabels.ActionTarget(dto)} as {(played ? "watched" : "unwatched")}";
+
+	internal static string FavoriteNotTaken(BaseItemDto dto, bool favorite) => favorite
+		? $"Couldn't add {ItemLabels.ActionTarget(dto)} to your favourites"
+		: $"Couldn't remove {ItemLabels.ActionTarget(dto)} from your favourites";
+
+	/// <summary>
 	/// sg-cw: the server changed an item's user data without one of these toggles (the mpv player's backend reported a play
 	/// of it, docs/BRIDGE.md §6): <paramref name="userData"/> is what the server has now, and every surface showing the item
 	/// updates (cards, rows, the series and season pages' Play and "Up next"). Raised on the calling thread (the UI thread).
@@ -55,7 +81,7 @@ public static class ItemUserData
 	public static Task<bool> SetPlayedAsync(IJellyfinClient client, BaseItemDto dto, bool played) =>
 		dto is { Type: BaseItemDto_Type.Series or BaseItemDto_Type.Season, Id: { } id }
 			? SetPlayedOfManyAsync(client, dto, id, played)
-			: SetAsync(dto, () => client.SetPlayed(dto, played));
+			: SetAsync(dto, () => client.SetPlayed(dto, played), PlayedNotTaken(dto, played));
 
 	private static async Task<bool> SetPlayedOfManyAsync(IJellyfinClient client, BaseItemDto dto, Guid id, bool played)
 	{
@@ -70,7 +96,7 @@ public static class ItemUserData
 			before = null;
 		}
 
-		var took = await SetAsync(dto, () => client.SetPlayed(dto, played));
+		var took = await SetAsync(dto, () => client.SetPlayed(dto, played), PlayedNotTaken(dto, played));
 		if (!took || before is null)
 		{
 			return took;
@@ -247,15 +273,17 @@ public static class ItemUserData
 
 	/// <returns>Whether the server took it.</returns>
 	public static Task<bool> SetFavoriteAsync(IJellyfinClient client, BaseItemDto dto, bool favorite) =>
-		SetAsync(dto, () => client.SetIsFavorite(dto, favorite));
+		SetAsync(dto, () => client.SetIsFavorite(dto, favorite), FavoriteNotTaken(dto, favorite));
 
-	private static async Task<bool> SetAsync(BaseItemDto dto, Func<Task<UserItemDataDto?>> send)
+	private static async Task<bool> SetAsync(BaseItemDto dto, Func<Task<UserItemDataDto?>> send, string notTaken)
 	{
 		if (dto.Id is not { } id)
 		{
 			return false;
 		}
 
+		// 1.7.5: what the server answered to it, so a toggle that springs back can say why (Refused)
+		var trace = Services.AnswerTrace.Begin();
 		UserItemDataDto? answer;
 		try
 		{
@@ -273,6 +301,11 @@ public static class ItemUserData
 		}
 
 		Changed?.Invoke(null, new ItemUserDataChangedEventArgs(id, dto.UserData ?? new UserItemDataDto(), failed: answer is null));
+		if (answer is null)
+		{
+			Refused?.Invoke(null, RefusedText(notTaken, trace));
+		}
+
 		return answer is not null;
 	}
 }

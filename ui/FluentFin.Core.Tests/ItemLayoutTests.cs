@@ -75,6 +75,18 @@ public sealed class ItemLayoutTests
 		Assert.Equal(expected, HeroLayout.Height(window, share));
 	}
 
+	[Theory]
+	[InlineData(432, 380, 48, 432)]   // the words fit: the share of the window, as before
+	[InlineData(432, 520, 48, 568)]   // 1280 x 720, an episode's long title, logo and overview: grown to hold them below the bar
+	[InlineData(640, 600, 48, 648)]
+	[InlineData(432, 384, 48, 432)]   // exactly fitting
+	[InlineData(432, 384.2, 48, 433)]
+	public void TheHero_GrowsToHoldItsWords_BelowTheBar(double height, double words, double top, double expected)
+	{
+		// Nixie 1.7.5 (the gate's g3): the words, held at the hero's bottom, ran up under the top bar: the crumbs out of view
+		Assert.Equal(expected, HeroLayout.Fit(height, words, top));
+	}
+
 	[Fact]
 	public void AShortHero_IsCompact()
 	{

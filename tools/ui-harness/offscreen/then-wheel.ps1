@@ -24,7 +24,7 @@ function Row-Named([string]$Name) {
         if ($row) { return $row }
     }
 }
-$names = 'Continue Watching', 'Next Up', 'New in Movies'
+$names = 'Continue watching', 'Up next', 'New in Movies'
 foreach ($rowName in $names) {
     $r = Row-Named $rowName
     if (-not $r) { Check "wheel: row $rowName found" $false; continue }

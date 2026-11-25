@@ -94,10 +94,15 @@ public sealed partial class EditorialEpisodeGrid : UserControl
 		Show();
 	}
 
-	/// <summary>The keyboard comes into the grid: to the first episode not watched (the one to watch), not the grid's first.</summary>
+	/// <summary>
+	/// The keyboard comes into the grid: to the first episode not watched (the one to watch), not the grid's first. Nixie 1.7.4: a
+	/// move only (Tab, an arrow, a gamepad); the page giving an episode the keyboard back by itself (Back to the season:
+	/// ItemPagePlace, which has no direction) keeps it on that episode (it went to Up next).
+	/// </summary>
 	private void List_GettingFocus(UIElement sender, GettingFocusEventArgs args)
 	{
-		if (args.FocusState != FocusState.Keyboard || _shown.Count == 0 || args.OldFocusedElement is DependencyObject old && IsInside(old, List))
+		if (args.FocusState != FocusState.Keyboard || args.Direction == FocusNavigationDirection.None
+			|| _shown.Count == 0 || args.OldFocusedElement is DependencyObject old && IsInside(old, List))
 		{
 			return;
 		}

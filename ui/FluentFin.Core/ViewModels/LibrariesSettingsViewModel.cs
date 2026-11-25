@@ -48,7 +48,7 @@ public partial class LibrariesSettingsViewModel(IJellyfinClient jellyfinClient) 
 	{
 		Notice = await jellyfinClient.ScanAllLibraries()
 			? new ServerNotice(ServerPowerState.None, "Scan started", "The server is looking for new and changed files in every library.", NoticeKind.Success)
-			: new ServerNotice(ServerPowerState.Failed, "The scan didn't start", "The server didn't accept the request.", NoticeKind.Error);
+			: new ServerNotice(ServerPowerState.Failed, "The scan didn't start", Admin.ServerPower.NotTaken("The server didn't accept the request."), NoticeKind.Error);
 	}
 
 	[RelayCommand]
@@ -78,7 +78,7 @@ public partial class LibrariesSettingsViewModel(IJellyfinClient jellyfinClient) 
 		}
 		else
 		{
-			Notice = new ServerNotice(ServerPowerState.Failed, $"{name} wasn't deleted", "The server didn't accept the request. Nothing changed.", NoticeKind.Error);
+			Notice = new ServerNotice(ServerPowerState.Failed, $"{name} wasn't deleted", Admin.ServerPower.NotTaken("The server didn't accept the request. Nothing changed."), NoticeKind.Error);
 		}
 	}
 }

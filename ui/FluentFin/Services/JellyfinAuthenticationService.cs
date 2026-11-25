@@ -507,6 +507,26 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		}
 	}
 
+	/// <inheritdoc/>
+	public async Task EndKeptSessions(SavedServer server, IEnumerable<SavedUser> users)
+	{
+		var url = server.GetServerUrl();
+		foreach (var user in users.Where(x => x.Token.Length > 0).ToList())
+		{
+			try
+			{
+				var token = user.Token.Unprotect(settingsService.GetEntropyBytes());
+				using var bound = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+				await GetClient(url, token).Sessions.Logout.PostAsync(cancellationToken: bound.Token);
+				logger.LogInformation("[sign-in] a saved sign-in's kept session on {Url} ended before it is forgotten", BridgeRedaction.ServerForLog(url));
+			}
+			catch (Exception ex)
+			{
+				logger.LogWarning("[sign-in] a saved sign-in's kept session on {Url} couldn't be ended ({Error}); it is forgotten all the same", BridgeRedaction.ServerForLog(url), ex.GetType().Name);
+			}
+		}
+	}
+
 	/// <summary>
 	/// 174-signin: this device's session on the server, which a sign-in's answer carries and a resumed one's has none of (Play
 	/// On leaves it out of its list). Never throws; nothing when it can't be read or the sign-in changed meanwhile.

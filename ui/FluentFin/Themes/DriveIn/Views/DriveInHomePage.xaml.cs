@@ -36,6 +36,9 @@ public sealed partial class DriveInHomePage : Page
 	public DriveInHomePage()
 	{
 		InitializeComponent();
+		// Nixie 1.7.5: kept whole by the frame for Back (its rows, its scroll, the card left from, at once); a new visit makes it anew
+		// (NavigationService.KeptWhole)
+		NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Enabled;
 		TopBar.SetExtendsUnder(this, true);
 		_compact = ReadCompact();
 		ShowNotice(ViewModel.Notice);
@@ -68,6 +71,7 @@ public sealed partial class DriveInHomePage : Page
 		SizeChanged += (_, e) => ApplyLayout(e.NewSize.Width);
 		Loaded += (_, _) =>
 		{
+			FluentFin.Services.NavigationService.PlaceStep(this, "home's Loaded"); // Nixie 1.7.5 (rule 10)
 			// the view model outlives the page (a theme switch makes a new one): listen only while shown
 			ViewModel.PropertyChanged -= OnViewModelChanged;
 			ViewModel.PropertyChanged += OnViewModelChanged;
@@ -78,6 +82,7 @@ public sealed partial class DriveInHomePage : Page
 			AmbientBackdrop.Set(null);
 			ApplyLayout(ActualWidth);
 			Refresh();
+			FluentFin.Services.NavigationService.PlaceStep(this, "home shown"); // Nixie 1.7.5 (rule 10)
 			RestorePlace();
 		};
 		Unloaded += (_, _) =>
@@ -161,7 +166,12 @@ public sealed partial class DriveInHomePage : Page
 		}
 
 		var features = _layout?.HasScreen == false ? [] : ViewModel.DriveInFeatures();
-		Screen.Slides = features;
+		// Nixie 1.7.5: the same slides and entries are not made again (Home kept whole for Back is refreshed on its Loaded)
+		if (!SameSlides(Screen.Slides, features))
+		{
+			Screen.Slides = features;
+		}
+
 		DriveInHome.Sync(ContinueShown, DriveInHome.ContinueRow(ViewModel.ContinueItems, x => x.Id, features));
 		DriveInRows.SetSubtitle(ContinueRow, DriveInHome.InProgressText(ViewModel.ContinueItems.Count));
 		// 1.7.3: the sign's entries and its link's count from one list, the one the link opens (Next Up)
@@ -170,6 +180,10 @@ public sealed partial class DriveInHomePage : Page
 		ContinueRow.Visibility = RowVisibility(ViewModel.IsContinueLoading, ContinueShown.Count);
 		TryArrivalFocus();
 	}
+
+	/// <summary>Nixie 1.7.5: the same slides, in the same order, each as it was made (its item, its art, its lines).</summary>
+	public static bool SameSlides(IReadOnlyList<HeroSlide>? shown, IReadOnlyList<HeroSlide> fresh) =>
+		shown is not null && shown.Count == fresh.Count && shown.Zip(fresh).All(x => x.First == x.Second);
 
 	// ---- the lot's layout ------------------------------------------------------------------------------------------------
 
@@ -286,6 +300,9 @@ public sealed partial class DriveInHomePage : Page
 
 	private bool IsMine(DependencyObject element) => OutdoorScreen.IsInside(element, this);
 
+	// Nixie 1.7.5: Back's restore, held while it waits for the rows
+	private Microsoft.UI.Dispatching.DispatcherQueueTimer? _restoreTimer;
+
 	private void RestorePlace()
 	{
 		if (_restore is not { } place)
@@ -295,7 +312,9 @@ public sealed partial class DriveInHomePage : Page
 
 		_restore = null;
 		var started = System.Diagnostics.Stopwatch.GetTimestamp();
-		var timer = DispatcherQueue.CreateTimer();
+		// Nixie 1.7.5: held by the page while it waits (a timer only a local holds can be collected before it ticks)
+		_restoreTimer?.Stop();
+		var timer = _restoreTimer = DispatcherQueue.CreateTimer();
 		timer.Interval = TimeSpan.FromMilliseconds(50);
 		timer.Tick += (t, _) =>
 		{
@@ -310,12 +329,13 @@ public sealed partial class DriveInHomePage : Page
 				return;
 			}
 
-			if (PageScroller.ScrollableHeight < place.Offset - 1 && ViewModel.IsLoading && System.Diagnostics.Stopwatch.GetElapsedTime(started) < TimeSpan.FromSeconds(4))
+			if (HomePlace.Waits(PageScroller.ScrollableHeight, place.Offset, ViewModel.IsLoading, System.Diagnostics.Stopwatch.GetElapsedTime(started))) // Nixie 1.7.4: laid out too
 			{
 				return;
 			}
 
 			t.Stop();
+			FluentFin.Services.NavigationService.PlaceStep(this, PageScroller.ScrollableHeight >= place.Offset - 1 ? "rows tall enough" : "rows short"); // 1.7.5
 			PageScroller.ChangeView(null, Math.Min(place.Offset, PageScroller.ScrollableHeight), null, disableAnimation: true);
 			PageScroller.UpdateLayout();
 			// Nixie 1.4.0 (review of wip/140-fix2): Back's card takes the keyboard by the app's one arrival rule (not once the user
@@ -325,6 +345,8 @@ public sealed partial class DriveInHomePage : Page
 				ShelfRow.Shown.FirstOrDefault(r => r.Header == header && IsMine(r))?
 					.FocusItem(x => x is BaseItemViewModel vm && vm.Id == id, FocusState.Programmatic);
 			}
+
+			FluentFin.Services.NavigationService.PlacePutBack(this, "place"); // Nixie 1.7.5 (rule 10): Back's place, its time
 		};
 		timer.Start();
 	}
@@ -371,7 +393,7 @@ public sealed partial class DriveInHomePage : Page
 	private void Sign_NextFeatureRequested(object? sender, EventArgs e) => Screen.ShowNext();
 
 	private void ContinueSeeAll(object sender, EventArgs e) =>
-		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Continue Watching", [.. ViewModel.ContinueItems]));
+		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Continue watching", [.. ViewModel.ContinueItems]));
 
 	private void NextUpSeeAll(object sender, EventArgs e) =>
 		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Up next", [.. ViewModel.NextUpItems]));

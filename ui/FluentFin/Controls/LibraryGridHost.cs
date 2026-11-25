@@ -49,7 +49,8 @@ internal sealed class LibraryGridHost
 		// after R, a user who moved first keeps the keyboard where they put it (the refresh's own restore yields the same way);
 		// Nixie 1.4.0 (bug hunt m4): and on arrival and Back too: the app's one arrival rule (LibraryViewModel.FocusYields asks
 		// Services.ArrivalFocus.LibraryYields for the load's focus), so the page sets no rule of its own
-		vm.PropertyChanged += (_, e) =>
+		// Nixie 1.7.4: only while the page is shown (Back hands a kept view model to a new page: WhileLoaded)
+		FluentFin.Services.WhileLoaded.Listen(page, vm, (_, e) =>
 		{
 			switch (e.PropertyName)
 			{
@@ -70,8 +71,10 @@ internal sealed class LibraryGridHost
 					QueueView();
 					break;
 			}
-		};
-		((System.Collections.Specialized.INotifyCollectionChanged)vm.Items).CollectionChanged += (_, _) => QueueView();
+		});
+		var items = (System.Collections.Specialized.INotifyCollectionChanged)vm.Items;
+		System.Collections.Specialized.NotifyCollectionChangedEventHandler itemsChanged = (_, _) => QueueView();
+		FluentFin.Services.WhileLoaded.Hold(page, () => items.CollectionChanged += itemsChanged, () => items.CollectionChanged -= itemsChanged);
 		repeater.ElementIndexChanged += (_, _) => QueueView();
 
 		if (letters is not null)
@@ -103,9 +106,12 @@ internal sealed class LibraryGridHost
 
 	private void FocusOnLoad(object sender, RoutedEventArgs e)
 	{
-		if (_focusOnLoad)
+		// Nixie 1.7.5: or a place asked for while the page was out of the window: a page kept whole for Back hears its view model
+		// only from its Loaded (WhileLoaded), and Back's place was asked before it (back-gate7, Drive-in: the keyboard on Back)
+		if (_focusOnLoad || _vm.FocusRequest >= 0 || _vm.ReturnOffset is not null)
 		{
 			_focusOnLoad = false;
+			Services.NavigationService.PlaceStep(_page, "loaded"); // 1.7.5
 			FocusRequested();
 		}
 	}
@@ -118,7 +124,10 @@ internal sealed class LibraryGridHost
 			return;
 		}
 
-		// Nixie 1.4.0 (bug hunt M3): through the guard: a failure here is logged, it cannot end the app
+		// Nixie 1.4.0 (bug hunt M3): through the guard: a failure here is logged, it cannot end the app. Nixie 1.7.5: Back's place
+		// (a kept library shown as it was) at the normal priority: on the low one it waited for the posters' work, and the grid
+		// showed its top for up to 2.5 s under load before it moved to where it was (BackPlacePriority)
+		var priority = BackPlacePriority(_vm.ReturnOffset is not null, Services.NavigationService.PuttingBack(_page));
 		Services.UiDispatch.Enqueue(_page.DispatcherQueue, "the library's focus", () =>
 		{
 			if (_vm.IsLoading)
@@ -130,6 +139,7 @@ internal sealed class LibraryGridHost
 			if (_page.XamlRoot is null || !_page.IsLoaded || _scroller.XamlRoot is null || !_scroller.IsLoaded)
 			{
 				_focusOnLoad = true;
+				Services.NavigationService.PlaceStep(_page, "not loaded"); // 1.7.5
 				return;
 			}
 
@@ -151,6 +161,8 @@ internal sealed class LibraryGridHost
 				_vm.ReturnOffset = null;
 				_scroller.UpdateLayout();
 				_returnScroll = _scroller.ScrollTo(0, Math.Min(offset, _scroller.ScrollableHeight), new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+				Services.NavigationService.PlaceStep(_page, $"scroll asked ({(int)Math.Min(offset, _scroller.ScrollableHeight)} of {(int)offset} px)"); // 1.7.5
+				Services.NavigationService.StepWhenAt(_page, _scroller, Math.Min(offset, _scroller.ScrollableHeight)); // 1.7.5
 				_returnFocus = (index, state);
 				_returnLate = late;
 				return;
@@ -161,8 +173,20 @@ internal sealed class LibraryGridHost
 			{
 				_grid.FocusAndHold(index, state, atTop: jumped);
 			}
-		}, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+
+			if (index >= 0)
+			{
+				Services.NavigationService.PlacePutBack(_page, "place"); // (a pass queued before the place was put back does nothing: no line)
+			}
+		}, priority);
 	}
+
+	/// <summary>
+	/// Nixie 1.7.5: the priority of the library's focus pass: normal for the place of a library Back shows as it was (its grid
+	/// is there already; the pass makes its own layout), low otherwise (an arrival or a jump waits for the grid's work).
+	/// </summary>
+	public static Microsoft.UI.Dispatching.DispatcherQueuePriority BackPlacePriority(bool returnOffset, bool puttingBack) =>
+		returnOffset && puttingBack ? Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal : Microsoft.UI.Dispatching.DispatcherQueuePriority.Low;
 
 	private void Scroller_ScrollCompleted(ScrollView sender, ScrollingScrollCompletedEventArgs args)
 	{
@@ -172,6 +196,7 @@ internal sealed class LibraryGridHost
 		}
 
 		_returnScroll = -1;
+		Services.NavigationService.PlaceStep(_page, "scrolled"); // 1.7.5
 		var late = _returnLate;
 		_returnLate = false;
 		if (_returnFocus.Index >= 0 && _vm.FocusYields?.Invoke() != true && !(late && FocusIsElsewhere()))
@@ -180,6 +205,7 @@ internal sealed class LibraryGridHost
 			_grid.FocusAndHold(_returnFocus.Index, _returnFocus.State);
 		}
 
+		Services.NavigationService.PlacePutBack(_page, "place");
 		_returnFocus = (-1, FocusState.Keyboard);
 	}
 

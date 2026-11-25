@@ -86,6 +86,27 @@ public sealed class PageRefreshTests
 	}
 
 	/// <summary>
+	/// Nixie 1.7.5 (the basics gate's item-buttons check, g3): for the 10 s the Undo notice shows after a season or series is
+	/// marked, Back, R and the window's other keys did nothing: the notice's popup counted as an open menu. It holds no keys
+	/// (as it holds no page's arrival); a menu, a flyout or a dialog still does, a tooltip never did.
+	/// </summary>
+	[Fact]
+	public void TheUndoNotice_HoldsNoKeys_BackAndRWorkWhileItShows()
+	{
+		Assert.False(WindowShortcuts.HoldsTheKeys(isOpen: true, child: null, tag: FluentFin.Controls.UndoToast.NoticeTag));
+		Assert.True(WindowShortcuts.HoldsTheKeys(isOpen: true, child: null, tag: null));
+		Assert.False(WindowShortcuts.HoldsTheKeys(isOpen: false, child: null, tag: null));
+		// the window's keys ask that of every open popup (Back, R, /, Home, Settings and ? all go through Gate's popupOpen)
+		var shortcuts = Source("Services", "WindowShortcuts.cs").Replace("\r\n", "\n");
+		Assert.Contains("GetOpenPopupsForXamlRoot(xamlRoot).Any(p => HoldsTheKeys(p.IsOpen, p.Child, p.Tag))", shortcuts);
+		Assert.DoesNotContain("popup.Child is not ToolTip", shortcuts);
+		foreach (var shortcut in new[] { AppShortcut.Back, AppShortcut.Refresh })
+		{
+			Assert.Equal(WindowShortcuts.ShortcutGate.Run, WindowShortcuts.Gate(shortcut, ShortcutContext.Browsing, popupOpen: false, trailerOpen: false));
+		}
+	}
+
+	/// <summary>
 	/// Nixie 1.4.0 (bug hunt M1): over a trailer every shortcut is handled: Back closes it, the rest is held back. 1.3.1 left
 	/// them unhandled (Ignore), so the key went on to the accelerators and the search box's Ctrl+F took the keyboard.
 	/// </summary>

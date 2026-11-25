@@ -219,9 +219,19 @@ public sealed class OutsideLists
 		return set;
 	}
 
-	private static bool Same(OutsideListsSnapshot a, OutsideListsSnapshot b) =>
-		a.FranchiseNames.Count == b.FranchiseNames.Count && a.KeywordNames.Count == b.KeywordNames.Count
-		&& a.Lists.Count == b.Lists.Count
-		&& a.Lists.Zip(b.Lists).All(x => x.First.Id == x.Second.Id && x.First.Items.Count == x.Second.Items.Count)
-		&& a.FranchiseNames.All(x => b.FranchiseNames.TryGetValue(x.Key, out var v) && v == x.Value);
+	// 1.7.5 (fx1; BH-170-q5): the items, not the counts. 1.7.3 compared only the counts of Wikidata's lists and of TMDb's keyword
+	// names, so a refresh with as many titles but other ones wasn't published until a restart
+	/// <summary>Whether two snapshots hold the same names and lists, item by item (a refresh that changed nothing isn't published).</summary>
+	internal static bool Same(OutsideListsSnapshot a, OutsideListsSnapshot b) =>
+		SameNames(a.FranchiseNames, b.FranchiseNames) && SameNames(a.KeywordNames, b.KeywordNames)
+		&& a.Lists.Count == b.Lists.Count && a.Lists.Zip(b.Lists).All(x => SameList(x.First, x.Second));
+
+	private static bool SameNames(IReadOnlyDictionary<string, string> a, IReadOnlyDictionary<string, string> b) =>
+		ReferenceEquals(a, b) || (a.Count == b.Count && a.All(x => b.TryGetValue(x.Key, out var v) && v == x.Value));
+
+	// a list's words and its items in order (OutsideListItem and OutsideRef are records of values)
+	private static bool SameList(OutsideList a, OutsideList b) =>
+		ReferenceEquals(a, b) || (a.Id == b.Id && a.Source == b.Source && a.Kind == b.Kind && a.Title == b.Title && a.Why == b.Why && a.KeywordTag == b.KeywordTag
+			&& a.Items.SequenceEqual(b.Items));
+	// end 1.7.5
 }

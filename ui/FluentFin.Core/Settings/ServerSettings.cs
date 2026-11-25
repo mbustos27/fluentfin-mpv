@@ -36,7 +36,9 @@ public class SavedUser
 	/// me" has no password, so its token is kept instead, protected as a password is (DPAPI, the settings' entropy). Empty
 	/// for a password sign-in. Such an entry's <see cref="Password"/> is an empty one, protected: Nixie 1.7.3 and earlier
 	/// read every saved user's password at the start, and an empty array is no DPAPI blob (they stopped at "Startup failed").
-	/// Sign out and Switch user end the token on the server and forget it here (<see cref="SavedSignIns.ForgetToken"/>).
+	/// Sign out ends the token on the server and forgets it here (<see cref="SavedSignIns.Forget"/>); a token the server refuses
+	/// (401) is forgotten too (<see cref="SavedSignIns.ForgetToken"/>). 1.7.5: Switch user keeps it, and its session on the
+	/// server, so switching back signs in with it (<see cref="SavedSignIns.WithToken"/>), with no new code.
 	/// </summary>
 	public byte[] Token { get; set; } = [];
 }
@@ -67,10 +69,10 @@ public static class SavedSignIns
 	}
 
 	/// <summary>
-	/// Switch user ended the session of <paramref name="userName"/> on <paramref name="server"/>, or the server refused the
-	/// saved token: a saved Quick Connect sign-in (<see cref="SavedUser.Token"/>; it has no password of its own) is
-	/// forgotten. A saved password stays (Switch user; 174-sessions: Sign out forgets it too, <see cref="Forget"/>). True
-	/// when something was forgotten.
+	/// The server refused the saved token of <paramref name="userName"/> on <paramref name="server"/> (401): that saved Quick
+	/// Connect sign-in (<see cref="SavedUser.Token"/>; it has no password of its own) is forgotten. A saved password stays
+	/// (174-sessions: Sign out forgets both, <see cref="Forget"/>; 1.7.5: Switch user forgets neither). True when something
+	/// was forgotten.
 	/// </summary>
 	public static bool ForgetToken(SavedServer? server, string? userName)
 	{
@@ -187,6 +189,21 @@ public static class SavedSignIns
 	public static bool WasRemembered(SavedServer? server, string? userName) =>
 		server is not null && !string.IsNullOrWhiteSpace(userName) &&
 		(SameUser(server.LastUser, userName) || server.Users.Any(x => SameUser(x.Username, userName)));
+
+	/// <summary>
+	/// 1.7.5 (the basics gate: Switch user forgot a Quick Connect sign-in, so switching back needed a new code): the saved
+	/// Quick Connect sign-in of <paramref name="userName"/> on <paramref name="server"/> (one with a token), whatever the case
+	/// of the name; null when there is none.
+	/// </summary>
+	public static SavedUser? WithToken(SavedServer? server, string? userName) =>
+		server?.Users.FirstOrDefault(x => SameUser(x.Username, userName) && x.Token.Length > 0);
+
+	/// <summary>
+	/// 1.7.5 (the review's Major): the saved sign-in of <paramref name="userName"/> on <paramref name="server"/> that can sign
+	/// in by itself (a password or a Quick Connect token), whatever the case of the name; null when there is none.
+	/// </summary>
+	public static SavedUser? Saved(SavedServer? server, string? userName) =>
+		server?.Users.FirstOrDefault(x => SameUser(x.Username, userName) && CanSignIn(x));
 
 	private static bool SameUser(string? a, string? b) =>
 		!string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b) && string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);

@@ -58,7 +58,7 @@ if ($skip -notcontains 'home') {
     if ($hpRetry) {
         Set-Rules @()
         Say "pressed 'Try again' ($(Invoke-Element $hpRetry))"
-        $hpLoaded = Wait-Until { if (-not (Find-Ui -Name 'Some of Home' -Contains -Type 'Text') -and (Find-Ui -Name 'Continue Watching' -Type 'Text')) { $true } } -Seconds 20 -PollMs 200
+        $hpLoaded = Wait-Until { if (-not (Find-Ui -Name 'Some of Home' -Contains -Type 'Text') -and (Find-Ui -Name 'Continue watching' -Type 'Text')) { $true } } -Seconds 20 -PollMs 200
         Check 'states (BH-150-M1): Try again, invoked, loads Home (the notice goes, Continue Watching is back)' ([bool]$hpLoaded)
         # back to the partly loaded Home for the next state (it starts from its Try again)
         Set-Rules @(, @($resume, 'status:500'))

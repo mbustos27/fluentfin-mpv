@@ -36,6 +36,8 @@ public sealed partial class CinematicItemStage : UserControl
 			toggle.Indeterminate += (_, _) => UpdateActionNames();
 		}
 
+		Words.SizeChanged += (_, _) => Fit(); // Nixie 1.7.5: a longer title, the logo coming, Up next drawn: the stage holds them
+		BottomPresenter.SizeChanged += (_, _) => Fit();
 		Loaded += (_, _) =>
 		{
 			AmbientBackdrop.Set(_ambient, _ambientHash);
@@ -101,7 +103,30 @@ public sealed partial class CinematicItemStage : UserControl
 
 	/// <summary>The stage's height: the page gives it the window's (the first screen), never under 640.</summary>
 	public static readonly DependencyProperty StageHeightProperty =
-		DependencyProperty.Register(nameof(StageHeight), typeof(double), typeof(CinematicItemStage), new PropertyMetadata(double.NaN, (d, e) => ((CinematicItemStage)d).Stage.Height = (double)e.NewValue));
+		DependencyProperty.Register(nameof(StageHeight), typeof(double), typeof(CinematicItemStage), new PropertyMetadata(double.NaN, (d, _) => ((CinematicItemStage)d).Fit()));
+
+	/// <summary>
+	/// Nixie 1.7.5 (the gate's g3, at 1280 x 720): the stage is never shorter than its words over what runs along its foot (an
+	/// episode's Up next). The window's height less Up next was shorter than an episode's title, its series' logo, the facts,
+	/// the overview and the actions, and the words, held at the bottom, ran up under the top bar: the way up (the crumbs) out
+	/// of view and the logo cut (HeroLayout.Fit; the words' own top margin clears the bar).
+	/// </summary>
+	private void Fit()
+	{
+		if (double.IsNaN(StageHeight))
+		{
+			Stage.Height = double.NaN;
+			return;
+		}
+
+		double words = 0;
+		foreach (var child in Words.Children)
+		{
+			words += child.DesiredSize.Height;
+		}
+
+		Stage.Height = HeroLayout.Fit(StageHeight, Math.Max(words, Words.ActualHeight) + Words.Margin.Top + Words.Margin.Bottom + BottomPresenter.ActualHeight, 0);
+	}
 
 	public double StageHeight
 	{
@@ -229,7 +254,8 @@ public sealed partial class CinematicItemStage : UserControl
 		var dto = Dto;
 		WatchedButton.IsChecked = dto?.UserData?.Played;
 		FavoriteButton.IsChecked = dto?.UserData?.IsFavorite;
-		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter { IncludeToggles = false }.Convert(dto, typeof(object), null!, "") as FlyoutBase;
+		// 1.7.5: shown only with something in it (a series' or a season's had nothing for a user who isn't an administrator)
+		JellyfinFlyoutConverter.ApplyPageMenu(MoreButton, dto);
 		UpdateActionNames();
 	}
 

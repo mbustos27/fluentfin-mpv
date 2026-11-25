@@ -380,11 +380,14 @@ public partial class App : Application
 	{
 		NativeMethods.AllowSleep();
 		GetService<ILogger<App>>().LogError($"{e.ExceptionObject}");
+		Services.CrashTrail.Log("the process's unhandled exception", e.ExceptionObject as Exception); // 1.7.5 (fx3): with the last UI action
 	}
 
 	private void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
 	{
 		GetService<ILogger<App>>().LogError(e.Exception, "Unhandled exception");
+		// 1.7.5 (fx3; 1.7.3's Drive-in crash): XAML's own message (a stowed error's text), the HRESULT and the last UI action
+		Services.CrashTrail.Log("XAML's unhandled exception", e.Exception, e.Message);
 		e.Handled = true;
 	}
 
@@ -395,6 +398,7 @@ public partial class App : Application
 			PerfLog.Startup(GetService<ILogger<App>>(), "launched");
 			// Nixie 1.4.0 (bug hunt M3): what threw on the UI thread is in the log before a crash can end the app
 			Services.FirstChanceTrail.Start();
+			Services.CrashTrail.ListenForUnhandledErrors(GetService<ILogger<App>>()); // 1.7.5 (fx3)
 			// 1.5 season: pictures 6 at a time, not WinINet's 2 (a season's stills came 0.4 to 0.9 s after its rows)
 			Services.ImageDownloads.AllowMoreAtOnce(GetService<ILogger<App>>());
 			// Nixie 1.4.0 (bug hunt m4): every theme's library page gives its load's focus by the app's one arrival rule
@@ -456,6 +460,9 @@ public partial class App : Application
 			}
 
 			GlassTheme.Attach((FrameworkElement)MainWindow.Content);
+			// 1.7.5 (fx3): the last things done in the window, said with the crash trail's lines (kinds only, no titles)
+			Services.UiTrail.Attach(MainWindow.Content);
+			GetService<INavigationService>().Navigated += (_, e) => Services.UiTrail.NotePage(e.SourcePageType);
 			NixieTheme.Attach();
 			TitleTint.Attach();
 
@@ -529,10 +536,65 @@ public partial class App : Application
 		}
 		finally
 		{
-			WatchExit(log);
-			MainWindow.Close();
+			// 1.7.5 (the review's Minor): nothing of the watching may keep the window from closing (a throw here left a hidden
+			// process): each part on its own, the close itself whatever they did
+			Services.CloseWatch? watch = null;
+			try
+			{
+				WatchExit(log);
+				// 1.7.5 (g4): one close waited 25 s in here with nothing said; now it says each step and, while it lasts, the last
+				watch = WatchWindowClose(log);
+			}
+			catch (Exception ex)
+			{
+				log.LogWarning(ex, "[close] the close's watch could not be set up; the window closes all the same");
+			}
+
+			try
+			{
+				MainWindow.Close();
+			}
+			finally
+			{
+				watch?.Dispose();
+			}
+
 			log.LogInformation("[close] the window: closed after {Ms} ms", s_closing.ElapsedMilliseconds);
 		}
+	}
+
+	/// <summary>
+	/// 1.7.5 (g4): the window's close, watched (<see cref="Services.CloseWatch"/>): the page it closes on, the window's Closed
+	/// handlers done (this one is added last, so it runs after the others) and its content unloaded.
+	/// </summary>
+	private static Services.CloseWatch WatchWindowClose(Microsoft.Extensions.Logging.ILogger log)
+	{
+		// 1.7.5 (the review's Minor): the page's name is read inside a try (the frame may be going already)
+		string page;
+		try
+		{
+			page = (GetService<INavigationService>() as NavigationService)?.Frame?.Content?.GetType().Name ?? "no page";
+		}
+		catch (Exception ex)
+		{
+			page = $"a page that could not be read ({ex.GetType().Name})";
+		}
+
+		var watch = new Services.CloseWatch(log, s_closing, $"closing the window on {page}");
+		try
+		{
+			MainWindow.Closed += (_, _) => watch.Step = "the window's Closed handlers: done";
+			if (MainWindow.Content is FrameworkElement content)
+			{
+				content.Unloaded += (_, _) => watch.Step = "the window's content: unloaded";
+			}
+		}
+		catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+		{
+			// the window is going already: the watch's own lines still say how long it took
+		}
+
+		return watch;
 	}
 
 	/// <summary>

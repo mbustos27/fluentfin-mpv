@@ -16,14 +16,14 @@ internal static class SeasonPillFocus
 	public static void Keep(Page page, SeriesViewModel viewModel, ItemsControl picker)
 	{
 		var had = FocusState.Unfocused;
-		viewModel.PropertyChanging += (_, e) =>
+		System.ComponentModel.PropertyChangingEventHandler changing = (_, e) =>
 		{
 			if (e.PropertyName == nameof(SeriesViewModel.SeasonPills))
 			{
 				had = FocusedIn(page, picker);
 			}
 		};
-		viewModel.PropertyChanged += (_, e) =>
+		System.ComponentModel.PropertyChangedEventHandler changed = (_, e) =>
 		{
 			if (e.PropertyName == nameof(SeriesViewModel.SeasonPills) && had is not FocusState.Unfocused)
 			{
@@ -32,6 +32,19 @@ internal static class SeasonPillFocus
 				page.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => FocusCurrent(viewModel, picker, state));
 			}
 		};
+		// Nixie 1.7.5 (review Major 3): only while the page is shown. Back hands the kept view model to a new page, and the
+		// handlers, holding the page and its picker, kept every page left alive with it (one more for every Back)
+		Services.WhileLoaded.Hold(page,
+			() =>
+			{
+				viewModel.PropertyChanging += changing;
+				viewModel.PropertyChanged += changed;
+			},
+			() =>
+			{
+				viewModel.PropertyChanging -= changing;
+				viewModel.PropertyChanged -= changed;
+			});
 	}
 
 	/// <summary>How the pill with the keyboard got it, or Unfocused when no pill has it.</summary>

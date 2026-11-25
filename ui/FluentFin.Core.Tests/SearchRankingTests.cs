@@ -448,7 +448,7 @@ public sealed class SearchRankingTests
 		var person = Item("Sunny Holm", BaseItemDto_Type.Person);
 		var client = new Mock<IJellyfinClient>();
 		client.Setup(x => x.GetPersonItems(person.Id!.Value)).ReturnsAsync(Found(Item("Sunny", BaseItemDto_Type.Movie), Item("Sunny Days", BaseItemDto_Type.Series)));
-		client.Setup(x => x.GetPersonEpisodes(It.IsAny<Guid>(), It.IsAny<int>())).ReturnsAsync(Found());
+		client.Setup(x => x.GetPersonEpisodes(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(Found());
 		var vm = new PersonItemsViewModel(client.Object);
 
 		await vm.OnNavigatedTo(person);
@@ -498,7 +498,7 @@ public sealed class SearchRankingTests
 		film.ProductionYear = 2023;
 		days.ProductionYear = 2017;
 		client.Setup(x => x.GetPersonItems(person.Id!.Value)).ReturnsAsync(Found(film, days));
-		client.Setup(x => x.GetPersonEpisodes(person.Id!.Value, PersonItemsViewModel.EpisodeLimit)).ReturnsAsync(Found(
+		client.Setup(x => x.GetPersonEpisodes(person.Id!.Value, 0, PersonItemsViewModel.EpisodeLimit)).ReturnsAsync(Found(
 			Episode("Pilot", lost, "Lost", 2024),
 			Episode("The Gang Gets Started", sunny, "It's Always Sunny", 2023),
 			Episode("Exodus", lost, "Lost", 2022),
@@ -537,18 +537,18 @@ public sealed class SearchRankingTests
 		var show = Guid.NewGuid();
 		var client = new Mock<IJellyfinClient>();
 		client.Setup(x => x.GetPersonItems(person.Id!.Value)).ReturnsAsync(Found());
-		client.Setup(x => x.GetPersonEpisodes(person.Id!.Value, It.IsAny<int>()))
+		client.Setup(x => x.GetPersonEpisodes(person.Id!.Value, It.IsAny<int>(), It.IsAny<int>()))
 			.ReturnsAsync(new BaseItemDtoQueryResult { Items = [Episode("Pilot", show, "Lost", 2024), Episode("Exodus", show, "Lost", 2023)], TotalRecordCount = 340 });
 		var vm = new PersonItemsViewModel(client.Object);
 
 		await vm.OnNavigatedTo(person);
 
-		client.Verify(x => x.GetPersonEpisodes(person.Id!.Value, PersonItemsViewModel.EpisodeLimit), Times.Once);
+		client.Verify(x => x.GetPersonEpisodes(person.Id!.Value, 0, PersonItemsViewModel.EpisodeLimit), Times.Once);
 		Assert.InRange(PersonItemsViewModel.EpisodeLimit, 50, 500);
 		Assert.Equal("in 2+ episodes", Assert.Single(vm.Items).CardSubtitle);
 
 		// the episodes fail: the films and shows still show; and with none of those, it couldn't load (not "nothing")
-		client.Setup(x => x.GetPersonEpisodes(person.Id!.Value, It.IsAny<int>())).ReturnsAsync((BaseItemDtoQueryResult?)null);
+		client.Setup(x => x.GetPersonEpisodes(person.Id!.Value, It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync((BaseItemDtoQueryResult?)null);
 		client.Setup(x => x.GetPersonItems(person.Id!.Value)).ReturnsAsync(Found(Item("Sunny", BaseItemDto_Type.Movie)));
 		await vm.OnNavigatedTo(person);
 		Assert.True(vm.Results.IsLoaded);
@@ -572,7 +572,7 @@ public sealed class SearchRankingTests
 		{
 			var person = Guid.NewGuid();
 			Assert.NotNull(await client.GetPersonItems(person));
-			Assert.NotNull(await client.GetPersonEpisodes(person, 200));
+			Assert.NotNull(await client.GetPersonEpisodes(person, 0, 200));
 
 			var asked = server.ApiRequests.Where(r => r.Path.Equals("/Items", StringComparison.OrdinalIgnoreCase)).ToList();
 			Assert.Equal(2, asked.Count);

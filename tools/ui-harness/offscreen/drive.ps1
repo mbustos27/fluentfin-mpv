@@ -99,7 +99,12 @@ $script:ui = $null; $script:hwnd = [IntPtr]::Zero; $script:serverUrl = $null; $s
 $script:page = $null          # where the driver believes it is: home, library:<name>, movie, series, season, player, ...
 $script:signedInAt = $null
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
-    $checks[$Name] = [ordered]@{ ok = $Ok; detail = $Detail }
+    # 1.7.5 (the review's Minor): a check run again under the same name never turns a FAIL into a PASS (a loop's later pass hid
+    # an earlier failure); the failure stays, its detail noting the later pass
+    if ($checks.Contains($Name) -and -not $checks[$Name].ok -and $Ok) {
+        $checks[$Name].detail = "$($checks[$Name].detail) (it passed later: $Detail)"
+    }
+    else { $checks[$Name] = [ordered]@{ ok = $Ok; detail = $Detail } }
     Say ("{0} {1}{2}" -f $(if ($Ok) { 'PASS' } else { 'FAIL' }), $Name, $(if ($Detail) { ": $Detail" } else { '' }))
 }
 function Ms([double]$From, [double]$To) { if ($From -and $To) { [int][Math]::Round(($To - $From) * 1000) } else { $null } }
@@ -721,6 +726,7 @@ function Step-Close([string]$What = 'close') {
     # within the 20 s and passed the check above (verify-package's NoMpv run of the first 1.7.3 build); a clean close exits 0
     $code = try { if ($script:ui.HasExited) { $script:ui.ExitCode } else { $null } } catch { $null }
     Check "$($What): a clean exit (exit code 0, not a crash)" ($code -eq 0) $(if ($null -ne $code) { '0x{0:X8}' -f $code } elseif ($script:ui.HasExited) { 'exit code not readable' } else { 'still running' })
+    $script:closedByStep = $script:ui   # 1.7.5: this copy's end was the close step's (the end of the run doesn't count it again)
     Start-Sleep -Milliseconds 800
     $alive = @($tree | Where-Object { Get-TrackedProcess ([int]$_.ProcessId) })
     Check "$($What): nothing FluentFin started survives" ($alive.Count -eq 0) $(if ($alive) { ($alive | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ',' } else { 'none' })
@@ -908,6 +914,16 @@ finally {
     if ($script:ui -and $script:ui.Id) { [void](Get-Descendants $script:ui.Id) }
     if ($script:ui -and -not $script:ui.HasExited -and $script:hwnd -ne [IntPtr]::Zero) {
         try { [OffscreenUi]::Close($script:hwnd, $script:ui.Id); [void]$script:ui.WaitForExit($CloseSeconds * 1000) } catch {}
+        # Nixie 1.7.5 (g1; 1.7.4's Left): a run without the close step ends with this close, which is a close like any other:
+        # a crash here (0xC000027B, a stowed exception) or a hang fails the run, as Step-Close's check does
+        $endCode = try { if ($script:ui.HasExited) { $script:ui.ExitCode } else { $null } } catch { $null }
+        Check 'end of run: the close is a clean exit (exit code 0, not a crash)' ($endCode -eq 0) $(if ($null -ne $endCode) { '0x{0:X8}' -f $endCode } elseif ($script:ui.HasExited) { 'exit code not readable' } else { "still running after $CloseSeconds s" })
+    }
+    elseif ($script:ui -and $script:ui.HasExited -and -not [object]::ReferenceEquals($script:closedByStep, $script:ui) -and -not $script:exitExpected) {
+        # 1.7.5 (the review's Minor): Nixie had ended before the end of the run without the close step (a crash after the last
+        # check passed the run). A script that ends it on purpose (Restart to update) sets $script:exitExpected
+        $endCode = try { $script:ui.ExitCode } catch { $null }
+        Check 'end of run: Nixie was still running (it ended without the close step)' $false $(if ($null -ne $endCode) { 'exit code 0x{0:X8}' -f $endCode } else { 'exit code not readable' })
     }
     if ($script:serverUrl) { try { [void](Invoke-Server '/__harness/shutdown' 'POST') } catch {} }
     Start-Sleep -Milliseconds 500

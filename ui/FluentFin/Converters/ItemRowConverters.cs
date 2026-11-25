@@ -25,4 +25,11 @@ public static class ItemRowConverters
 
 	public static Visibility Show(int count) => count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
+	/// <summary>
+	/// 1.7.5 (g4, the basics gate's offline check): an item page's own content while its item couldn't be loaded: none, only the
+	/// message with Try again (Editorial's film page showed Play, its other buttons and an empty Audio picker behind it).
+	/// </summary>
+	public static Visibility ItemContent(FluentFin.Core.ViewModels.LoadStatus status) =>
+		status is FluentFin.Core.ViewModels.LoadStatus.Failed ? Visibility.Collapsed : Visibility.Visible;
+
 }

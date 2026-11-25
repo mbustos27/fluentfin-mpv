@@ -99,7 +99,8 @@ public sealed partial class InlineDetailsRow : UserControl
 		AutomationProperties.SetName(FullDetailsButton, $"Full details of {ItemLabels.ActionTarget(dto)}");
 		AutomationProperties.SetName(CloseButton, $"Close the details of {ItemLabels.ActionTarget(dto)}");
 		AutomationProperties.SetName(this, $"Details of {ItemLabels.ActionTarget(dto)}");
-		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter { IncludeToggles = false }.Convert(dto, typeof(object), null!, "") as FlyoutBase;
+		// 1.7.5: shown only with something in it (a series' or a season's had nothing for a user who isn't an administrator)
+		JellyfinFlyoutConverter.ApplyPageMenu(MoreButton, dto);
 		ApplyUserData();
 	}
 

@@ -41,7 +41,7 @@ public sealed record SubtitleModeChoice(UserConfiguration_SubtitleMode Mode, str
 	public override string ToString() => Name;
 }
 
-public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache, KnownFolders? knownFolders = null, MpvPlaybackService? mpvPlayback = null, ITitleBarViewModel? titleBar = null) : ObservableObject, INavigationAware
+public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache, KnownFolders? knownFolders = null, MpvPlaybackService? mpvPlayback = null, ITitleBarViewModel? titleBar = null, IJellyfinAuthenticationService? sessions = null) : ObservableObject, INavigationAware
 {
 	private IDisposable? _statusSubscription;
 
@@ -769,6 +769,14 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 			return;
 		}
 
+		// 1.7.5 (the bug hunt): first end the sessions kept on the server for its saved sign-ins (Switch user keeps a Quick
+		// Connect one alive), but the one in use, which Sign out below ends; once forgotten here, nothing could end them
+		if (sessions is not null)
+		{
+			var current = inUse ? titleBar?.User?.Name : null;
+			await sessions.EndKeptSessions(server, server.Users.Where(x => !SavedSignIns.SameUserName(x.Username, current)).ToList());
+		}
+
 		Servers.Remove(server);
 		foreach (var user in server.Users.ToList())
 		{
@@ -790,6 +798,13 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		if (!await Asked(RemoveUserPrompt(server, user)))
 		{
 			return false;
+		}
+
+		// 1.7.5 (the bug hunt): first end the session kept on the server for this sign-in (Switch user keeps a Quick Connect one
+		// alive), unless it is the one in use; once forgotten here, nothing could end it
+		if (sessions is not null && !(InUse(server) && SavedSignIns.SameUserName(user.Username, titleBar?.User?.Name)))
+		{
+			await sessions.EndKeptSessions(server, [user]);
 		}
 
 		SavedSignIns.ForgetName(server, user.Username); // 174-sessions (the review's m3): the sign-in page opened with the name, ticked

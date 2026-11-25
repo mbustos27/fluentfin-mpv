@@ -679,7 +679,8 @@ public sealed partial class AmbientBackdropView : UserControl
 
 	private void OnFrontImageOpened(object sender, RoutedEventArgs e)
 	{
-		if (_shown is null || FrontImage.Source is not BitmapImage { UriSource: { } source } || source != _shown)
+		// 1.7.5 (fx3): App.IsClosing, nothing in the window's teardown (a picture that arrives there)
+		if (App.IsClosing || _shown is null ||FrontImage.Source is not BitmapImage { UriSource: { } source } || source != _shown)
 		{
 			return;
 		}
@@ -694,7 +695,8 @@ public sealed partial class AmbientBackdropView : UserControl
 		Storyboard.SetTarget(animation, FrontImage);
 		Storyboard.SetTargetProperty(animation, "Opacity");
 		fade.Children.Add(animation);
-		fade.Completed += (_, _) =>
+		// 1.7.5 (fx3): a fade that ends in the window's teardown sets nothing there
+		fade.Completed += UiDispatch.Frame("the backdrop's fade in", () =>
 		{
 			if (_fade != fade)
 			{
@@ -706,7 +708,7 @@ public sealed partial class AmbientBackdropView : UserControl
 			BackImage.Opacity = 1;
 			FrontImage.Opacity = 0;
 			_fade = null;
-		};
+		});
 		_fade = fade;
 		fade.Begin();
 	}
@@ -726,7 +728,7 @@ public sealed partial class AmbientBackdropView : UserControl
 		Storyboard.SetTarget(animation, BackImage);
 		Storyboard.SetTargetProperty(animation, "Opacity");
 		fade.Children.Add(animation);
-		fade.Completed += (_, _) =>
+		fade.Completed += UiDispatch.Frame("the backdrop's fade out", () => // 1.7.5 (fx3)
 		{
 			if (_fade != fade)
 			{
@@ -737,7 +739,7 @@ public sealed partial class AmbientBackdropView : UserControl
 			BackImage.Source = null;
 			FrontImage.Source = null;
 			_fade = null;
-		};
+		});
 		_fade = fade;
 		fade.Begin();
 	}

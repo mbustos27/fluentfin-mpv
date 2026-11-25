@@ -24,7 +24,7 @@ namespace FluentFin.Core.Tests;
 /// </para>
 /// </summary>
 [Collection(CollectionNamesSerial.Name)]
-public sealed class IndexOnABigServerTests : IDisposable
+public sealed partial class IndexOnABigServerTests : IDisposable
 {
 	private static readonly Guid MoviesId = Guid.Parse("aaaaaaaa-1111-0000-0000-000000000171");
 	private static readonly Guid ShowsId = Guid.Parse("aaaaaaaa-2222-0000-0000-000000000171");
@@ -1007,8 +1007,9 @@ public sealed class IndexOnABigServerTests : IDisposable
 			await WaitFor(ui, () => vm.Rows.Any(r => r.Section == CollectionsSection.MadeByNixie));
 
 			// what the line says, with the Kids library's first page (and its count) still to come
-			await WaitFor(ui, () => vm.ReadingText.EndsWith(" films", StringComparison.Ordinal));
-			Assert.Equal("Nixie is reading your libraries to make its collections: 200 of about 2,600 films", await ui.Invoke(() => vm.ReadingText));
+			// 1.7.5 (fx1): "titles" while the total is only "about" (the check counts shows, and libraries the index skips, too)
+			await WaitFor(ui, () => vm.ReadingText.Contains(" of about ", StringComparison.Ordinal));
+			Assert.Equal("Nixie is reading your libraries to make its collections: 200 of about 2,600 titles", await ui.Invoke(() => vm.ReadingText));
 			Assert.True(await ui.Invoke(() => vm.IsReadingIndex));
 
 			kidsFirst.SetResult(); // every library's count in: the total is theirs

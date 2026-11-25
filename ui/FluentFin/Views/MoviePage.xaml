@@ -28,7 +28,7 @@
     </Page.Resources>
 
     <Grid>
-        <ScrollViewer x:Name="PageContent">
+        <ScrollViewer x:Name="PageContent" Visibility="{x:Bind c:ItemRowConverters.ItemContent(ViewModel.State.Status), Mode=OneWay}">
             <StackPanel>
                 <controls:ItemHero Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" Overview="{x:Bind ViewModel.Dto.Overview, Mode=OneWay}">
                     <controls:ItemHero.PrimaryActions>

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Helpers;
 using FluentFin.Contracts.Services;
 using FluentFin.Contracts.ViewModels;
+using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.Services;
 using FluentFin.Core.Settings;
 using FluentFin.Helpers;
@@ -18,7 +19,8 @@ namespace FluentFin.Core.ViewModels;
 
 public partial class SelectServerViewModel(ISettings settings,
 										   [FromKeyedServices(NavigationRegions.InitialSetup)] INavigationService navigationService,
-										   HomeCache homeCache) : ObservableObject, INavigationAware
+										   HomeCache homeCache,
+										   IJellyfinAuthenticationService? sessions = null) : ObservableObject, INavigationAware
 {
 	private int _found;
 
@@ -219,6 +221,13 @@ public partial class SelectServerViewModel(ISettings settings,
 		if (Confirm is not { } confirm || !await confirm(SettingsViewModel.RemoveServerPrompt(server)))
 		{
 			return;
+		}
+
+		// 1.7.5 (the bug hunt): first end the sessions kept on the server for its saved sign-ins (Switch user keeps a Quick
+		// Connect one alive); once forgotten here, nothing could end them
+		if (sessions is not null)
+		{
+			await sessions.EndKeptSessions(server, server.Users);
 		}
 
 		Servers.Remove(server);

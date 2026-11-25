@@ -68,9 +68,18 @@ function UP-Settings {
 
 function UP-Home { Open-Nav 'Home'; $script:upOnSettings = $false; Start-Sleep -Milliseconds 800 }
 
+# 1.7.5 (fx3): the button found when it is scrolled out of view too, and brought into view first. The intermittent "Check
+# now made no check for about two minutes" after the release notes (1.6.0, 1.6.1; 87 s each time: the 16 s wait, then this
+# 10 s search, then the 60 s wait) was this click never happening: the notes' shots resize the window to 1100 and back,
+# and Check now could be left out of view, which the search skipped. Said in the log when it isn't found
 function UP-Click([string]$Name, [double]$Seconds = 10) {
-    $b = Wait-Ui -Name $Name -Seconds $Seconds
-    if ($b) { [void](Invoke-Element $b) }
+    $b = Wait-Until { $x = Find-Ui -Name $Name; if (-not $x) { $x = Find-Ui -Name $Name -OffscreenToo }; $x } -Seconds $Seconds -PollMs 150
+    if ($b) {
+        $p = $null
+        try { if ($b.TryGetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern, [ref]$p)) { $p.ScrollIntoView(); Start-Sleep -Milliseconds 300 } } catch {}
+        [void](Invoke-Element $b)
+    }
+    else { Say "update: no '$Name' to press within $Seconds s" }
     [bool]$b
 }
 
@@ -209,7 +218,10 @@ if (UP-Click 'Release notes') {
 # 6. a download that doesn't match its checksum
 [void](UP-Release @{ version = $upV2; mismatch = $true; digest = 'none'; kbps = 40000 })   # no digest: the .sha256 alone, started over once
 Start-Sleep -Seconds 16      # Check now says a 15-s-old answer again: ask after it
-[void](UP-Click 'Check now')
+$upAt = Get-Epoch
+# 1.7.5 (fx3): the step that failed intermittently since 1.6: Check now pressed, and a check sent (UP-Click above)
+Check 'update: after the release notes, Check now is there to press' (UP-Click 'Check now')
+Check 'update: and it sends a check at once' ([bool](Wait-Until { @(Get-Requests $upAt | Where-Object { $_.path -eq '/__harness/release/latest' }) | Select-Object -First 1 } -Seconds 10 -PollMs 300))
 $upBad = Wait-Until { Find-Ui -Name "Couldn't download Nixie $upV2" -Type 'Text' } -Seconds 60 -PollMs 300
 Check "update: a checksum mismatch (twice) says it couldn't download, with Retry" ($upBad -and (Find-Ui -Name 'Retry' -Type 'Button'))
 UP-Shot 'settings-download-failed'
@@ -226,6 +238,7 @@ if ($env:UP_RESTART -eq '1') {
     [void](UP-Click 'Check now')
     $upReady = Wait-Until { Find-Ui -Name "Nixie $upV3 is ready to install" -Type 'Text' } -Seconds 60 -PollMs 300
     Check "update: $upV3 ready" ([bool]$upReady)
+    $script:exitExpected = $true   # 1.7.5: Nixie ends here on purpose (drive.ps1's end of run counts no other ending)
     [void](UP-Click 'Restart to update')
     $upGone = Wait-Until { $script:ui.Refresh(); $script:ui.HasExited } -Seconds 40 -PollMs 250
     Check 'update: Restart to update closes Nixie' ([bool]$upGone)

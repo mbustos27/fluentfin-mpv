@@ -49,8 +49,8 @@ public sealed class ThemeSwitcher(ThemeService themes, INavigationService naviga
 		var fade = CrossfadeFor(GlassMode.MotionAllowed);
 		var faded = fade > TimeSpan.Zero && await CaptureAsync();
 
-		themes.Choose(id);
-		var reload = nav?.ReloadForTheme() ?? ThemeReload.None;
+		// 1.7.5 (g4): the swap shows the page again in the new theme's view itself (ThemeResources), in the same turn
+		var reload = themes.Choose(id) ? ThemeResources.LastReload : ThemeReload.None;
 		log?.LogInformation("Layout theme {Theme}: {Reload}, crossfade {Crossfade} ms", themes.ActiveId, reload, faded ? (int)fade.TotalMilliseconds : 0);
 
 		if (reload == ThemeReload.Reloaded && frame?.Content is Page fresh && anchors is not null)
@@ -103,11 +103,12 @@ public sealed class ThemeSwitcher(ThemeService themes, INavigationService naviga
 		Storyboard.SetTargetProperty(animation, nameof(UIElement.Opacity));
 		var story = new Storyboard();
 		story.Children.Add(animation);
-		story.Completed += (_, _) =>
+		// 1.7.5 (fx3): a fade that ends in the window's teardown sets nothing there
+		story.Completed += UiDispatch.Frame("the theme switch's fade", () =>
 		{
 			layer.Visibility = Visibility.Collapsed;
 			layer.Source = null;
-		};
+		});
 		story.Begin();
 	}
 

@@ -47,6 +47,7 @@ public sealed partial class ItemHero : UserControl
 			toggle.Unchecked += (_, _) => UpdateActionNames();
 			toggle.Indeterminate += (_, _) => UpdateActionNames();
 		}
+		Words.SizeChanged += (_, _) => Fit(); // Nixie 1.7.5: a longer title or the logo coming grows the hero to hold them
 		Loaded += (_, _) =>
 		{
 			AmbientBackdrop.Set(_ambient, _ambientHash);
@@ -97,6 +98,15 @@ public sealed partial class ItemHero : UserControl
 
 	private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => Resize();
 
+	private double _shareHeight = HeroLayout.Max;
+
+	/// <summary>
+	/// Nixie 1.7.5: never shorter than its words, with the top bar's height clear above them (HeroLayout.Fit): at 1280 x 720
+	/// an episode's way up and its series' logo went under the bar.
+	/// </summary>
+	private void Fit() =>
+		HeroGrid.Height = HeroLayout.Fit(_shareHeight, Words.ActualHeight + Words.Margin.Top + Words.Margin.Bottom, TopBar.Height);
+
 	/// <summary>
 	/// 1.2.0 (1.1.3 UX audit, layout item 8): the hero is a share of the window's height (HeroLayout), so the page's
 	/// first content shows on a short window; a short hero is compact: a smaller logo and two lines of overview.
@@ -104,7 +114,8 @@ public sealed partial class ItemHero : UserControl
 	private void Resize()
 	{
 		var height = HeroLayout.Height(XamlRoot?.Size.Height ?? 0, HeightShare);
-		HeroGrid.Height = height;
+		_shareHeight = height;
+		Fit();
 		var compact = HeroLayout.IsCompact(height);
 		var episode = Dto?.Type == BaseItemDto_Type.Episode;
 		// an episode's logo is its series': small, under the episode's own title in importance (layout audit item 21)
@@ -173,7 +184,8 @@ public sealed partial class ItemHero : UserControl
 		WatchedButton.IsChecked = dto?.UserData?.Played;
 		FavoriteButton.IsChecked = dto?.UserData?.IsFavorite;
 		// 1.2.0 (Nixie button review, I26): Watched and Favourite are buttons beside it, so the "…" leaves them out
-		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter { IncludeToggles = false }.Convert(dto, typeof(object), null!, "") as FlyoutBase;
+		// 1.7.5: shown only with something in it (a series' or a season's had nothing for a user who isn't an administrator)
+		JellyfinFlyoutConverter.ApplyPageMenu(MoreButton, dto);
 		UpdateActionNames();
 	}
 

@@ -62,11 +62,14 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 	public EditorialLibraryPage()
 	{
 		InitializeComponent();
+		// Nixie 1.7.5: kept whole by the frame for Back to this very page (its grid as it was, at once); a new visit makes it anew
+		// (NavigationService.KeptWhole)
+		NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Enabled;
 		// Nixie 1.4.0 (item 15): the first poster's time ([perf]) and the placeholders' cells against the posters', in the log
 		// (the artwork: a poster's 2:3 art against the placeholder's; their captions differ in lines, not in place)
 		// (the keyboard's poster is lifted and scaled: its art measured from the poster's own place, not as drawn)
 		LibraryProbe.Attach(this, Skeleton, Lines, i => LibraryProbe.RectOf(SkeletonArt(i), this), i => PosterArtAt(i), logFirstCard: true);
-		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, e) =>
+		System.Collections.Specialized.NotifyCollectionChangedEventHandler itemsChanged = (_, e) =>
 		{
 			// Nixie 1.4.1: a big library's later pages insert titles before the poster the keyboard was on: its place follows
 			// (Back and R come back to the poster, not to whatever moved into its place)
@@ -79,7 +82,11 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			_pageArrived |= ViewModel.UpdatingFromPage;
 			QueueRebuild();
 		};
-		ViewModel.PropertyChanged += (_, e) =>
+		// Nixie 1.7.4: only while the page is shown (Back hands a kept view model to a new page: WhileLoaded)
+		var items = (System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items;
+		FluentFin.Services.WhileLoaded.Hold(this, () => items.CollectionChanged += itemsChanged, () => items.CollectionChanged -= itemsChanged);
+		// Nixie 1.7.4: only while the page is shown (Back hands a kept view model to a new page: WhileLoaded)
+		FluentFin.Services.WhileLoaded.Listen(this, ViewModel, (_, e) =>
 		{
 			switch (e.PropertyName)
 			{
@@ -107,13 +114,14 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 					QueueRebuild();
 					break;
 			}
-		};
-		ViewModel.Filter.PropertyChanged += (_, _) =>
+		});
+		// Nixie 1.7.4: only while the page is shown (Back hands a kept view model to a new page: WhileLoaded)
+		FluentFin.Services.WhileLoaded.Listen(this, ViewModel.Filter, (_, _) =>
 		{
 			// a narrower or wider library starts at its top (the old place would land mid-library)
 			_toTop = !ViewModel.IsLoading;
 			UpdateChips();
-		};
+		});
 		// R or F5 (a new view model for the same library): the sort, the filters and the poster are put back, as for Back
 		// (R and F5 keep the place; the lit tab chosen again starts at the top: LastRefreshKeepsPlace false)
 		ViewModel.ReloadedInPlace = () => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastNavigationWasRefresh: true, LastRefreshKeepsPlace: true };
@@ -178,9 +186,11 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			Layout(ActualWidth);
 			UpdateChips();
 			QueueRebuild();
-			if (_focusOnLoad)
+			// (Nixie 1.7.5: or a place asked for while out of the window: the page kept whole for Back hears it only from here)
+			if (_focusOnLoad || ViewModel.FocusRequest >= 0 || ViewModel.ReturnOffset is not null)
 			{
 				_focusOnLoad = false;
+				NavigationService.PlaceStep(this, "loaded"); // 1.7.5
 				FocusRequested();
 			}
 		};
@@ -396,8 +406,9 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 				_lines.Add(lines[i]);
 			}
 		}
-		else
+		else if (!(_lines.Count == lines.Count && _lines.Zip(lines).All(x => SameDrawn(x.First, x.Second))))
 		{
+			// (Nixie 1.7.5: the same lines stay as they are: the page kept whole for Back is loaded again with its lines drawn)
 			_lines.Clear();
 			foreach (var line in lines)
 			{
@@ -442,6 +453,10 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 		UpdateBar();
 	}
+
+	/// <summary>Nixie 1.7.5: the same line, drawn the same ("n of m" too): a rebuild leaves it as it is.</summary>
+	private static bool SameDrawn(EditorialLibraryLine a, EditorialLibraryLine b) =>
+		SameLine(a, b) && (a, b) switch { (EditorialRowLine x, EditorialRowLine y) => x.Total == y.Total, _ => true };
 
 	/// <summary>Nixie 1.4.1: the same line, as a page's rebuild sees it: the same posters in the same place (their "n of m" aside: it is redone once every page is in).</summary>
 	private static bool SameLine(EditorialLibraryLine a, EditorialLibraryLine b) => (a, b) switch
@@ -1068,7 +1083,9 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			return;
 		}
 
-		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+		// Nixie 1.7.5: Back's place (a kept library shown as it was) at the normal priority: on the low one it waited for the
+		// posters' work, and the page showed its top for up to 2.5 s under load before it moved to where it was
+		DispatcherQueue.TryEnqueue(FluentFin.Controls.LibraryGridHost.BackPlacePriority(ViewModel.ReturnOffset is not null, NavigationService.PuttingBack(this)), () =>
 		{
 			if (_rebuildQueued || _columns == 0)
 			{
@@ -1093,6 +1110,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			{
 				ViewModel.ReturnOffset = null;
 				GridScroller.UpdateLayout();
+				NavigationService.PlaceStep(this, $"scroll asked ({(int)Math.Min(offset, GridScroller.ScrollableHeight)} of {(int)offset} px)"); // 1.7.5
 				GridScroller.ChangeView(null, Math.Min(offset, GridScroller.ScrollableHeight), null, disableAnimation: true);
 				GridScroller.UpdateLayout();
 			}
@@ -1110,6 +1128,10 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			}
 
 			UpdateBar();
+			if (index >= 0)
+			{
+				NavigationService.PlacePutBack(this, "place"); // (a pass with nothing asked of it: no line)
+			}
 		});
 	}
 

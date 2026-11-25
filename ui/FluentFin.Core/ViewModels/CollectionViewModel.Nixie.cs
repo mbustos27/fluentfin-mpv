@@ -19,6 +19,56 @@ public static class SmartCollectionServices
 }
 
 /// <summary>
+/// Nixie 1.7.5 (the review): the playlist each Nixie collection was saved as ("Save as playlist"), by server, user and
+/// collection, kept on this PC: the earlier save is found by its id first, so one renamed on the server is still the one.
+/// </summary>
+internal static class SavedPlaylists
+{
+	internal const string SettingKey = "SavedAsPlaylist";
+
+	/// <summary>Where they are kept (the app's settings; tests give their own).</summary>
+	internal static Func<Contracts.Services.ILocalSettingsService?> Settings { get; set; } = () => SmartCollectionServices.Settings;
+
+	internal static string KeyOf(string? serverId, Guid userId, string collectionId) => $"{serverId}|{userId:N}|{collectionId}";
+
+	public static Guid? Of(string key)
+	{
+		try
+		{
+			return Settings()?.ReadSettingRaw(SettingKey) is System.Text.Json.Nodes.JsonObject map && map[key] is { } value &&
+				Guid.TryParse(value.GetValue<string>(), out var id) ? id : null;
+		}
+		catch (Exception ex) when (ex is InvalidOperationException or FormatException or System.Text.Json.JsonException)
+		{
+			return null;
+		}
+	}
+
+	/// <summary>Keeps <paramref name="id"/> for <paramref name="key"/>; null forgets it (deleted on the server).</summary>
+	public static void Set(string key, Guid? id)
+	{
+		if (Settings() is not { } settings)
+		{
+			return;
+		}
+
+		var map = settings.ReadSettingRaw(SettingKey) is System.Text.Json.Nodes.JsonObject kept
+			? System.Text.Json.Nodes.JsonNode.Parse(kept.ToJsonString()) as System.Text.Json.Nodes.JsonObject ?? []
+			: [];
+		if (id is { } playlist)
+		{
+			map[key] = playlist.ToString("N");
+		}
+		else if (!map.Remove(key))
+		{
+			return;
+		}
+
+		settings.SaveSetting(SettingKey, map);
+	}
+}
+
+/// <summary>
 /// Nixie 1.6 (plan 4.3; the collections stream's part of the shared Collection page, kept apart from colpage's file): a
 /// Nixie collection opens here through its source (<see cref="NixieCollection"/>), with the eyebrow "Made by Nixie ·
 /// Franchise", the "why" line, the 2×2 mosaic for its art, Favourite kept on this PC, and "Save as playlist"; an admin's
@@ -165,9 +215,11 @@ public partial class CollectionViewModel
 		PlaylistMessage = "Saving to your playlists…";
 		// 1.6.1 (BH-160-m2): saved before (this page left and opened again, another start, a 200 that named no playlist): the
 		// user's playlist of that name is the one, not a second copy
-		if (await SavedBefore(Title) is { } before)
+		var key = SavedPlaylists.KeyOf(SessionInfo.ServerId, JellyfinClient.UserId, Nixie.Collection.Id);
+		if (await SavedBefore(Title, key) is { } before)
 		{
 			SavedPlaylist = before;
+			SavedPlaylists.Set(key, before.Id);
 			PlaylistMessage = $"Already in your playlists as “{before.Name}”.";
 			return;
 		}
@@ -176,6 +228,7 @@ public partial class CollectionViewModel
 		var made = await JellyfinClient.CreatePlaylist(Title, ids);
 		if (made.Created)
 		{
+			SavedPlaylists.Set(key, made.Id);
 			SavedPlaylist = new BaseItemDto { Id = made.Id, Name = Title, Type = BaseItemDto_Type.Playlist };
 			PlaylistMessage = SavedText(Title, ids.Count, playable.Count, shows);
 			return;
@@ -190,13 +243,37 @@ public partial class CollectionViewModel
 
 	/// <summary>
 	/// The user's playlist named <paramref name="title"/> (as the server's list of playlists has it, ignoring case and the
-	/// edges' spaces), or null: none, or the list could not be read (then Save makes it, as asked).
+	/// edges' spaces), or null: none, or the list could not be read (then Save makes it, as asked). 1.7.5 (the 1.6.1 review):
+	/// the user's own, checked by its id (<see cref="IJellyfinClient.IsOwnPlaylist"/>): another user's public playlist of that
+	/// name read "Already in your playlists", and Open took the user to it. Only the ones whose name matches are asked about.
+	/// The review: the playlist this collection was saved as (<see cref="SavedPlaylists"/>) by its id first: renamed on the
+	/// server, it is still the one.
 	/// </summary>
-	private async Task<BaseItemDto?> SavedBefore(string title)
+	private async Task<BaseItemDto?> SavedBefore(string title, string key)
 	{
 		var name = title.Trim();
 		var playlists = await JellyfinClient.GetPlaylists();
-		return playlists?.Items?.FirstOrDefault(x => x is { Id: not null, Type: BaseItemDto_Type.Playlist } && string.Equals(x.Name?.Trim(), name, StringComparison.CurrentCultureIgnoreCase));
+		if (SavedPlaylists.Of(key) is { } saved && playlists?.Items is { } listed)
+		{
+			if (listed.FirstOrDefault(x => x.Id == saved && x.Type == BaseItemDto_Type.Playlist) is { } same)
+			{
+				return same;
+			}
+
+			SavedPlaylists.Set(key, null); // deleted on the server: saved again
+		}
+
+		foreach (var playlist in playlists?.Items?.Where(x => x is { Id: not null, Type: BaseItemDto_Type.Playlist } &&
+			string.Equals(x.Name?.Trim(), name, StringComparison.CurrentCultureIgnoreCase)) ?? [])
+		{
+			// a server that couldn't say (null): the name, as before (a second copy is the worse mistake)
+			if (await JellyfinClient.IsOwnPlaylist(playlist.Id!.Value) is not false)
+			{
+				return playlist;
+			}
+		}
+
+		return null;
 	}
 
 	/// <summary>The most titles "Save as playlist" sends: the first ones in the collection's order (a "Highly rated" of thousands is not one request).</summary>

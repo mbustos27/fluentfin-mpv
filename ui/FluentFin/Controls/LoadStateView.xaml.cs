@@ -47,7 +47,11 @@ public sealed partial class LoadStateView : UserControl
 	{
 		InitializeComponent();
 		Loaded += OnLoaded;
-		Unloaded += (_, _) => FluentFin.Services.AmbientBackdrop.ReleaseFullScene(this);
+		Unloaded += (_, _) =>
+		{
+			Watch(null); // Nixie 1.7.5 (review Major 3)
+			FluentFin.Services.AmbientBackdrop.ReleaseFullScene(this);
+		};
 	}
 
 	/// <summary>
@@ -73,18 +77,27 @@ public sealed partial class LoadStateView : UserControl
 
 	partial void OnStateChanged(LoadState? newValue)
 	{
+		Watch(IsLoaded ? newValue : null);
+		UpdateScene();
+	}
+
+	/// <summary>
+	/// Nixie 1.7.5 (review Major 3): the state is heard only while the view is in the window. A page's state belongs to its view
+	/// model, which Back keeps and hands to a new page: heard from the first page on, it kept that page alive, one more for every
+	/// Back. On Loaded the view hears it again and shows it as it is.
+	/// </summary>
+	private void Watch(LoadState? state)
+	{
 		if (_watched is not null)
 		{
 			_watched.PropertyChanged -= OnStatePropertyChanged;
 		}
 
-		_watched = newValue;
-		if (newValue is not null)
+		_watched = state;
+		if (state is not null)
 		{
-			newValue.PropertyChanged += OnStatePropertyChanged;
+			state.PropertyChanged += OnStatePropertyChanged;
 		}
-
-		UpdateScene();
 	}
 
 	/// <summary>
@@ -93,6 +106,7 @@ public sealed partial class LoadStateView : UserControl
 	/// </summary>
 	private void OnLoaded(object sender, RoutedEventArgs e)
 	{
+		Watch(State); // Nixie 1.7.5 (review Major 3)
 		UpdateScene();
 		if (IsInsideGlassSurface(this))
 		{

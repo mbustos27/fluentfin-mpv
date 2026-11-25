@@ -99,6 +99,40 @@ internal sealed class ItemPagePlace
 	/// <summary>A page that turns out shorter than it was gets its content this long to grow before it is scrolled to its end.</summary>
 	private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(400);
 
+	/// <summary>Nixie 1.7.5: how long the poster whose details were open is waited for (its row drawn) before the place goes on without them.</summary>
+	private static readonly TimeSpan ReopenWait = TimeSpan.FromMilliseconds(1500);
+
+	// Nixie 1.7.5: per page place (its key), the item whose details were open under its row when the page was left
+	private static readonly Dictionary<string, Guid> DetailsLeftOpen = [];
+
+	/// <summary>Nixie 1.7.5: the item of the Editorial details (under a row) the element is in, or null.</summary>
+	private static Guid? DetailsOf(DependencyObject element)
+	{
+		for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is Themes.Editorial.Controls.InlineDetailsRow details)
+			{
+				return details.Item?.Dto?.Id;
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>Nixie 1.7.5: the row that opens a poster's details under it (an Editorial shelf).</summary>
+	private static Themes.Editorial.Controls.IEditorialDetailsHost? HostOf(DependencyObject element)
+	{
+		for (var node = VisualTreeHelper.GetParent(element); node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is Themes.Editorial.Controls.IEditorialDetailsHost host)
+			{
+				return host;
+			}
+		}
+
+		return null;
+	}
+
 	private string _key = "";
 	private DispatcherTimer? _timer;
 
@@ -258,6 +292,18 @@ internal sealed class ItemPagePlace
 		}
 
 		PagePlaces.Save(_key, new PagePlace(_scroller.VerticalOffset, item, path, fromKeyboard, selectedSeasonId, name));
+		// Nixie 1.7.5: left from an Editorial poster's details under its row (its Full details): Back opens them again
+		lock (DetailsLeftOpen)
+		{
+			if (focused is not null && DetailsOf(focused) is { } open)
+			{
+				DetailsLeftOpen[_key] = open;
+			}
+			else
+			{
+				DetailsLeftOpen.Remove(_key);
+			}
+		}
 	}
 
 	private void Restore(PagePlace place)
@@ -266,6 +312,14 @@ internal sealed class ItemPagePlace
 		DateTime? loadedAt = null;
 		var scrolled = false;
 		var focused = place.FocusedItemId is null && place.FocusedPath is null && place.FocusedName is null;
+		// Nixie 1.7.5: details open under a row when the page was left are opened again before the scroll (the page is that much
+		// taller: without them Back stopped 234 px short, at the page's end, on Editorial's film page)
+		Guid? reopen;
+		DependencyObject? made = null; // the poster the row made for them, with the keyboard the app put there (not the user's)
+		lock (DetailsLeftOpen)
+		{
+			reopen = DetailsLeftOpen.TryGetValue(_key, out var open) ? open : null;
+		}
 		_timer?.Stop();
 		_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
 		_timer.Tick += (_, _) =>
@@ -281,6 +335,49 @@ internal sealed class ItemPagePlace
 				loadedAt ??= now;
 			}
 
+			if (reopen is { } detailsOf && loadedAt is { } loadedSince)
+			{
+				if (Find(_page, detailsOf) is Themes.Editorial.Controls.EditorialPoster { Item: { } shown } poster && HostOf(poster) is { } host)
+				{
+					if (!host.IsOpen(shown))
+					{
+						host.ToggleDetails(shown, poster);
+					}
+
+					// (back-gate10, Editorial: the poster the row made had the keyboard, so the details opened with theirs on their
+					// Play, which then counted as the user's: the place's own focus never came) where the keyboard is now is still ours
+					if (made is not null && _page.XamlRoot is { } openRoot)
+					{
+						made = FocusManager.GetFocusedElement(openRoot) as DependencyObject ?? made;
+					}
+
+					reopen = null;
+					return; // the next pass scrolls, with the details laid out
+				}
+
+				// (the gate's final grid, Editorial: the poster 9 of 12 was past its row's start, never made, and the details stayed
+				// shut, 1.8 s and 243 px short): the row makes it as the keyboard would reach it, unless the user is somewhere already
+				if (made is null && _page.XamlRoot is { } shelfRoot && !UserThere(shelfRoot) && Services.ArrivalFocus.WhyNot(_page) is null
+					&& Services.ArrivalFocus.OpenPopups(shelfRoot) == 0)
+				{
+					foreach (var shelf in Themes.Editorial.Controls.EditorialShelf.Within(_page))
+					{
+						if (shelf.ShelfRow.FocusItem(x => x is Core.ViewModels.BaseItemViewModel { Dto.Id: { } itemId } && itemId == detailsOf, FocusState.Programmatic))
+						{
+							made = FocusManager.GetFocusedElement(shelfRoot) as DependencyObject;
+							break;
+						}
+					}
+				}
+
+				if (now - loadedSince < ReopenWait)
+				{
+					return; // its row is not drawn yet
+				}
+
+				reopen = null; // its poster is not on the page any more: the place as it is
+			}
+
 			if (!scrolled)
 			{
 				var settled = loadedAt is { } at && now - at >= Settle;
@@ -292,10 +389,9 @@ internal sealed class ItemPagePlace
 			}
 			else if (!focused && _page.XamlRoot is { } root)
 			{
-				var current = FocusManager.GetFocusedElement(root) as DependencyObject;
 				// Nixie 1.4.0 (review of wip/140-fix2: Back to a slow film, then Ctrl+F and a letter: its card or Play took the
 				// keyboard out of the box when the page came in, the hunt's M1 again): the app's one arrival rule too
-				var userThere = current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller);
+				var userThere = UserThere(root);
 				switch (FocusRestore(userThere || Services.ArrivalFocus.WhyNot(_page) is not null, Services.ArrivalFocus.OpenPopups(root)))
 				{
 					case FocusStep.Leave:
@@ -313,6 +409,11 @@ internal sealed class ItemPagePlace
 			}
 		};
 		_timer.Start();
+
+		// the user has put the keyboard in the page (the app's own focus on a poster it made does not count)
+		bool UserThere(XamlRoot root) =>
+			FocusManager.GetFocusedElement(root) is DependencyObject current && IsInPage(current) && !ReferenceEquals(current, _scroller)
+			&& !ReferenceEquals(current, made);
 	}
 
 	private DependencyObject? Target(PagePlace place) =>
@@ -340,22 +441,36 @@ internal sealed class ItemPagePlace
 		return false;
 	}
 
-	/// <summary>The item of the card or episode row the element is in (or is).</summary>
+	/// <summary>
+	/// The item of the card or episode row the element is in (or is). Nixie 1.7.4: a layout theme's too (Editorial's stills and
+	/// posters, Cinematic's stills, Drive-in's showtimes): Back to an Editorial season gave the keyboard to Up next, not the
+	/// episode it was left from.
+	/// </summary>
 	private static Guid? ItemOf(DependencyObject element)
 	{
 		for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
 		{
-			switch (node)
+			// (an Editorial poster's details open under its row: Full details left from them, Back gives the poster the keyboard)
+			if ((ItemShown(node) ?? (node is Themes.Editorial.Controls.InlineDetailsRow details ? details.Item?.Dto?.Id : null)) is { } item)
 			{
-				case BaseItemDtoCard card:
-					return card.Model?.Dto.Id;
-				case EpisodeRow row:
-					return row.Dto?.Id;
+				return item;
 			}
 		}
 
 		return null;
 	}
+
+	/// <summary>Nixie 1.7.4: the item a card or row of any theme shows, or null for anything else.</summary>
+	private static Guid? ItemShown(DependencyObject node) => node switch
+	{
+		BaseItemDtoCard card => card.Model?.Dto.Id,
+		EpisodeRow row => row.Dto?.Id,
+		Themes.Editorial.Controls.EditorialStill still => still.Episode?.Id,
+		Themes.Editorial.Controls.EditorialPoster poster => poster.Item?.Dto?.Id,
+		Themes.Cinematic.Controls.CinematicStill still => still.Dto?.Id,
+		Themes.DriveIn.Controls.Showtime showtime => showtime.Dto?.Id,
+		_ => null,
+	};
 
 	/// <summary>The first card or episode row of the page showing that item.</summary>
 	private static Control? Find(DependencyObject root, Guid id)
@@ -364,12 +479,9 @@ internal sealed class ItemPagePlace
 		for (var i = 0; i < count; i++)
 		{
 			var child = VisualTreeHelper.GetChild(root, i);
-			switch (child)
+			if (child is Control control && ItemShown(control) == id)
 			{
-				case BaseItemDtoCard card when card.Model?.Dto.Id == id:
-					return card;
-				case EpisodeRow row when row.Dto?.Id == id:
-					return row;
+				return control;
 			}
 
 			if (Find(child, id) is { } found)

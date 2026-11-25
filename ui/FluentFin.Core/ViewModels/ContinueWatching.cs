@@ -234,7 +234,7 @@ public sealed class ContinueRemoval(BaseItemViewModel item, BaseItemDto dto, int
 /// </summary>
 public sealed partial class ContinueWatchingSettingViewModel(ILocalSettingsService settings) : ObservableObject
 {
-	public string Header => "Hide Continue Watching items not played for";
+	public string Header => "Hide Continue watching items not played for";
 
 	public string Description => "Only on this PC: nothing changes on the server, and the items come back if you choose Never.";
 

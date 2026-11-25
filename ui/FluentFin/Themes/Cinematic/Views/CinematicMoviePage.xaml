@@ -39,7 +39,7 @@
         the details and the cast. Same view model and same Back place as the shared movie page.
     -->
     <Grid>
-        <ScrollViewer x:Name="PageContent">
+        <ScrollViewer x:Name="PageContent" Visibility="{x:Bind c:ItemRowConverters.ItemContent(ViewModel.State.Status), Mode=OneWay}">
             <StackPanel>
                 <cc:CinematicItemStage x:Name="Stage" Dto="{x:Bind ViewModel.Dto, Mode=OneWay}">
                     <cc:CinematicItemStage.PrimaryActions>

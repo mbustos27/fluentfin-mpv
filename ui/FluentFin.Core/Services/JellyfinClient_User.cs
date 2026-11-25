@@ -235,6 +235,21 @@ public partial class JellyfinClient
 		}
 	}
 
+	public async Task<UserItemDataDto?> SetPlace(Guid id, bool played, long positionTicks, DateTimeOffset lastPlayed)
+	{
+		try
+		{
+			return await _jellyfinApiClient.UserItems[id].UserData.PostAsync(
+				new UpdateUserItemDataDto { Played = played, PlaybackPositionTicks = Math.Max(0, positionTicks), LastPlayedDate = lastPlayed },
+				x => x.QueryParameters.UserId = UserId);
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Setting the place of {ItemId} failed", id);
+			return null;
+		}
+	}
+
 	public async Task<UserItemDataDto?> SetPlayed(BaseItemDto dto, bool played)
 	{
 		try

@@ -15,7 +15,7 @@ using ReactiveUI;
 
 namespace FluentFin.Core.ViewModels;
 
-public partial class LibraryViewModel : ObservableObject, INavigationAware
+public partial class LibraryViewModel : ObservableObject, INavigationAware, IKeptOnBack
 {
 	// Nixie 1.4.1 (big libraries): every title loaded, by id (a title a later page brings again is kept once) and in the
 	// server's order; the grid's list is made from them here (it was DynamicData's SortAndBind, which reset the grid for any
@@ -381,6 +381,14 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 				onItsWay = null;
 				if (cancellationToken.IsCancellationRequested)
 				{
+					// Nixie 1.7.5 (review Major 1): a page that came as the library was left is its own (the reader has moved past
+					// it, and Back reads on from after it): it goes in, then the reading stops. Only a newer load's (a Retry, R)
+					// replaces this one's pages
+					if (ReferenceEquals(_loading, loading))
+					{
+						AddPage(page);
+					}
+
 					return;
 				}
 
@@ -914,9 +922,77 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	public Task OnNavigatedFrom()
 	{
 		// Nixie 1.4.1: the rest of a big library is not asked for once the page is left
+		_visit++; // Nixie 1.7.5: and a read on that Back started does not start after it
 		_loading?.Cancel();
 		StopPresets(); // 1.6 colpage (review Major 4): the presets source's Changed let go
 		return Task.CompletedTask;
+	}
+
+	// ---- Nixie 1.7.4: Back shows the library as it was (IKeptOnBack) ----------------------------------------------------------
+
+	/// <summary>
+	/// Kept for Back once its first page is in. Nixie 1.7.5: a big library left while the rest of its titles still came is kept
+	/// too (its reading stopped when it was left, OnNavigatedFrom) and reads on from where it stopped on Back (Returned); 1.7.4
+	/// loaded it again. One left before its first page loads again on Back.
+	/// </summary>
+	public bool CanKeep => State.Status is LoadStatus.Loaded or LoadStatus.Empty && !IsLoading && _library is not null
+		&& (!IsLoadingMore || _reader is { IsDone: false, HasFailed: false });
+
+	// Nixie 1.7.5: the reader of the library's pages (none for a playlist): Back reads on with it from where leaving stopped it
+	private LibraryPageReader? _reader;
+
+	/// <summary>
+	/// Back or Forward shows the library as it was: its titles, its sort, its filters, its view. The card the user left from gets
+	/// the keyboard again and the grid goes as far down as it was, as after a load that comes back (<see cref="PutBack"/>); its
+	/// presets' source is heard again. The titles are not asked again (a whole library is never read on Back: rule 3); a title
+	/// marked watched or a favourite since shows on its card (the navigation service tells the cards).
+	/// </summary>
+	public Task Returned(object parameter, bool stale)
+	{
+		ComingBack = false;
+		_lastJump = null; // a run of the same letter typed on the last visit starts over
+		Listen(PresetSource);
+		if (_library?.Id is { } library && LibraryPlaces.Recall(JellyfinClient.UserId, library) is { } place)
+		{
+			PutBack(place);
+		}
+
+		// Nixie 1.7.5: a big library left before all its titles came reads on from where it stopped (the page it was reading
+		// when left is asked again: the reader moves on only with a page that came), once the read that leaving stopped is over
+		if (IsLoadingMore && _reader is { IsDone: false, HasFailed: false } reader)
+		{
+			RestLoaded = ReadOnAsync(RestLoaded, reader, ++_visit, _loading);
+		}
+
+		return Task.CompletedTask;
+	}
+
+	// Nixie 1.7.5: each visit's number (each Back, each leave): a read on of an earlier visit does not start
+	private int _visit;
+
+	/// <summary>
+	/// Nixie 1.7.5: Back's read on: once the read that leaving stopped is over (a page that came as it stopped went in: review
+	/// Major 1), from where the reader is, with a load of its own; never when the page was left again meanwhile, or a newer
+	/// load (a Retry) took over.
+	/// </summary>
+	private async Task ReadOnAsync(Task stopped, LibraryPageReader reader, int visit, CancellationTokenSource? stoppedLoad)
+	{
+		try
+		{
+			await stopped;
+		}
+		catch (Exception)
+		{
+			// (it ends by itself when stopped: nothing of it is wanted now)
+		}
+
+		if (visit != _visit || !ReferenceEquals(_loading, stoppedLoad) || !IsLoadingMore || reader.IsDone || reader.HasFailed)
+		{
+			return;
+		}
+
+		var loading = _loading = new CancellationTokenSource();
+		await ReadRestAsync(reader, loading);
 	}
 
 	/// <summary>
@@ -992,6 +1068,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			// (LibraryPageReader): the first page shows at once, the rest follows (ReadRestAsync); a playlist is one request
 			var playlist = dto.Type == BaseItemDto_Type.Playlist && dto.Id is not null;
 			var reader = playlist ? null : new LibraryPageReader(JellyfinClient, dto) { Log = _logger };
+			_reader = reader; // 1.7.5
 			var first = playlist ? (await JellyfinClient.GetPlaylistItems(dto.Id!.Value))?.Items : await reader!.ReadFirstAsync(cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 

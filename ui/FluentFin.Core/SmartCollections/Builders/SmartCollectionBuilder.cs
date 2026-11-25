@@ -40,20 +40,44 @@ public sealed record BuildContext(IndexSnapshot Index, DateTimeOffset Now, IRead
 				return made.Titles;
 			}
 
-			CanonicalTitles titles;
-			try
-			{
-				titles = CanonicalTitles.Of(Index.Entries);
-			}
-			catch (Exception ex) when (ex is not OutOfMemoryException)
-			{
-				titles = CanonicalTitles.Each(Index.Entries);
-			}
-
+			var titles = Collapse(Index.Entries);
 			_titles = (Index, titles);
 			return titles;
 		}
 	}
+
+	// 1.7.5 (fx1; M1's review of 1.7.3): titles an index already has collapsed, given to a context of that index (the catalog's
+	// Find: a batch of pins collapses the index once, not once a pin)
+	/// <summary>1.7.5: the titles of <see cref="Index"/> collapsed already (null: made at the first builder that asks).</summary>
+	internal CanonicalTitles? Collapsed
+	{
+		get => _titles is { } made && ReferenceEquals(made.For, Index) ? made.Titles : null;
+		init
+		{
+			if (value is not null)
+			{
+				_titles = (Index, value);
+			}
+		}
+	}
+
+	/// <summary>Tests: told of each collapse, with the entries collapsed (a test counts its own index's only).</summary>
+	internal static event Action<IReadOnlyList<IndexEntry>>? Collapsing;
+
+	/// <summary>1.7.5: <paramref name="entries"/>' titles, copies collapsed; each entry its own title should collapsing fail.</summary>
+	internal static CanonicalTitles Collapse(IReadOnlyList<IndexEntry> entries)
+	{
+		Collapsing?.Invoke(entries);
+		try
+		{
+			return CanonicalTitles.Of(entries);
+		}
+		catch (Exception ex) when (ex is not OutOfMemoryException)
+		{
+			return CanonicalTitles.Each(entries);
+		}
+	}
+	// end 1.7.5
 
 	/// <summary>1.7.3: the outside lists' matcher over <see cref="Titles"/> (a list's title matches the title, not one of its copies).</summary>
 	public global::FluentFin.Core.Outside.OutsideMatcher Matcher

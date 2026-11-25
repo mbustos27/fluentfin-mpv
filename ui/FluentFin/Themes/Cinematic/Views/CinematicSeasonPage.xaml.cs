@@ -33,13 +33,14 @@ public sealed partial class CinematicSeasonPage : Page
 			CinematicShelf.HideHeader(EpisodeShelf);
 			Body.Margin = new Thickness(side, 24, 48, 56);
 		});
-		ViewModel.PropertyChanged += (_, e) =>
+		// Nixie 1.7.4: only while the page is in the window (Back hands a kept view model to a new page: WhileLoaded)
+		FluentFin.Services.WhileLoaded.Listen(this, ViewModel, (_, e) =>
 		{
 			if (e.PropertyName is nameof(SeasonViewModel.SeasonPills))
 			{
 				ShowTabs();
 			}
-		};
+		}, ShowTabs);
 		ShowTabs();
 		// Nixie 1.5: the seasons either side get their stills asked ahead, as the stills ask them (the template's width)
 		FluentFin.Services.StillsAhead.Follow(this, episode => _stillWidth > 0 ? CinematicArtwork.StillPath(episode, _stillWidth, episodeOwnFirst: true) : null);

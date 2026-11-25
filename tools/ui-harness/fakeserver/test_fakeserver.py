@@ -897,6 +897,101 @@ class BigSeriesTests(unittest.TestCase):
         self.assertTrue(all(p.get("PrimaryImageTag") for p in big.items[fx["id"]]["people"]))
 
 
+class RealShapeTests(unittest.TestCase):
+    """Nixie 1.7.5 (the basics gate): FAKESERVER_REAL_SHAPE=1 adds real-shaped titles and changes nothing else."""
+
+    def _lib(self, **env):
+        keys = ("FAKESERVER_REAL_SHAPE", "FAKESERVER_COLLECTIONS", "FAKESERVER_BIG_SERIES")
+        old = {k: os.environ.pop(k, None) for k in keys}
+        try:
+            os.environ.update(env)
+            return library.Library("server", "user", 600)
+        finally:
+            for k in keys:
+                os.environ.pop(k, None)
+                if old[k] is not None:
+                    os.environ[k] = old[k]
+
+    def test_off_by_default_and_the_rest_of_the_fixture_is_unchanged(self):
+        plain, real = self._lib(), self._lib(FAKESERVER_REAL_SHAPE="1")
+        self.assertIsNone(plain.showcase()["real_shape"])
+        for iid, item in plain.items.items():
+            self.assertEqual(item["Name"], real.items[iid]["Name"], iid)
+            # a film the person is added to keeps its own people first, in their order
+            self.assertEqual(item.get("people") or [], (real.items[iid].get("people") or [])[:len(item.get("people") or [])], iid)
+        for iid, ud in plain.user.items():
+            self.assertEqual(ud, real.user[iid], iid)
+        self.assertEqual({k: v for k, v in plain.showcase().items() if k != "real_shape"},
+                         {k: v for k, v in real.showcase().items() if k != "real_shape"})
+        # the showcase titles stay first in their libraries; Home's rows other than Continue watching are as they were
+        for view in ("Movies", "Shows"):
+            vid = library._id("view", view)
+            self.assertEqual(plain.children[vid][0], real.children[vid][0], view)
+            self.assertEqual([d["Id"] for d in plain.latest(vid)], [d["Id"] for d in real.latest(vid)], view)
+        self.assertEqual([d["Id"] for d in plain.next_up()["Items"]], [d["Id"] for d in real.next_up()["Items"]])
+        # and with the big series too: it stays second in Shows, the real series after it
+        both = self._lib(FAKESERVER_REAL_SHAPE="1", FAKESERVER_BIG_SERIES="24x13")
+        shows = [both.items[i]["Name"] for i in both.children[library._id("view", "Shows")][:3]]
+        self.assertEqual([library.SHOWCASE["series"], library.Library.BIG_SERIES_NAME, library.Library.REAL_SERIES_NAME], shows)
+
+    def test_seasons_of_13_and_24_long_names_a_cast_of_48_and_a_person_in_40_films(self):
+        real = self._lib(FAKESERVER_REAL_SHAPE="1", FAKESERVER_COLLECTIONS="1")
+        fx = real.showcase()["real_shape"]
+        series = fx["series"]
+        self.assertGreater(len(series["name"]), 80)
+        self.assertEqual([13, 24], [len(s["episodes"]) for s in series["seasons"]])
+        names = [e["name"] for s in series["seasons"] for e in s["episodes"]]
+        self.assertEqual(len(names), len(set(names)), "every episode has a name of its own in the series")
+        self.assertTrue(any(len(n) > 60 for n in names) and any(len(n) < 10 for n in names))
+        self.assertTrue(any(" " not in n and len(n) > 30 for n in names), "a long name with no space to break at")
+        # the season's list, as the app asks for it, and its count
+        s2 = series["seasons"][1]
+        listed = real.query({"parentid": [s2["id"]], "sortby": ["SortName"]})["Items"]
+        self.assertEqual([e["name"] for e in s2["episodes"]], [d["Name"] for d in listed])
+        self.assertEqual(24, real.dto(real.items[s2["id"]])["ChildCount"])
+        self.assertEqual(library.Library.LONG_CAST, [p["name"] for p in series["cast"]])
+        # Season 1 and Season 2 to E5 watched; E6 in progress, Continue watching's first card
+        progress = fx["in_progress"]
+        self.assertEqual((2, 6), (progress["season"], progress["index"]))
+        first = real.resume(limit=12)["Items"][0]
+        self.assertEqual((progress["id"], series["name"]), (first["Id"], first["SeriesName"]))
+        eps = real.episodes_of(series["id"])
+        self.assertEqual(13 + 5, sum(1 for e in eps if (real.user.get(e["Id"]) or {}).get("played")))
+        # the film: a long title, 48 people (36 and more in Cast & crew), second in Movies after the showcase film
+        film = fx["film"]
+        self.assertGreater(len(film["name"]), 80)
+        self.assertEqual(48, film["cast"])
+        detail = real.dto(real.items[film["id"]], detail=True)
+        self.assertEqual(48, len(detail["People"]))
+        self.assertEqual(48, len({p["Id"] for p in detail["People"]}))
+        movies = library._id("view", "Movies")
+        self.assertEqual(film["id"], real.children[movies][1])
+        # the person: in 40 films and more (their titles' grid and "With <name>")
+        person = fx["person"]
+        self.assertGreaterEqual(person["films"], 40)
+        titles = real.query({"personids": [person["id"]], "recursive": ["true"], "includeitemtypes": ["Movie"]})
+        self.assertEqual(person["films"], titles["TotalRecordCount"])
+        # the box set of 40 (FAKESERVER_COLLECTIONS), never the first of the Collections library
+        box = fx["collection"]
+        self.assertEqual(40, box["count"])
+        self.assertGreater(len(box["name"]), 60)
+        self.assertNotEqual(box["name"], real.showcase()["collections"][0]["name"])
+        self.assertIsNone(self._lib(FAKESERVER_REAL_SHAPE="1").showcase()["real_shape"]["collection"])
+
+    def test_the_big_librarys_first_and_last_titles_as_sorted_by_name(self):
+        old = os.environ.pop("FAKESERVER_BIG_LIBRARY", None)
+        try:
+            os.environ["FAKESERVER_BIG_LIBRARY"] = "300"
+            lib = library.Library("server", "user", 600)
+        finally:
+            os.environ.pop("FAKESERVER_BIG_LIBRARY", None)
+            if old is not None:
+                os.environ["FAKESERVER_BIG_LIBRARY"] = old
+        big = lib.showcase()["big"][0]
+        listed = lib.query({"parentid": [library._id("view", "Archive")], "sortby": ["SortName"]})["Items"]
+        self.assertEqual((300, listed[0]["Name"], listed[-1]["Name"]), (big["count"], big["first"], big["last"]))
+
+
 class SearchTests(unittest.TestCase):
     """1.5 search: the fake answers as Jellyfin 12.4 (docs/research/search.md): one cleaned substring, scored, capped."""
 

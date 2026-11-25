@@ -85,6 +85,33 @@ public sealed class InstallDeviceIdCurrentTests : IDisposable
 		Assert.Equal(InstallDeviceId.ForWindow(id, 1), current);
 		Assert.Equal(current, InstallDeviceId.Current);
 	}
+
+	/// <summary>
+	/// 1.7.5 (BH-161-q2): a device-id.json with a key given twice threw out of <see cref="InstallDeviceId.Stored"/>, and
+	/// <see cref="InstallDeviceId.Current"/>'s fallback then skipped the window's slot: two windows shared one id. The key's last
+	/// value is the id, the window takes its slot (here the second: a first window runs), and the file is repaired.
+	/// </summary>
+	[Fact]
+	public void ADuplicateKey_StillGivesEachWindowItsSlot_AndTheFileIsRepaired()
+	{
+		var user = $@"{Environment.UserDomainName}\{Environment.UserName}";
+		var worked = InstallDeviceId.Stored(_root, InstallDeviceId.PcId(), AppContext.BaseDirectory, user);
+		var file = Path.Combine(_root, InstallDeviceId.FileName);
+		var key = ((System.Text.Json.Nodes.JsonObject)System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(file))!["ids"]!).Single().Key;
+		var kept = Guid.NewGuid().ToString("N"); // the file's id, not the one worked out
+		File.WriteAllText(file, $$$"""{"version": 1, "ids": {"{{{key}}}": "{{{worked}}}", "other": "{{{worked}}}", "{{{key}}}": "{{{kept}}}"}}""");
+		using var first = InstallDeviceId.ClaimWindow(kept).Claim; // a first window of the copy runs
+
+		InstallDeviceId.UseDataFolder(_root);
+		var current = InstallDeviceId.Current;
+
+		Assert.Equal(InstallDeviceId.ForWindow(kept, 1), current);
+		var repaired = File.ReadAllText(file);
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(repaired, key));
+		var ids = System.Text.Json.Nodes.JsonNode.Parse(repaired)!["ids"]!.AsObject();
+		Assert.Equal(kept, (string?)ids[key]);
+		Assert.Equal(worked, (string?)ids["other"]); // every other entry kept
+	}
 }
 
 /// <summary>
@@ -193,6 +220,23 @@ public sealed class StoredDeviceIdTests : IDisposable
 
 		Assert.Equal(InstallDeviceId.For(Pc, Data, program, User), id);
 		Assert.Equal(id, InstallDeviceId.Stored(Data, Pc, Path.Combine(_root, "elsewhere"), User));
+	}
+
+	/// <summary>1.7.5 (BH-161-q2): a key given twice anywhere is read as JSON reads it, its last value, and written once.</summary>
+	[Fact]
+	public void ADuplicateKey_IsReadAsItsLastValue_AndWrittenOnce()
+	{
+		var program = Path.Combine(_root, "app");
+		var id = InstallDeviceId.Stored(Data, Pc, program, User);
+		var text = File.ReadAllText(IdFile);
+		File.WriteAllText(IdFile, text.Replace("\"version\": 1", "\"version\": 1, \"version\": 1", StringComparison.Ordinal));
+		Assert.ThrowsAny<Exception>(() => (System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(IdFile)) as System.Text.Json.Nodes.JsonObject)?["ids"]); // what 1.6.1 met
+
+		Assert.Equal(id, InstallDeviceId.Stored(Data, Pc, Path.Combine(_root, "elsewhere"), User));
+
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(IdFile), "\"version\""));
+		Assert.Equal(id, InstallDeviceId.Stored(Data, Pc, Path.Combine(_root, "elsewhere"), User));
+		Assert.Empty(Directory.GetFiles(Data, "*.tmp"));
 	}
 
 	[Fact]

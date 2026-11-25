@@ -3,6 +3,7 @@ using FluentFin.Converters;
 using FluentFin.Core.ViewModels;
 using FluentFin.Services;
 using Jellyfin.Sdk.Generated.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -25,14 +26,6 @@ public sealed partial class CollectionsPage : Page
 	public CollectionsPage()
 	{
 		InitializeComponent();
-		ViewModel.State.PropertyChanged += (_, e) =>
-		{
-			if (e.PropertyName == nameof(Core.ViewModels.LoadState.Status) && ViewModel.State.IsLoaded && !_focused)
-			{
-				_focused = true;
-				TakeArrivalFocus(ArrivalTries);
-			}
-		};
 
 		// 1.7.3 (BH-171-m4): the reading line, from the view model while the page is in the window (a theme switch hands the view
 		// model to the next page)
@@ -46,8 +39,121 @@ public sealed partial class CollectionsPage : Page
 		ShowReadingLine();
 	}
 
-	/// <summary>How many times the arrival focus is tried while the rows' tiles are still being made (150 ms apart).</summary>
-	private const int ArrivalTries = 12;
+	// Nixie 1.7.4: the page hears its view model's state while it is shown (it added its handler in its constructor, and Back hands a
+	// kept view model to a new page: the page left stayed alive with it); a view model handed over already loaded (Back, Forward)
+	// has no Status change to wait for: the arrival focus is taken at once
+	protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+	{
+		base.OnNavigatedTo(e);
+		// Nixie 1.7.4: Back (or Forward) to the page: the tile it was left from and how far down it was (the section's first tile
+		// took the keyboard, at the top)
+		_returnTo = e.NavigationMode is Microsoft.UI.Xaml.Navigation.NavigationMode.Back or Microsoft.UI.Xaml.Navigation.NavigationMode.Forward
+			&& LeftAt.TryGetValue(PlaceKey(e.Parameter), out var left) ? left : null;
+		ViewModel.State.PropertyChanged -= OnStateChanged;
+		ViewModel.State.PropertyChanged += OnStateChanged;
+		if (ViewModel.State.IsLoaded)
+		{
+			OnStateChanged(ViewModel.State, new System.ComponentModel.PropertyChangedEventArgs(nameof(Core.ViewModels.LoadState.Status)));
+		}
+	}
+
+	protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+	{
+		ViewModel.State.PropertyChanged -= OnStateChanged;
+		base.OnNavigatedFrom(e);
+	}
+
+	// Nixie 1.7.4: per place of the page (its section, a See all), the tile left from (the kept view model's own tile, held weakly)
+	// and how far down the page was
+	private static readonly Dictionary<string, (WeakReference<CollectionTile>? Tile, double Offset)> LeftAt = [];
+	private (WeakReference<CollectionTile>? Tile, double Offset)? _returnTo;
+
+	private static string PlaceKey(object? parameter) => parameter switch
+	{
+		CollectionsPlace place => place.ToString(),
+		CollectionsSection section => new CollectionsPlace(section).ToString(),
+		_ => new CollectionsPlace(CollectionsSection.All).ToString(),
+	};
+
+	protected override void OnNavigatingFrom(Microsoft.UI.Xaml.Navigation.NavigatingCancelEventArgs e)
+	{
+		CollectionTile? tile = null;
+		for (var node = XamlRoot is { } root ? Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) as DependencyObject : null; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (node is FrameworkElement { Tag: CollectionTile focused })
+			{
+				tile = focused;
+				break;
+			}
+		}
+
+		LeftAt[PlaceKey(ViewModel.Place)] = (tile is null ? null : new WeakReference<CollectionTile>(tile), PageScroller.VerticalOffset);
+		base.OnNavigatingFrom(e);
+	}
+
+	/// <summary>Nixie 1.7.4: Back's place: the page as far down as it was, the tile left from given the keyboard; false when it is not there.</summary>
+	private bool FocusReturned()
+	{
+		if (_returnTo is not { } place)
+		{
+			return false;
+		}
+
+		PageScroller.ScrollTo(0, place.Offset, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled));
+		if (place.Tile?.TryGetTarget(out var tile) != true)
+		{
+			return FocusSection(); // (no tile was focused, or the page was made anew: its section's first tile, as on arrival)
+		}
+
+		if (ViewModel.IsSeeAll)
+		{
+			var at = IndexIn(ViewModel.GridTiles, tile!);
+			return at >= 0 && GridRepeater.GetOrCreateElement(at) is Control element && element.Focus(FocusState.Programmatic);
+		}
+
+		foreach (var row in ViewModel.Rows)
+		{
+			var index = IndexIn(row.Tiles, tile!);
+			if (index >= 0)
+			{
+				return RowsView.ContainerFromItem(row) is FrameworkElement container && FindShelf(container)?.FocusIndex(index, FocusState.Programmatic) == true;
+			}
+		}
+
+		return FocusSection(); // the tile is no longer on the page
+	}
+
+	private static int IndexIn(IReadOnlyList<CollectionTile> tiles, CollectionTile tile)
+	{
+		for (var i = 0; i < tiles.Count; i++)
+		{
+			if (ReferenceEquals(tiles[i], tile))
+			{
+				return i;
+			}
+		}
+
+		return -1;
+	}
+
+	private void OnStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(Core.ViewModels.LoadState.Status) && ViewModel.State.IsLoaded && !_focused)
+		{
+			_focused = true;
+			_arrivalStarted = Environment.TickCount64; // Nixie 1.7.5
+			TakeArrivalFocus(ArrivalTries);
+		}
+	}
+
+	/// <summary>
+	/// How many times the arrival focus is tried while the rows' tiles are still being made (150 ms apart, and more under load:
+	/// each try waits for the page's other work). Nixie 1.7.5: 40 (12 until 1.7.4, under two seconds).
+	/// </summary>
+	private const int ArrivalTries = 40;
+
+	// Nixie 1.7.5: when the arrival focus was first tried (Environment.TickCount64), for the line that says why it stopped trying
+	private long _arrivalStarted;
 
 	/// <summary>What the arrival focus does after a try that found no tile to take the keyboard (<see cref="NextArrivalTry"/>).</summary>
 	public enum ArrivalRetry
@@ -89,15 +195,29 @@ public sealed partial class CollectionsPage : Page
 	private void TakeArrivalFocus(int tries) =>
 		UiDispatch.Enqueue(DispatcherQueue, "the Collections page's arrival focus", () =>
 		{
-			if (ArrivalFocus.TryTake(this, "the section's first tile", FocusSection)
-				|| ArrivalFocus.UserActedAt > ArrivalFocus.ArrivedAt + ArrivalFocus.GraceMs)
+			// Nixie 1.7.4: Back: the tile left from, where the page was (else, and on arrival, the section's first tile)
+			if (ArrivalFocus.TryTake(this, _returnTo is null ? "the section's first tile" : "the tile Back returns to", () => FocusReturned() || (_returnTo is null && FocusSection())))
 			{
 				EndArrivalTries();
 				return;
 			}
 
+			// Nixie 1.7.5 (KNOWN-ISSUES, 1.6.1 and 1.7.3): the tries that end say why (they ended with no line, and the keyboard
+			// stayed on Back)
+			if (ArrivalFocus.UserActedAt > ArrivalFocus.ArrivedAt + ArrivalFocus.GraceMs)
+			{
+				EndArrivalTries();
+				ArrivalStopped("the user moved first");
+				return;
+			}
+
 			var next = NextArrivalTry(IsLoaded, ArrivalFocus.Shown(this), tries);
 			var mine = EndArrivalTries();
+			if (next is ArrivalRetry.None)
+			{
+				ArrivalStopped(ArrivalFocus.Shown(this) ? $"no tile took the keyboard in {ArrivalTries} tries" : "the page is no longer shown");
+			}
+
 			if (next is ArrivalRetry.Loaded or ArrivalRetry.LoadedOrTimer)
 			{
 				void Once(object sender, RoutedEventArgs e)
@@ -115,7 +235,9 @@ public sealed partial class CollectionsPage : Page
 
 			if (next is ArrivalRetry.Timer or ArrivalRetry.LoadedOrTimer)
 			{
-				var timer = DispatcherQueue.CreateTimer();
+				// Nixie 1.7.5: held by the page until it has ticked or the tries end (only a local held it: a timer the collector
+				// takes first never ticks, and the tries stopped with no line, under load)
+				var timer = _arrivalTimer = DispatcherQueue.CreateTimer();
 				timer.Interval = TimeSpan.FromMilliseconds(150);
 				timer.IsRepeating = false;
 				// 1.7.3 fix round (the close crash's class): nothing once the app is closing, and never a throw out of the tick
@@ -131,7 +253,7 @@ public sealed partial class CollectionsPage : Page
 			}
 		}, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
 
-	// any try scheduled before is no longer to run (its Loaded handler goes); returns the number of the next one
+	// any try scheduled before is no longer to run (its Loaded handler and its timer go); returns the number of the next one
 	private int EndArrivalTries()
 	{
 		if (_arrivalOnLoaded is { } handler)
@@ -140,8 +262,18 @@ public sealed partial class CollectionsPage : Page
 			_arrivalOnLoaded = null;
 		}
 
+		_arrivalTimer?.Stop();
+		_arrivalTimer = null;
 		return ++_arrivalTry;
 	}
+
+	// Nixie 1.7.5: the retry's timer, held while it waits
+	private Microsoft.UI.Dispatching.DispatcherQueueTimer? _arrivalTimer;
+
+	// Nixie 1.7.5: why the arrival focus stopped trying with no tile focused, and after how long (a duration only)
+	private void ArrivalStopped(string why) =>
+		App.GetService<ILogger<CollectionsPage>>().LogInformation("[focus] CollectionsPage: the arrival focus stops trying after {Ms} ms: {Why}",
+			Environment.TickCount64 - _arrivalStarted, why);
 
 	/// <summary>The reading line under the title: shown, gone with its space kept (the rows under it stay), or gone.</summary>
 	public enum ReadingLineState

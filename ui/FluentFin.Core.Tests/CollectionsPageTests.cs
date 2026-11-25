@@ -516,6 +516,92 @@ public sealed class CollectionsPageTests : IDisposable
 	}
 
 	[Fact]
+	public async Task SaveAsPlaylist_AnotherUsersPublicPlaylistOfThatName_IsNotTheUsers()
+	{
+		// 1.7.5 (the 1.6.1 review): the check for an earlier save went by the name, so another user's public "The Matrix" read
+		// "Already in your playlists", and Open took the user to it; it goes by whose it is now (by its id)
+		var theirs = Guid.NewGuid();
+		var made = Guid.NewGuid();
+		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult
+		{
+			Items = [new BaseItemDto { Id = theirs, Name = "The Matrix", Type = BaseItemDto_Type.Playlist }],
+		});
+		_client.Setup(x => x.IsOwnPlaylist(theirs)).ReturnsAsync(false);
+		_client.Setup(x => x.CreatePlaylist("The Matrix", It.IsAny<IReadOnlyList<Guid>>())).ReturnsAsync(new PlaylistCreation(made, 200, null));
+		var (vm, _) = await NixiePage();
+
+		await vm.SaveAsPlaylistCommand.ExecuteAsync(null);
+
+		_client.Verify(x => x.CreatePlaylist("The Matrix", It.IsAny<IReadOnlyList<Guid>>()), Times.Once);
+		Assert.Equal(made, vm.SavedPlaylist?.Id);
+		Assert.StartsWith("Saved to your playlists as “The Matrix”", vm.PlaylistMessage, StringComparison.Ordinal);
+		Assert.DoesNotContain("Already", vm.PlaylistMessage, StringComparison.Ordinal);
+
+		// the user's own beside it (asked by its id): that one is the earlier save, never the other user's
+		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult
+		{
+			Items = [new BaseItemDto { Id = theirs, Name = "The Matrix", Type = BaseItemDto_Type.Playlist }, new BaseItemDto { Id = made, Name = "The Matrix", Type = BaseItemDto_Type.Playlist }],
+		});
+		_client.Setup(x => x.IsOwnPlaylist(made)).ReturnsAsync(true);
+		var (again, _) = await NixiePage();
+		await again.SaveAsPlaylistCommand.ExecuteAsync(null);
+
+		_client.Verify(x => x.CreatePlaylist(It.IsAny<string>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Once);
+		Assert.Equal(made, again.SavedPlaylist?.Id);
+		Assert.Equal("Already in your playlists as “The Matrix”.", again.PlaylistMessage);
+	}
+
+	[Fact]
+	public async Task SaveAsPlaylist_TheEarlierSave_RenamedOnTheServer_IsFoundByItsId()
+	{
+		// 1.7.5 (the review): the earlier save was found by its name first, so one renamed on the server made a second copy
+		var store = new Outside.MemoryStore();
+		SavedPlaylists.Settings = () => store;
+		try
+		{
+			var made = Guid.NewGuid();
+			_client.Setup(x => x.CreatePlaylist("The Matrix", It.IsAny<IReadOnlyList<Guid>>())).ReturnsAsync(new PlaylistCreation(made, 200, null));
+			var (first, _) = await NixiePage();
+			await first.SaveAsPlaylistCommand.ExecuteAsync(null);
+			_client.Verify(x => x.CreatePlaylist(It.IsAny<string>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Once);
+
+			// the user renamed it on the server; another user's public "The Matrix" is there too
+			_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult
+			{
+				Items = [new BaseItemDto { Id = Guid.NewGuid(), Name = "The Matrix", Type = BaseItemDto_Type.Playlist },
+					new BaseItemDto { Id = made, Name = "Neo night", Type = BaseItemDto_Type.Playlist }],
+			});
+			var (again, _) = await NixiePage();
+			await again.SaveAsPlaylistCommand.ExecuteAsync(null);
+
+			_client.Verify(x => x.CreatePlaylist(It.IsAny<string>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Once);
+			Assert.Equal(made, again.SavedPlaylist?.Id);
+			Assert.Equal("Already in your playlists as “Neo night”.", again.PlaylistMessage);
+			_client.Verify(x => x.IsOwnPlaylist(It.IsAny<Guid>()), Times.Never); // known by its id: nothing to ask
+
+			// deleted on the server: forgotten, and saved again
+			_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+			var (third, _) = await NixiePage();
+			await third.SaveAsPlaylistCommand.ExecuteAsync(null);
+			_client.Verify(x => x.CreatePlaylist(It.IsAny<string>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Exactly(2));
+		}
+		finally
+		{
+			SavedPlaylists.Settings = () => SmartCollectionServices.Settings;
+		}
+	}
+
+	[Fact]
+	public void SaveAsPlaylist_ARefusalOfTheServers_NamesItsOwner_NeverAnAdministrator()
+	{
+		// rule 11 (KNOWN-ISSUES, from 1.7.3): a 403 said "Ask its administrator."; the app says "the server's owner" elsewhere
+		var refused = CollectionViewModel.PlaylistRefusal(403);
+		Assert.Contains("Only the server's owner can change that.", refused, StringComparison.Ordinal);
+		Assert.DoesNotContain("administrator", refused, StringComparison.OrdinalIgnoreCase);
+		Assert.DoesNotContain("your server", CollectionViewModel.PlaylistRefusal(0), StringComparison.OrdinalIgnoreCase);
+	}
+
+	[Fact]
 	public async Task SaveAsPlaylist_AnAnswerThatNamesNoPlaylist_IsSaidPlainly_AndSavingAgainFindsIt()
 	{
 		// 1.6.1 (BH-160-m2): a 200 with no playlist id read "didn't make the playlist (error 200)"

@@ -265,6 +265,11 @@ class Library:
         # 1.6 collections: TmdbCollection ids, countries, recurring directors, a show left a while ago, and (with
         # FAKESERVER_COLLECTIONS) the admin's box set with its franchise's Tmdb id (smartdata.py)
         smartdata.apply(self, _id("view", "Movies"))
+        # Nixie 1.7.5 (the basics gate, g3): FAKESERVER_REAL_SHAPE=1 adds the real-shaped titles (seasons of 13 and 24
+        # episodes, long titles and names, a cast of 48, a person in 40 films, a box set of 40); after everything else,
+        # with random sources of its own, so the rest of the fixture is unchanged
+        if os.environ.get("FAKESERVER_REAL_SHAPE"):
+            self._real_shape()
 
     # 1.6 collections: smartdata's helpers
     def _person_named(self, name):
@@ -636,6 +641,141 @@ class Library:
                          "Role": self.LONG_ROLES[i % len(self.LONG_ROLES)] if kind == "Actor" else ""})
         return cast
 
+    # Nixie 1.7.5 (the basics gate, g3; rule 12: "a fixture smaller than real life hides the bug"): FAKESERVER_REAL_SHAPE=1.
+    # Names start with "A " so they sort right after the showcase titles in their library (on its first page) and never
+    # before them: " a very ..." after " a signal ..." and " a tide ..." in Shows, " a voyage ..." after " a quiet ..." in Movies.
+    REAL_SERIES_NAME = "A Very Long-Running Chronicle of the Lighthouse Keeper's Apprentice and the Ferry to Port Ellery"
+    REAL_FILM_NAME = "A Voyage of Altogether Unlikely Length: The Copper Lighthouse (Director's Extended Edition)"
+    # (a box set's sort name keeps its article: "the forty-film ..." sorts among the others, never first)
+    REAL_COLLECTION_NAME = "The Forty-Film Collection, Gathered Over Many Years, with a Name Long Enough to Wrap"
+    #: the person credited in REAL_PERSON_FILMS films of Movies (and in the series and the film): "With <name>"'s 40 and more
+    REAL_PERSON = "Anneliese van der Westhuizen"
+    REAL_PERSON_FILMS = 40
+    #: episodes per season (a real season of 13 and one of 24: the friend's 13 stopped at E7 of 13 in 1.7.x)
+    REAL_SEASONS = (13, 24)
+    REAL_CAST = 48
+    #: the episode in progress (season, episode): the first card of Continue watching, for the way up from an episode
+    REAL_IN_PROGRESS = (2, 6)
+    # episode names as real shows have them: short, long, and long without a place to break
+    REAL_EPISODE_WORDS = ["The Night the Ferry Never Came Back to Port Ellery and Nobody in Town Said a Single Word",
+                          "Pilot", "Lanterns", "What the Lighthouse Keeper's Apprentice Found Beneath the Old Mill",
+                          "Part One", "Saltmarsh", "An Unexpectedly Long Conversation About the Weather",
+                          "Notwithstandingeverythingthathappenedbefore", "The Return", "Kestrel Bay, Again",
+                          "Everything We Said We Would Never Do, We Did, and Then We Did It Again", "Brightwater"]
+
+    def _real_shape(self):
+        saved = self.rng
+        self.rng = random.Random(1750)
+        try:
+            rng = self.rng
+            shows, movies = _id("view", "Shows"), _id("view", "Movies")
+            # the series: Season 1 of 13 episodes, Season 2 of 24, every episode named within the series, the long cast
+            words = list(self.REAL_EPISODE_WORDS)
+            sid = _id("series", "Shows", self.REAL_SERIES_NAME)
+            used = {}
+
+            def episode_name(e):
+                # a name of its own in the series: a word's second use is its "Part 2", as real shows name them
+                season = len(self.children.get(sid, []))
+                if e > self.REAL_SEASONS[season - 1]:
+                    return "(dropped below)"   # past this season's length: removed once the series is made
+                word = words[(e - 1 + season * 5) % len(words)]
+                used[word] = used.get(word, 0) + 1
+                return word if used[word] == 1 else "%s, Part %d" % (word, used[word])
+
+            self._series(shows, "Shows", self.REAL_SERIES_NAME, self.now - datetime.timedelta(days=2500), 2011, "real_series",
+                         seasons=len(self.REAL_SEASONS), episodes=max(self.REAL_SEASONS), episode_name=episode_name)
+            for s, season_id in enumerate(self.children[sid]):
+                for eid in self.children[season_id][self.REAL_SEASONS[s]:]:
+                    del self.items[eid]
+                del self.children[season_id][self.REAL_SEASONS[s]:]
+            self.children[shows].sort(key=lambda i: self.sort_name(self.items[i]))
+            cast = self._long_cast()
+            for item_id in [sid] + list(self.children[sid]):
+                self.items[item_id]["people"] = [dict(p) for p in cast]
+            # watched: all of Season 1, Season 2 to E5, E6 in progress (the newest resume point: Continue watching's first)
+            done_season, done_episode = self.REAL_IN_PROGRESS
+            when = self.now - datetime.timedelta(days=2)
+            for s, season_id in enumerate(self.children[sid], 1):
+                for e, eid in enumerate(self.children[season_id], 1):
+                    if s < done_season or e < done_episode:
+                        self._ud(eid).update(played=True, play_count=1, position=0,
+                                             last_played=when + datetime.timedelta(minutes=s * 100 + e))
+                    elif s == done_season and e == done_episode:
+                        self._ud(eid).update(played=False, position=int(self.runtime * 0.4),
+                                             last_played=self.now - datetime.timedelta(minutes=30))
+            # the film: a long title and a cast of 48 (the long cast and more, double-barrelled), in Movies
+            fid = _id("movie", "Movies", self.REAL_FILM_NAME)
+            film = self._common(fid, "movie", self.REAL_FILM_NAME, movies, movies, self.now - datetime.timedelta(days=400), 2019,
+                                ["Adventure", "Drama", "Mystery"], "PG-13")
+            film["showcase"] = "real_film"
+            film["countries"] = ["United Kingdom"]
+            people = list(cast)
+            while len(people) < self.REAL_CAST:
+                name = "%s %s-%s" % (rng.choice(FIRST), rng.choice(LAST), rng.choice(LAST))
+                if any(p["Name"] == name for p in people):
+                    continue
+                person = self._person_named(name)
+                people.append({"Name": name, "Id": person["Id"], "Type": "Actor", "PrimaryImageTag": person["PrimaryImageTag"],
+                               "Role": "%s %s, %s" % (rng.choice(FIRST), rng.choice(LAST), rng.choice(self.LONG_ROLES))})
+            film["people"] = [dict(p) for p in people]
+            self.items[fid] = film
+            self.children[movies].append(fid)
+            self.children[movies].sort(key=lambda i: self.sort_name(self.items[i]))
+            # the person in 40 films of Movies besides (credited last, so each film's own first names stay as they were)
+            person = self._person_named(self.REAL_PERSON)
+            pool = [i for i in self.children[movies] if self.items[i]["kind"] == "movie" and not self.items[i].get("showcase")
+                    and not any(p.get("Id") == person["Id"] for p in self.items[i]["people"])]
+            for mid in rng.sample(pool, min(self.REAL_PERSON_FILMS, len(pool))):
+                self.items[mid]["people"] = list(self.items[mid]["people"]) + [
+                    {"Name": person["Name"], "Id": person["Id"], "Role": rng.choice(self.LONG_ROLES), "Type": "Actor",
+                     "PrimaryImageTag": person["PrimaryImageTag"]}]
+            # with FAKESERVER_COLLECTIONS: a box set of 40 films with a long name
+            cvid = _id("view", "Collections")
+            if cvid in self.items:
+                bid = _id("boxset", self.REAL_COLLECTION_NAME)
+                films = [i for i in self.children[movies] if self.items[i]["kind"] == "movie"]
+                members = sorted(rng.sample(films, min(40, len(films))),
+                                 key=lambda i: (self.items[i]["premiere"], self.sort_name(self.items[i])))
+                years = [self.items[m]["year"] for m in members]
+                self.items[bid] = {"Id": bid, "kind": "boxset", "Name": self.REAL_COLLECTION_NAME, "parent": cvid, "view": cvid,
+                                   "created": self.now - datetime.timedelta(days=5), "year": min(years),
+                                   "premiere": min(self.items[m]["premiere"] for m in members), "genres": [], "tags": [],
+                                   "rating": self.items[members[0]]["rating"], "people": [], "studios": [],
+                                   "overview": "Forty films, %d-%d." % (min(years), max(years)), "tagline": "",
+                                   "community": None, "critic": None}
+                self.children[cvid].append(bid)
+                self.children[bid] = members
+                self.children[cvid].sort(key=lambda i: self.sort_name(self.items[i]))
+        finally:
+            self.rng = saved
+
+    def real_shape_fixture(self):
+        """The real-shaped titles for GET /__harness/fixture (FAKESERVER_REAL_SHAPE): the series' seasons and episodes, the
+        episode in progress, the film and its cast's size, the person and their films, the box set; None when off."""
+        sid = next((i for i, item in self.items.items() if item.get("showcase") == "real_series"), None)
+        if not sid:
+            return None
+        fid = next(i for i, item in self.items.items() if item.get("showcase") == "real_film")
+        pid = _id("person", self.REAL_PERSON)
+        bid = _id("boxset", self.REAL_COLLECTION_NAME)
+        s, e = self.REAL_IN_PROGRESS
+        current = self.items[self.children[self.children[sid][s - 1]][e - 1]]
+        return {"series": {"id": sid, "name": self.items[sid]["Name"], "library": "Shows",
+                           "seasons": [{"id": season, "name": self.items[season]["Name"], "index": self.items[season]["index"],
+                                        "episodes": [{"id": ep, "name": self.items[ep]["Name"], "index": self.items[ep]["index"]}
+                                                     for ep in self.children[season]]}
+                                       for season in self.children[sid]],
+                           "cast": [{"name": p["Name"], "role": p["Role"] or ("" if p["Type"] == "Actor" else p["Type"])}
+                                    for p in self.items[sid]["people"]]},
+                "in_progress": {"id": current["Id"], "name": current["Name"], "season": s, "index": e},
+                "film": {"id": fid, "name": self.items[fid]["Name"], "library": "Movies", "cast": len(self.items[fid]["people"])},
+                "person": {"id": pid, "name": self.REAL_PERSON,
+                           "films": sum(1 for i in self.items.values() if i["kind"] == "movie"
+                                        and any(p.get("Id") == pid for p in i.get("people") or []))},
+                "collection": {"id": bid, "name": self.items[bid]["Name"], "count": len(self.children[bid])}
+                if bid in self.items else None}
+
     def big_series_fixture(self):
         """The big series for GET /__harness/fixture: its seasons in order, each with its episodes' ids and names; None
         when FAKESERVER_BIG_SERIES is off."""
@@ -763,10 +903,15 @@ class Library:
                 "collections": [{"id": b, "name": self.items[b]["Name"], "count": len(self.children[b]),
                                  "first": self.items[self.children[b][0]]["Name"]}
                                 for v in self.views if self.items[v].get("collection") == "boxsets" for b in self.children[v]],
-                "big": [{"name": self.items[v]["Name"], "count": len(self.children[v])} for v in self.views
+                # (Nixie 1.7.5, g3: its first and last titles by name, as a library sorted by name shows them)
+                "big": [{"name": self.items[v]["Name"], "count": len(self.children[v]),
+                         "first": self.items[self.children[v][0]]["Name"] if self.children[v] else None,
+                         "last": self.items[self.children[v][-1]]["Name"] if self.children[v] else None} for v in self.views
                         if self.items[v]["Name"] == "Archive"],
                 # season speed: the big series (FAKESERVER_BIG_SERIES), None when off
-                "big_series": self.big_series_fixture()}
+                "big_series": self.big_series_fixture(),
+                # Nixie 1.7.5 (the basics gate): the real-shaped titles (FAKESERVER_REAL_SHAPE), None when off
+                "real_shape": self.real_shape_fixture()}
 
     def episodes_of(self, series_id, season_id=None):
         out = []

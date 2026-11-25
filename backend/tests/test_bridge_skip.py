@@ -229,6 +229,66 @@ class Rules(SkipBridgeCase):
         self.assertFalse(rules[answer["result"]["ruleId"]].has_triggered,
                          "the new part ahead is skipped when reached")
 
+    def test_a_rule_over_the_servers_intro_stays_an_intro_mid_episode(self):
+        """1.7.5: a rule that took over the server's Intro became a
+        "Commercial" ("Skip extra") after an Add, Yes or Forget mid-episode
+        (the server's segment it replaced was gone from the list), and a
+        forgotten one left no intro until the next item."""
+        from jellyfin_mpv_shim import intro_sources
+        from jellyfin_mpv_shim.media import Intro
+
+        self.connect_server()
+        intro = self.store.add_rule(ACCOUNT + ":" + SERIES, "start", 9, 41,
+                                    "always")
+        pm = self.runtime.pm
+        video = episode_video("e" * 32)
+        server = Intro("Intro", 10.0, 40.0, "server")
+        video.intros = [server, Intro("Outro", 1330.0, 1400.0, "server")]
+        intro_sources.augment(video, Intro, self.store)
+        pm.play(video)
+        rule, = [s for s in video.intros if s.source == "rule"]
+        rule.has_triggered = True           # the player skipped it
+        pm._player.playback_time = 100.0
+
+        def kinds():
+            return sorted((s.type, s.source) for s in video.intros)
+
+        self.assertEqual(kinds(), [("Intro", "rule"), ("Outro", "server")])
+        # an Add mid-episode (an end rule over nothing)
+        added = self.send("add_skip_rule", {"anchor": "end", "startS": 200,
+                                            "endS": 150})
+        self.assertTrue(added["ok"], added)
+        pm.run_deferred()
+        self.assertEqual(kinds(), [("Commercial", "rule"), ("Intro", "rule"),
+                                   ("Outro", "server")])
+        data, = [d for n, d in self.tick() if n == "segments"]
+        self.assertEqual(sorted(s["type"] for s in data["segments"]),
+                         ["Commercial", "Intro", "Outro"])
+        # one over the credits takes the server's Outro, and keeps it
+        over = self.send("add_skip_rule", {"anchor": "end", "startS": 70,
+                                           "endS": 0})
+        pm.run_deferred()
+        self.assertEqual(kinds(), [("Commercial", "rule"), ("Intro", "rule"),
+                                   ("Outro", "rule")])
+        # forgetting the intro's rule brings the server's Intro back at once
+        self.assertEqual(self.send("forget_skip_rules", {"ruleId": intro})[
+            "result"], {"forgotten": 1})
+        pm.run_deferred()
+        self.assertEqual(kinds(), [("Commercial", "rule"), ("Intro", "server"),
+                                   ("Outro", "rule")])
+        self.assertIn(server, video.intros)
+        self.assertEqual((server.start, server.end), (10.0, 40.0))
+        self.assertTrue(server.has_triggered,
+                        "the rule had skipped that part in this episode")
+        # and the credits' rule forgotten: the server's Outro, not skipped
+        self.send("forget_skip_rules",
+                  {"ruleId": over["result"]["ruleId"]})
+        pm.run_deferred()
+        self.assertEqual(kinds(), [("Commercial", "rule"), ("Intro", "server"),
+                                   ("Outro", "server")])
+        outro, = [s for s in video.intros if s.type == "Outro"]
+        self.assertFalse(outro.has_triggered)
+
     def test_the_segments_event_of_an_item_with_no_rule_is_15s(self):
         """Golden (the 1.6 review's skip queue: it covered `segment_list`
         only): the whole ``segments`` event of an episode with no rule, as

@@ -14,6 +14,7 @@ namespace FluentFin.Tests.Mpv;
 /// does, whatever the exit code) is decided by what came first, the exit or a kill, or the stop; not by when the exit is
 /// handled. The races are made deterministic: an exit seen late, a watchdog kill held between its decision and its kill.
 /// </summary>
+[Collection(SavedSignInCollection.Name)] // 1.7.5: CloseSequence.RunAsync frees the device slot (static), as CloseSequenceDeviceSlotTests asserts
 public sealed class BackendExitTests
 {
 	private static readonly Guid Item = Guid.Parse("0123456789abcdef0123456789abcdef");

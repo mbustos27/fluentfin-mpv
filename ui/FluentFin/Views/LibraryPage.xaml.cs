@@ -32,6 +32,9 @@ public sealed partial class LibraryPage : Page
 	public LibraryPage()
 	{
 		InitializeComponent();
+		// Nixie 1.7.5: kept whole by the frame for Back to this very page (its grid as it was, at once); a new visit makes it anew
+		// (NavigationService.KeptWhole)
+		NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Enabled;
 
 		GridRepeater.ElementPrepared += (_, _) =>
 		{
@@ -48,13 +51,14 @@ public sealed partial class LibraryPage : Page
 		_host = new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters);
 		// Nixie 1.4.0 (item 15): the placeholders' cells against the grid's, in the log
 		LibraryProbe.Attach(this, SkeletonRepeater, GridRepeater, i => LibraryProbe.SlotOf(SkeletonRepeater, i, this), i => LibraryProbe.SlotOf(GridRepeater, i, this), logFirstCard: false);
-		ViewModel.PropertyChanged += (_, e) =>
+		// Nixie 1.7.4: only while the page is shown (Back hands a kept view model to a new page: WhileLoaded)
+		FluentFin.Services.WhileLoaded.Listen(this, ViewModel, (_, e) =>
 		{
 			if (e.PropertyName is nameof(LibraryViewModel.Density) or nameof(LibraryViewModel.Layout))
 			{
 				ShowView();
 			}
-		};
+		});
 		ShowView();
 	}
 

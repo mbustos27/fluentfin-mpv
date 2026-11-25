@@ -139,6 +139,11 @@ public sealed class ShortcutsTests
 			foreach (var chord in section.Entries.Where(e => e.Scope == ShortcutScope.Global).SelectMany(e => e.Chords))
 			{
 				Assert.NotNull(AppShortcuts.For(chord.Key, chord.Control, chord.Shift, chord.Alt, inTextInput: false));
+				if (chord.Key is AppShortcuts.Keys.BrowserBack or AppShortcuts.Keys.BrowserForward)
+				{
+					continue; // Nixie 1.7.5: these keys type nothing, so they step back and forward from a text box too (BackKeysInTextTests)
+				}
+
 				Assert.Null(AppShortcuts.For(chord.Key, chord.Control, chord.Shift, chord.Alt, inTextInput: true));
 			}
 		}

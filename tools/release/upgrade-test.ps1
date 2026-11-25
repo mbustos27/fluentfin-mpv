@@ -102,7 +102,7 @@ if (-not $OldMsi) {
     $published = 'Seaglass-1.1.3-win-x64.msi'
     $OldMsi = Join-Path $dist $published
     if (-not (Test-Path $OldMsi)) {
-        $base = 'https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.1.3'
+        $base = 'https://github.com/mbustos27/nixie/releases/download/v1.1.3' # 1.7.5: the repository's name since 2026-11-22
         $OldMsi = Join-Path $Out $published
         Invoke-WebRequest "$base/$published" -OutFile $OldMsi -UseBasicParsing
         $shaFile = Join-Path $Out "$published.sha256"

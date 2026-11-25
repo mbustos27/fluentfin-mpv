@@ -261,7 +261,25 @@ public static class DriveInRows
 		dress.Handler = null;
 		if (model is not null)
 		{
-			dress.Handler = (_, _) => card.DispatcherQueue.TryEnqueue(() => Apply(card, dress));
+			// Nixie 1.7.5 (review Major 3): the card weakly. The model lives in a view model Back keeps; a handler holding the card
+			// (and through it its page) kept every page left alive with it whenever the card was not unloaded first
+			var weak = new WeakReference<BaseItemDtoCard>(card);
+			PropertyChangedEventHandler? handler = null;
+			handler = (sender, _) =>
+			{
+				if (!weak.TryGetTarget(out var target) || target.GetValue(CardDressProperty) is not CardDress shown)
+				{
+					if (sender is INotifyPropertyChanged source && handler is not null)
+					{
+						source.PropertyChanged -= handler;
+					}
+
+					return;
+				}
+
+				target.DispatcherQueue.TryEnqueue(() => Apply(target, shown));
+			};
+			dress.Handler = handler;
 			model.PropertyChanged += dress.Handler;
 			if (model.UserData is { } data)
 			{

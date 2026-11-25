@@ -83,9 +83,10 @@ public static class SmartCollectionCatalog
 	/// mixes and countries as filters), in <see cref="Builders"/>' order; the franchises an admin's box set already is left
 	/// out. Says no census (a library's titles are not the whole index).
 	/// </summary>
+	/// <param name="whole">1.7.5: every title of each rule, without the display cap (<see cref="BuildContext.Whole"/>): a library's presets strip.</param>
 	public static IReadOnlyList<SmartCollection> BuildKinds(IndexSnapshot index, DateTimeOffset now, IReadOnlySet<SmartCollectionKind> kinds, IReadOnlySet<string>? boxedFranchises = null,
-		Outside.OutsideListsSnapshot? outside = null) =>
-		BuildAll([.. Builders.Where(x => kinds.Contains(x.Kind))], index, now, boxedFranchises, null, outside, Log);
+		Outside.OutsideListsSnapshot? outside = null, bool whole = false) =>
+		BuildAll([.. Builders.Where(x => kinds.Contains(x.Kind))], index, now, boxedFranchises, null, outside, Log, whole: whole);
 
 	/// <summary>
 	/// 1.7.3 (P0-3): one collection, of any kind, by its id ("director:avaabara", "franchise:2344", "pick:highly-rated"): made
@@ -105,8 +106,16 @@ public static class SmartCollectionCatalog
 			return null;
 		}
 
-		return BuildAll([.. Builders.Where(x => x.Kind == kind)], index, now, null, null, outside, log, whole: whole).FirstOrDefault(x => x.Id == collectionId);
+		return BuildAll([.. Builders.Where(x => x.Kind == kind)], index, now, null, null, outside, log, whole: whole, titles: CollapsedOf(index)).FirstOrDefault(x => x.Id == collectionId);
 	}
+
+	// 1.7.5 (fx1; M1's review of 1.7.3): an index's titles, copies collapsed, made once and kept while the index is. Find is asked
+	// once a pin (the Collections page's PinnedOnDemand), and collapsing 36,000 entries took about 170 ms each time
+	private static readonly ConditionalWeakTable<IndexSnapshot, Lazy<CanonicalTitles>> Collapsed = new();
+
+	private static CanonicalTitles CollapsedOf(IndexSnapshot index) =>
+		Collapsed.GetValue(index, x => new Lazy<CanonicalTitles>(() => BuildContext.Collapse(x.Entries))).Value;
+	// end 1.7.5
 
 	/// <summary>1.7.3: the kind a collection's id names ("director:x" a director's); null for one no builder makes (a saved filter's, a public list's).</summary>
 	public static SmartCollectionKind? KindOf(string collectionId)
@@ -143,10 +152,10 @@ public static class SmartCollectionCatalog
 	private static readonly ConditionalWeakTable<ILogger, ConcurrentDictionary<(string? Key, DateTimeOffset ReadAt, int Entries), byte>> Censused = new();
 
 	internal static IReadOnlyList<SmartCollection> BuildAll(IReadOnlyList<ISmartCollectionBuilder> builders, IndexSnapshot index, DateTimeOffset now, IReadOnlySet<string>? boxedFranchises,
-		IReadOnlySet<SmartCollectionKind>? kindsOff, Outside.OutsideListsSnapshot? outside, ILogger? log, bool census = false, bool whole = false)
+		IReadOnlySet<SmartCollectionKind>? kindsOff, Outside.OutsideListsSnapshot? outside, ILogger? log, bool census = false, bool whole = false, CanonicalTitles? titles = null)
 	{
 		var watch = Stopwatch.StartNew();
-		var context = new BuildContext(index, now, boxedFranchises ?? new HashSet<string>()) { Outside = outside ?? Outside.OutsideListsSnapshot.Shared, Whole = whole };
+		var context = new BuildContext(index, now, boxedFranchises ?? new HashSet<string>()) { Outside = outside ?? Outside.OutsideListsSnapshot.Shared, Whole = whole, Collapsed = titles };
 		var all = new List<SmartCollection>();
 		var said = new List<string>();
 		foreach (var builder in builders)

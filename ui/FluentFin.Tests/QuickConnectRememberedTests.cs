@@ -261,11 +261,14 @@ public sealed class QuickConnectRememberedTests : IDisposable
 	{
 		var (run, server) = await SignInWithQuickConnect(remember: true);
 		Assert.Single(server.Users);
-		var titleBar = TitleBar(run.Client, server);
+		var shell = new Mock<INavigationService>();
+		var titleBar = TitleBar(run.Client, server, shell: shell.Object);
 
 		await titleBar.Logout();
 
 		Assert.Empty(server.Users);
+		run.Client.Verify(x => x.Logout(), Times.Once); // Sign out ends the session on the server
+		shell.Verify(x => x.Release(), Times.Once);     // 1.7.5: and the old shell's frame is let go
 		var first = Requests().Count;
 		var again = Start();
 		await new StartSignIn(again.Setup.Object, again.Settings, again.Auth).Go().WaitAsync(TimeSpan.FromSeconds(30));
@@ -375,27 +378,136 @@ public sealed class QuickConnectRememberedTests : IDisposable
 	/// <summary>
 	/// 174-signin (the review's m4): a settings file that can't be written while the saved token is forgotten doesn't stop
 	/// Sign out halfway (no page change, the token alive on the server): the sign-out completes and says it in one line.
+	/// (1.7.5: Switch user forgets nothing of a saved Quick Connect sign-in, <see cref="SwitchUser_KeepsASavedQuickConnectSignIn_AndItsSession"/>.)
 	/// </summary>
-	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	public async Task SignOut_Completes_WhenTheSavedSignInCantBeForgotten(bool switchUser)
+	[Fact]
+	public async Task SignOut_Completes_WhenTheSavedSignInCantBeForgotten()
 	{
 		var (run, server) = await SignInWithQuickConnect(remember: true);
 		server.Users.CollectionChanged += (_, _) => throw new IOException("The disk is full.");
 		var setup = new Mock<INavigationService>();
 		var titleBar = TitleBar(run.Client, server, setup.Object);
 
-		await (switchUser ? titleBar.SwitchUser() : titleBar.Logout()).WaitAsync(TimeSpan.FromSeconds(10));
+		await titleBar.Logout().WaitAsync(TimeSpan.FromSeconds(10));
 
 		run.Client.Verify(x => x.Logout(), Times.Once); // the token ended on the server
 		Assert.False(titleBar.IsSigningOut);
 		Assert.Null(titleBar.User);
 		var opened = Assert.Single(setup.Invocations, i => i.Method.Name == "NavigateTo");
-		Assert.Equal(switchUser ? "FluentFin.ViewModels.LoginViewModel" : "FluentFin.Core.ViewModels.SelectServerViewModel", opened.Arguments[0]);
+		Assert.Equal("FluentFin.Core.ViewModels.SelectServerViewModel", opened.Arguments[0]);
 		var notice = Assert.IsType<SetupNotice>(opened.Arguments[1]);
 		Assert.Equal(TitleBarViewModel.ForgetFailedNotice, notice.Message);
-		Assert.Equal(switchUser ? server : null, notice.Server);
+		Assert.Null(notice.Server);
+	}
+
+	/// <summary>
+	/// 1.7.5 (the basics gate; decided as a basics bug): Switch user keeps a remembered Quick Connect sign-in, saved and alive
+	/// on the server (no Logout), so switching back needs no new code. 1.7.4 ended its session and forgot it. Only Sign out
+	/// forgets it (<see cref="SignOut_ForgetsASavedQuickConnectSignIn"/>).
+	/// </summary>
+	[Fact]
+	public async Task SwitchUser_KeepsASavedQuickConnectSignIn_AndItsSession()
+	{
+		var (run, server) = await SignInWithQuickConnect(remember: true);
+		var setup = new Mock<INavigationService>();
+		var shell = new Mock<INavigationService>();
+
+		await TitleBar(run.Client, server, setup.Object, shell.Object).SwitchUser().WaitAsync(TimeSpan.FromSeconds(10));
+
+		run.Client.Verify(x => x.Logout(), Times.Never); // its session stays on the server
+		// the review's Major: but this app stops using it: the websocket closes (no Play On, no cast reaching it) and the old
+		// shell's frame is let go (a cast that still came played in it, detached, with no page or controls)
+		run.Client.Verify(x => x.LeaveSession(), Times.Once);
+		shell.Verify(x => x.Release(), Times.Once);
+		var opened = Assert.Single(setup.Invocations, i => i.Method.Name == "NavigateTo");
+		Assert.Equal("FluentFin.ViewModels.LoginViewModel", opened.Arguments[0]);
+		Assert.Equal("", Assert.IsType<SetupNotice>(opened.Arguments[1]).Message); // nothing went wrong to say
+		// still saved, in the file too
+		var saved = Assert.Single(Assert.Single(Start().Settings.Servers).Users);
+		Assert.Equal("alice", saved.Username);
+		Assert.Equal(Token, saved.Token.Unprotect(run.LocalSettings.GetEntropyBytes()));
+	}
+
+	/// <summary>
+	/// 1.7.5: back on Switch user's page, the Quick Connect user picked from the list (the page puts in the name and the saved
+	/// password, an empty one) signs in with the saved token, as a start does: no code, no password sent (an empty one was
+	/// sent and refused, and Jellyfin disables an account after a few).
+	/// </summary>
+	[Fact]
+	public async Task SwitchingBack_ToASavedQuickConnectUser_SignsInWithItsToken_WithNoCode()
+	{
+		var (run, server, signIn) = await SwitchUserAndOpenTheSignInPage();
+		var shells = ShellCount(run);
+		var first = Requests().Count;
+
+		await signIn.Login();
+
+		Assert.False(signIn.HasError, signIn.ErrorMessage);
+		Assert.Equal(shells + 1, ShellCount(run));
+		var asked = Requests().Skip(first).ToList();
+		Assert.Contains(asked, r => r.Path == "/Users/Me" && r.Token == Token);
+		Assert.DoesNotContain(asked, r => r.Path.StartsWith("/Users/Authenticate", StringComparison.Ordinal) || r.Path.StartsWith("/QuickConnect", StringComparison.Ordinal));
+		run.Client.Verify(x => x.Initialize(_baseUrl, It.Is<AuthenticationResult>(a => a.AccessToken == Token && a.User!.Name == "alice")), Times.Exactly(2));
+		Assert.Equal(Token, Assert.Single(server.Users).Token.Unprotect(run.LocalSettings.GetEntropyBytes()));
+	}
+
+	/// <summary>1.7.5: a kept token the server refuses meanwhile (401) is forgotten when it is used, and the page says so.</summary>
+	[Fact]
+	public async Task SwitchingBack_WithATokenTheServerRefuses_ForgetsIt_AndSaysSo()
+	{
+		var (run, server, signIn) = await SwitchUserAndOpenTheSignInPage();
+		_revoked.Add(Token); // signed out on another device meanwhile
+		_refusal = 401;
+		var shells = ShellCount(run);
+		var first = Requests().Count;
+
+		await signIn.Login();
+
+		Assert.Equal(shells, ShellCount(run));
+		Assert.Equal("The saved sign-in to home no longer works. Sign in again.", signIn.ErrorMessage);
+		Assert.Empty(server.Users);
+		Assert.DoesNotContain(Requests().Skip(first), r => r.Path.StartsWith("/Users/Authenticate", StringComparison.Ordinal));
+	}
+
+	/// <summary>
+	/// 1.7.5 (the bug hunt, reproduced): after Switch user kept alice's Quick Connect session, Remove server on the server page
+	/// ends it on the server (/Sessions/Logout with her token) before forgetting it; forgotten first, nothing could end it.
+	/// </summary>
+	[Fact]
+	public async Task RemoveServer_AfterSwitchUserKeptASession_EndsItOnTheServer_ThenForgetsIt()
+	{
+		var (run, server) = await SignInWithQuickConnect(remember: true);
+		await TitleBar(run.Client, server).SwitchUser().WaitAsync(TimeSpan.FromSeconds(10));
+		Assert.Single(server.Users); // kept by Switch user
+		var settings = new Mock<ISettings>();
+		settings.SetupGet(x => x.Servers).Returns(run.Settings.Servers);
+		var list = new SelectServerViewModel(settings.Object, Mock.Of<INavigationService>(), TestHomeCache.Unused(), run.Auth) { Confirm = _ => Task.FromResult(true) };
+		var first = Requests().Count;
+
+		await list.RemoveServerCommand.ExecuteAsync(server);
+
+		Assert.Contains(Requests().Skip(first), r => r.Method == "POST" && r.Path == "/Sessions/Logout" && r.Token == Token);
+		Assert.DoesNotContain(server, run.Settings.Servers);
+	}
+
+	private static int ShellCount(Run run) =>
+		run.Setup.Invocations.Count(i => i.Method.Name == "NavigateTo" && Equals(i.Arguments[0], "FluentFin.ViewModels.ShellViewModel"));
+
+	/// <summary>Alice by Quick Connect with Remember me, Switch user, and the sign-in page it opens with her picked from the list.</summary>
+	private async Task<(Run Run, SavedServer Server, LoginViewModel SignIn)> SwitchUserAndOpenTheSignInPage()
+	{
+		var (run, server) = await SignInWithQuickConnect(remember: true);
+		var setup = new Mock<INavigationService>();
+		await TitleBar(run.Client, server, setup.Object).SwitchUser().WaitAsync(TimeSpan.FromSeconds(10));
+		var page = Assert.Single(setup.Invocations, i => i.Method.Name == "NavigateTo").Arguments[1]!;
+		var signIn = new LoginViewModel(run.Auth, run.Setup.Object, run.LocalSettings);
+		await signIn.OnNavigatedTo(page);
+		// picked from the list: the page puts in her name and her saved password (LoginPage.AutoSuggestBox_SuggestionChosen)
+		var saved = Assert.Single(server.Users);
+		signIn.Username = saved.Username;
+		signIn.Password = signIn.Unprotect(saved.Password);
+		Assert.Equal("", signIn.Password);
+		return (run, server, signIn);
 	}
 
 	[Fact]
@@ -406,13 +518,13 @@ public sealed class QuickConnectRememberedTests : IDisposable
 		Assert.Equal("", vm.Unprotect([])); // it threw: an empty array is no DPAPI blob
 	}
 
-	private static TitleBarViewModel TitleBar(Mock<IJellyfinClient> client, SavedServer server, INavigationService? setup = null)
+	private static TitleBarViewModel TitleBar(Mock<IJellyfinClient> client, SavedServer server, INavigationService? setup = null, INavigationService? shell = null)
 	{
 		var backend = new Mock<IMpvBackend>();
 		backend.Setup(x => x.Events).Returns(Observable.Never<BridgeEvent>());
 		backend.Setup(x => x.PlaybackInterrupted).Returns(Observable.Never<MpvInterruptedPlayback>());
 		var playback = new MpvPlaybackService(backend.Object, client.Object, NullLogger<MpvPlaybackService>.Instance);
-		return new TitleBarViewModel(Mock.Of<INavigationService>(), setup ?? Mock.Of<INavigationService>(), Mock.Of<INavigationViewService>(), client.Object, playback)
+		return new TitleBarViewModel(shell ?? Mock.Of<INavigationService>(), setup ?? Mock.Of<INavigationService>(), Mock.Of<INavigationViewService>(), client.Object, playback)
 		{
 			LibmpvUnavailable = () => null,
 			User = new UserDto { Name = "alice" },

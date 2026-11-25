@@ -159,6 +159,37 @@ public sealed class SmartCollectionStore
 		}
 	}
 
+	// 1.7.5 (fx1; M2's review of 1.7.3)
+	/// <summary>
+	/// The pins whose id <paramref name="gone"/> names, and the saved filters whose preset's id it names, taken out in one call
+	/// under the store's lock, the file written once; how many went (a saved filter's own pin goes with it, uncounted, as
+	/// <see cref="RemoveSaved"/> does). A second call at the same time finds them gone and says 0: Home's start-up call and the
+	/// Collections page's could run together on a first visit, each counted the same pins, and the file was written once a pin.
+	/// </summary>
+	public async Task<int> RemoveWhere(Func<string?, bool> gone)
+	{
+		await _lock.WaitAsync().ConfigureAwait(false);
+		try
+		{
+			var state = await Load().ConfigureAwait(false);
+			var pins = state.Favorites.RemoveWhere(x => gone(x));
+			var filters = state.Filters.Where(x => gone(x.Filter?.PresetId)).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+			state.Filters.RemoveAll(x => filters.Contains(x.Id));
+			state.Favorites.ExceptWith(filters);
+			if (pins + filters.Count > 0)
+			{
+				await Save(state).ConfigureAwait(false);
+			}
+
+			return pins + filters.Count;
+		}
+		finally
+		{
+			_lock.Release();
+		}
+	}
+	// end 1.7.5
+
 	/// <summary>The Nixie collections pinned with Favourite (their ids).</summary>
 	public async Task<IReadOnlySet<string>> FavoritesAsync()
 	{

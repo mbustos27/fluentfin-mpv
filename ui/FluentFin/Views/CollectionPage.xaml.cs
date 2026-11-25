@@ -20,8 +20,19 @@ public sealed partial class CollectionPage : Page
 
 	private bool _focusedOnArrival;
 
-	// the card the user left the page from, per collection: Back (or Forward) puts the keyboard on it again, as the library does
-	private static readonly Dictionary<Guid, Guid> LeftFrom = [];
+	// the card the user left the page from, per collection: Back (or Forward) puts the keyboard on it again, as the library does.
+	// Nixie 1.7.4: keyed by KeyOf, so a Made by Nixie collection (no server id) gets its card back too (it gave Play the keyboard)
+	private static readonly Dictionary<string, (Guid Item, double Offset)> LeftFrom = [];
+	private double? _returnOffset;
+
+	/// <summary>Nixie 1.7.4: a collection's key for <see cref="LeftFrom"/>: a server's set or playlist by its id, a Nixie collection by its own.</summary>
+	internal static string? KeyOf(object? collection) => collection switch
+	{
+		BaseItemDto { Id: { } id } => id.ToString(),
+		Guid id => id.ToString(),
+		NixieCollection nixie => "nixie:" + nixie.Collection.Id,
+		_ => null,
+	};
 	private Guid? _returnTo;
 	private Guid? _lastEntry;
 
@@ -102,7 +113,7 @@ public sealed partial class CollectionPage : Page
 		};
 
 		// Nixie 1.4.0 (bug hunt M2): Back, Forward and R keep the page's Order and Hide watched (CollectionPlaces)
-		ViewModel.KeepsPlace = () => ArrivalFocus.KindOf(this) switch
+		ViewModel.KeepsPlace = _keepsPlace = () => ArrivalFocus.KindOf(this) switch
 		{
 			ArrivalKind.Returned or ArrivalKind.ThemeSwitched => true,
 			ArrivalKind.Refreshed => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastRefreshKeepsPlace: true },
@@ -110,11 +121,16 @@ public sealed partial class CollectionPage : Page
 		};
 	}
 
+	// Nixie 1.7.4: the page's own question, let go when the page is left (the view model, kept for Back, would hold the page and its
+	// pictures through it); the next page asks its own
+	private readonly Func<bool> _keepsPlace;
+
 	protected override void OnNavigatedTo(NavigationEventArgs e)
 	{
 		_focusedOnArrival = false;
-		var set = e.Parameter is BaseItemDto { Id: { } given } ? given : e.Parameter as Guid?;
-		_returnTo = e.NavigationMode is NavigationMode.Back or NavigationMode.Forward && set is { } key && LeftFrom.TryGetValue(key, out var item) ? item : null;
+		var left = e.NavigationMode is NavigationMode.Back or NavigationMode.Forward && KeyOf(e.Parameter) is { } key && LeftFrom.TryGetValue(key, out var place) ? place : ((Guid Item, double Offset)?)null;
+		_returnTo = left?.Item;
+		_returnOffset = left?.Offset;
 		// Nixie 1.4.0 (bug hunt m8): the page follows its view model while it is shown, and lets go when it is left (it was held
 		// from the constructor on: a page left behind would still focus cards)
 		ViewModel.State.PropertyChanged -= OnStateChanged;
@@ -133,9 +149,14 @@ public sealed partial class CollectionPage : Page
 	{
 		ViewModel.State.PropertyChanged -= OnStateChanged;
 		ViewModel.PropertyChanged -= OnViewModelChanged;
-		if (ViewModel.Collection?.Id is { } set && _lastEntry is { } item)
+		if (KeyOf((object?)ViewModel.Nixie ?? ViewModel.Collection) is { } set && _lastEntry is { } item)
 		{
-			LeftFrom[set] = item;
+			LeftFrom[set] = (item, _leftOffset);
+		}
+
+		if (ReferenceEquals(ViewModel.KeepsPlace, _keepsPlace))
+		{
+			ViewModel.KeepsPlace = null;
 		}
 
 		base.OnNavigatedFrom(e);
@@ -333,7 +354,7 @@ public sealed partial class CollectionPage : Page
 		var back = _returnTo is { } id ? IndexOf(id) : -1;
 		if (back >= 0)
 		{
-			ArrivalFocus.TryTake(this, "the card Back returns to", () => FocusCard(back));
+			ArrivalFocus.TryTake(this, "the card Back returns to", () => FocusReturned(back));
 		}
 		else if (PlayButton.IsLoaded && PlayButton.IsEnabled)
 		{
@@ -459,6 +480,83 @@ public sealed partial class CollectionPage : Page
 		if (sender is Button { Tag: LetterJump jump })
 		{
 			ViewModel.JumpTo(jump);
+		}
+	}
+
+	// Nixie 1.7.4: how far down the page was when it was left (OnNavigatingFrom: by OnNavigatedFrom it is unloaded)
+	private double _leftOffset;
+
+	protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
+	{
+		_leftOffset = PageScroller.VerticalOffset;
+		base.OnNavigatingFrom(e);
+	}
+
+	/// <summary>
+	/// Nixie 1.7.4: Back's card: the page as far down as it was left, then the card it was left from takes the keyboard where it is
+	/// (Back showed the collection as it was: the card is in view there); one not in view is brought in as before.
+	/// </summary>
+	private bool FocusReturned(int index)
+	{
+		if (_returnOffset is { } offset && CanFocusCard(index, ViewModel.Entries.Count, GridRepeater.ItemsSourceView?.Count ?? -1, IsLoaded && GridRepeater.IsLoaded))
+		{
+			UpdateLayout();
+			_placeScroll = PageScroller.ScrollTo(0, offset, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled));
+			HoldPlace();
+			UpdateLayout();
+			if (GridRepeater.TryGetElement(index) is { } element && CardOf(element) is { } card && card.Focus(FocusState.Keyboard))
+			{
+				ViewModel.FocusRequest = -1;
+				return true;
+			}
+		}
+
+		return FocusCard(index);
+	}
+
+	/// <summary>How long at most Back's place holds back a bring-into-view while its scroll lands (<see cref="HoldPlace"/>).</summary>
+	public const long HoldMs = 1500;
+
+	// Nixie 1.7.5: Back's scroll (its correlation id) and until when its place is held
+	private int _placeScroll = -1;
+	private long _holdUntil;
+	private long _holdArrived;
+
+	/// <summary>
+	/// Nixie 1.7.5: whether a bring-into-view the page asks for while Back's scroll lands is let go: the card's focus asks for one
+	/// from where the page is before the scroll has landed (its top), and it won over the scroll: the card at the view's foot,
+	/// 61 px higher than it was left in Classic, 58 in Cinematic (the gate). Back's place shows the card already. Never once the
+	/// user has moved (theirs is theirs), the scroll has landed, or <see cref="HoldMs"/> has passed.
+	/// </summary>
+	public static bool HoldsBringIntoView(bool landed, bool userMoved, long now, long until) => !landed && !userMoved && now <= until;
+
+	private void HoldPlace()
+	{
+		_holdUntil = Environment.TickCount64 + HoldMs;
+		_holdArrived = ArrivalFocus.ArrivedAt;
+		PageScroller.BringingIntoView -= OnBringingIntoView;
+		PageScroller.BringingIntoView += OnBringingIntoView;
+		PageScroller.ScrollCompleted -= OnPlaceLanded;
+		PageScroller.ScrollCompleted += OnPlaceLanded;
+	}
+
+	private void OnBringingIntoView(ScrollView sender, ScrollingBringingIntoViewEventArgs args)
+	{
+		if (HoldsBringIntoView(_placeScroll < 0, ArrivalFocus.UserActedAt > _holdArrived + ArrivalFocus.GraceMs, Environment.TickCount64, _holdUntil))
+		{
+			args.Cancel = true;
+			return;
+		}
+
+		sender.BringingIntoView -= OnBringingIntoView;
+	}
+
+	private void OnPlaceLanded(ScrollView sender, ScrollingScrollCompletedEventArgs args)
+	{
+		if (args.CorrelationId == _placeScroll)
+		{
+			_placeScroll = -1;
+			sender.ScrollCompleted -= OnPlaceLanded;
 		}
 	}
 

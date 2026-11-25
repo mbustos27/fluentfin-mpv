@@ -804,6 +804,55 @@ class StoreFile(Base):
             self.assertIsNone(after.note_candidate(self.key, "e5", "start",
                                                    2.0, 41.0))
 
+    def test_a_newer_backends_marks_survive_this_ones_save(self):
+        """1.7.5 (BH-151-m4): a 1.5.0 backend saving the learned intros
+        dropped 1.5.1's "moves" marks. This backend is the older one next
+        time (a portable copy beside a newer one, or a downgrade): what it
+        doesn't know, in the file, a show, a season's record or an intro,
+        is written back as it was read, and a show holding only that is
+        kept. A newer format number stays."""
+        other = ACCOUNT + ":" + "cd" * 16
+        newer = {
+            "version": 3, "shiftedMarks": {"a": [1, 2]},
+            "shows": {
+                self.key: {
+                    "name": "Shadows", "rules": [], "refused": False,
+                    "intros": {"1": {"start": 60.0, "end": 150.0,
+                                     "undone": 0, "learned": 1,
+                                     "moves": False, "drift": 4.5}},
+                    "seasons": {"1": {"skips": [[60.0, 150.0]],
+                                      "moves": False,
+                                      "movesBy": "cold-open"}},
+                    "chapterMarks": {"1": [12.0, 70.0]}},
+                other: {"name": "Only new", "chapterMarks": {"2": [5.0]}}}}
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, sr.RULES_FILE)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(newer, f)
+            store = sr.SkipStore(path)
+            self.assertEqual(store.intro(self.key, 1), (60.0, 150.0))
+            # a change of this backend's own: a rule added, a skip noted
+            store.add_rule(self.key, "start", 0, 40)
+            store.note_hand_skip(self.key, 1, 61.0, 151.0)
+            with open(path, encoding="utf-8") as f:
+                saved = json.load(f)
+            # listed nowhere here (nothing of this backend's in it)
+            listed = [s["seriesId"] for s in sr.listing(
+                sr.SkipStore(path), ACCOUNT)["shows"]]
+        self.assertEqual(listed, [SERIES])
+        self.assertEqual(saved["version"], 3)
+        self.assertEqual(saved["shiftedMarks"], {"a": [1, 2]})
+        show = saved["shows"][self.key]
+        self.assertEqual(show["chapterMarks"], {"1": [12.0, 70.0]})
+        self.assertEqual(show["seasons"]["1"]["movesBy"], "cold-open")
+        self.assertEqual(show["seasons"]["1"]["skips"],
+                         [[60.0, 150.0], [61.0, 151.0]], "its own change")
+        self.assertEqual(show["intros"]["1"]["drift"], 4.5)
+        self.assertEqual(len(show["rules"]), 1)
+        self.assertEqual(saved["shows"][other],
+                         dict(sr._empty_show("Only new"),
+                              chapterMarks={"2": [5.0]}))
+
     def test_a_rule_too_long_or_empty_is_refused(self):
         for anchor, start, end in (("start", 40, 10), ("start", 0, 700),
                                    ("end", 0, 30), ("middle", 0, 5)):

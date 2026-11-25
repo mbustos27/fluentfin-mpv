@@ -41,6 +41,21 @@ public sealed class TrendingSources
 	private int _version = 1;
 	private volatile bool _appTokenRefused;
 
+	// 1.7.5 (fx1; BH-170-q3): each source's generation, which Forget moves on: a list asked before a switch-off is never written
+	// to the cache or held after it (it was, when the switch went off between the IsActive check and the write, and showed
+	// again at once if the source was turned back on). _writing keeps a list's write and Forget's clear one at a time
+	private readonly Dictionary<OutsideSourceId, int> _generations = [];
+	private readonly Lock _writing = new();
+
+	private int GenerationOf(OutsideSourceId id)
+	{
+		lock (_lock)
+		{
+			return _generations.GetValueOrDefault(id);
+		}
+	}
+	// end 1.7.5
+
 	/// <param name="tmdbAppToken">Nixie's own TMDb token, built into a release (<see cref="TmdbAppToken"/>); the user's own wins.</param>
 	public TrendingSources(OutsideHub hub, TmdbToken? token, string? traktClientId, Func<DateTimeOffset>? clock = null, string? tmdbAppToken = null)
 	{
@@ -154,8 +169,10 @@ public sealed class TrendingSources
 	// the list in memory while it is younger than its source's maximum age, else the cache's (read into memory)
 	private TrendingListRead? Held(Spec spec, OutsideSourceInfo info)
 	{
+		int generation;
 		lock (_lock)
 		{
+			generation = _generations.GetValueOrDefault(spec.Source); // 1.7.5 (BH-170-q3)
 			if (_held.TryGetValue(spec.Key, out var held))
 			{
 				if (_clock() - held.FetchedAt <= info.MaxAge)
@@ -178,6 +195,11 @@ public sealed class TrendingSources
 			var read = new TrendingListRead(spec.Source, spec.List, spec.Kind, entry.FetchedAt, titles);
 			lock (_lock)
 			{
+				if (_generations.GetValueOrDefault(spec.Source) != generation)
+				{
+					return null; // 1.7.5 (BH-170-q3): forgotten while the cache was read
+				}
+
 				_held[spec.Key] = read;
 			}
 
@@ -233,25 +255,10 @@ public sealed class TrendingSources
 					continue;
 				}
 
+				var generation = GenerationOf(id); // 1.7.5 (BH-170-q3): before the list's first request
 				var (titles, stop) = spec.Trakt is { } endpoint ? await ReadTrakt(endpoint, cancellation).ConfigureAwait(false) : await ReadTmdb(spec.Kind, cancellation).ConfigureAwait(false);
-				if (titles is not null && IsActive(id))
+				if (titles is not null && Keep(spec, info, titles, generation))
 				{
-					var now = _clock();
-					try
-					{
-						_hub.Cache.Write(info, spec.CacheName, JsonSerializer.SerializeToUtf8Bytes(titles, Json), now);
-					}
-					catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-					{
-						// kept in memory for this run; the next start asks again
-					}
-
-					lock (_lock)
-					{
-						_held[spec.Key] = new TrendingListRead(spec.Source, spec.List, spec.Kind, now, titles);
-						_problems.Remove(id);
-					}
-
 					changed = true;
 				}
 
@@ -265,6 +272,37 @@ public sealed class TrendingSources
 		if (changed)
 		{
 			Bump();
+		}
+	}
+
+	// 1.7.5 (fx1; BH-170-q3): a list that came in, written to the cache and held, unless its source was turned off (or forgotten)
+	// since its first request; then nothing of it stays
+	private bool Keep(Spec spec, OutsideSourceInfo info, List<ListedTitle> titles, int generation)
+	{
+		lock (_writing)
+		{
+			if (!IsActive(spec.Source) || GenerationOf(spec.Source) != generation)
+			{
+				return false;
+			}
+
+			var now = _clock();
+			try
+			{
+				_hub.Cache.Write(info, spec.CacheName, JsonSerializer.SerializeToUtf8Bytes(titles, Json), now);
+			}
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+			{
+				// kept in memory for this run; the next start asks again
+			}
+
+			lock (_lock)
+			{
+				_held[spec.Key] = new TrendingListRead(spec.Source, spec.List, spec.Kind, now, titles);
+				_problems.Remove(spec.Source);
+			}
+
+			return true;
 		}
 	}
 
@@ -434,25 +472,34 @@ public sealed class TrendingSources
 	/// <summary>A source turned off: its lists go, from memory and from the cache, and its last problem with them.</summary>
 	public void Forget(OutsideSourceId id)
 	{
-		lock (_lock)
+		lock (_writing) // 1.7.5 (BH-170-q3): a list being written finishes first, and is cleared with the rest
 		{
-			foreach (var key in _held.Keys.Where(k => k.StartsWith(id + "/", StringComparison.Ordinal)).ToList())
+			// the 1.7.5 review: the cache is cleared under the lock that moves the generation on. Cleared after it, a list read
+			// from the cache meanwhile (Held, which takes no _writing) saw the new generation, read the old file and kept it
+			lock (_lock)
 			{
-				_held.Remove(key);
+				_generations[id] = _generations.GetValueOrDefault(id) + 1; // a list asked before now is never kept
+				foreach (var key in _held.Keys.Where(k => k.StartsWith(id + "/", StringComparison.Ordinal)).ToList())
+				{
+					_held.Remove(key);
+				}
+
+				_problems.Remove(id);
+				Forgetting?.Invoke(id);
+				try
+				{
+					_hub.Cache.Clear(id);
+				}
+				catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+				{
+					// the files age out on their own (the cache's purge at the next start)
+				}
 			}
-
-			_problems.Remove(id);
-		}
-
-		try
-		{
-			_hub.Cache.Clear(id);
-		}
-		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-		{
-			// the files age out on their own (the cache's purge at the next start)
 		}
 	}
+
+	/// <summary>Tests: told when Forget has moved a source's generation on, before its cache is cleared.</summary>
+	internal Action<OutsideSourceId>? Forgetting { get; set; }
 
 	private void Bump()
 	{

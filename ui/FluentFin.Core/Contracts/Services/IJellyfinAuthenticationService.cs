@@ -29,6 +29,14 @@ public interface IJellyfinAuthenticationService
 	/// </summary>
 	bool SavedSignInRefused { get; }
 
+	/// <summary>
+	/// 1.7.5 (the bug hunt): the sessions Nixie keeps on <paramref name="server"/> for these saved sign-ins (a Quick Connect
+	/// token, kept alive by Switch user) are ended there (/Sessions/Logout with each token), before a Remove forgets them:
+	/// once forgotten, nothing could end them. Bounded; one that can't be ended (the server away) is logged, and the removal
+	/// goes on.
+	/// </summary>
+	Task EndKeptSessions(SavedServer server, IEnumerable<SavedUser> users);
+
 	/// <summary>174-signin: <paramref name="remember"/> keeps the sign-in for the next start, as a password one's does ("Remember me").</summary>
 	Task<bool> Authenticate(SavedServer server, QuickConnectResult result, bool remember);
 	Task<QuickConnectResult?> GetQuickConnectCode(SavedServer server);

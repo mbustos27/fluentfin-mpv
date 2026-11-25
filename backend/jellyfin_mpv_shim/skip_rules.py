@@ -315,8 +315,29 @@ def _marks_of_entry(entry):
             else _skips(entry)[-MOVES_KEEP:], "moves": moves}
 
 
+#: 1.7.5 (BH-151-m4): the keys of a show entry this backend knows. Any other
+#: is a newer backend's (a portable copy beside an older one, or a
+#: downgrade): kept as it was read and written back, never dropped, as a
+#: 1.5.0 backend dropped 1.5.1's "moves" marks.
+_SHOW_KEYS = frozenset(("name", "rules", "intros", "seasons", "candidates",
+                        "refused", "episodes", "last_item"))
+#: 1.7.5 (BH-151-m4): the same for a season's record, and the file's own.
+_SEASON_KEYS = frozenset(("skips", "moves"))
+_FILE_KEYS = frozenset(("version", "shows", "legacyMigrated"))
+#: The file's format as this backend writes it (a newer one's is kept).
+FILE_VERSION = 2
+
+
+def _unknown(entry, known):
+    """``entry``'s keys this backend doesn't know, as read (1.7.5)."""
+    return {k: v for k, v in entry.items()
+            if isinstance(k, str) and k not in known}
+
+
 def _clean_show(show):
-    """A show entry read from disk, with anything unusable left out."""
+    """A show entry read from disk, with anything unusable left out. 1.7.5
+    (BH-151-m4): keys this backend doesn't know (a newer one's marks) are
+    kept as they were (`_SHOW_KEYS`, `_SEASON_KEYS`)."""
     if not isinstance(show, dict):
         return None
     out = {
@@ -340,13 +361,16 @@ def _clean_show(show):
     seasons = show.get("seasons") if isinstance(show.get("seasons"),
                                                 dict) else {}
     out["seasons"] = {
-        k: {"skips": _kept(v.get("skips")), "moves": v.get("moves") is True}
+        k: dict(_unknown(v, _SEASON_KEYS), skips=_kept(v.get("skips")),
+                moves=v.get("moves") is True)
         for k, v in seasons.items()
         if isinstance(k, str) and isinstance(v, dict)}
     for season, entry in out["intros"].items():
         if season not in out["seasons"]:
             out["seasons"][season] = _marks_of_entry(entry)
         _mirror(out, season)
+    for k, v in _unknown(show, _SHOW_KEYS).items():
+        out[k] = v
     return out
 
 
@@ -371,6 +395,12 @@ def _has_content(show):
                 or show["candidates"] or show["refused"])
 
 
+def _kept_on_save(show):
+    """1.7.5 (BH-151-m4): what `SkipStore._save` writes: a show with content,
+    or with a newer backend's marks only (listed nowhere here, but kept)."""
+    return _has_content(show) or any(_unknown(show, _SHOW_KEYS).values())
+
+
 class SkipStore:
     """`RULES_FILE`: re-read when it changes on disk, written whole and
     atomically. With no path it only lives in memory (tests, and a backend
@@ -386,6 +416,10 @@ class SkipStore:
         self._legacy_done = False
         #: 1.6.1: the file was read once in this process (`_load`)
         self._read_once = False
+        #: 1.7.5 (BH-151-m4): the file's keys this backend doesn't know (a
+        #: newer one's), and its format if newer: written back as read
+        self._other = {}
+        self._version = FILE_VERSION
 
     # -- disk --------------------------------------------------------------
 
@@ -399,6 +433,7 @@ class SkipStore:
                 # deleted underneath us: nothing is kept
                 self._shows = {}
                 self._legacy_done = False
+                self._other, self._version = {}, FILE_VERSION
             self._stamp = None
             return
         if stamp == self._stamp:
@@ -415,6 +450,12 @@ class SkipStore:
                 if show is not None:
                     self._shows[key] = show
             self._legacy_done = data.get("legacyMigrated") is True
+            self._other = _unknown(data, _FILE_KEYS)
+            version = data.get("version")
+            newer = (isinstance(version, int)
+                     and not isinstance(version, bool)
+                     and version > FILE_VERSION)
+            self._version = version if newer else FILE_VERSION
             if not self._read_once:
                 self._read_once = True
                 self._release_asked()
@@ -423,6 +464,7 @@ class SkipStore:
                         "kept beside it)", RULES_FILE, exc_info=True)
             self._shows = {}
             self._legacy_done = False
+            self._other, self._version = {}, FILE_VERSION
             try:
                 os.replace(self.path, self.path + ".corrupt")
             except OSError:
@@ -448,8 +490,12 @@ class SkipStore:
         try:
             from . import durable
 
-            shows = {k: v for k, v in self._shows.items() if _has_content(v)}
-            data = {"version": 2, "shows": shows}
+            shows = {k: v for k, v in self._shows.items()
+                     if _kept_on_save(v)}
+            # 1.7.5 (BH-151-m4): what a newer backend wrote that this one
+            # doesn't know goes back as it was read
+            data = dict(self._other)
+            data.update({"version": self._version, "shows": shows})
             if self._legacy_done:
                 data["legacyMigrated"] = True
             durable.replace_file(
@@ -997,9 +1043,12 @@ def add_rules(video, make_segment, key, store_):
     and its place (never two pills for one part); any other is a
     ``Commercial`` ("Skip extra"). An "ask" rule is offered from
     `START_TOLERANCE` before its start (a bumper is not the same length
-    twice); an "always" one skips exactly its span."""
+    twice); an "always" one skips exactly its span. 1.7.5: the segment a
+    rule takes over is kept on the rule's (``replaced``), so a refresh puts
+    it back first (`taken_over`)."""
     for rule, start, end, action in rule_parts(video, key, store_):
         kind = "Commercial"
+        replaced = None
         for other in list(video.intros):
             if other.type not in ("Intro", "Outro"):
                 continue
@@ -1007,6 +1056,7 @@ def add_rules(video, make_segment, key, store_):
             if _overlap(start, end, other.start, other.end) >= 0.5 * span:
                 kind = other.type
                 video.intros.remove(other)
+                replaced = other
                 break
         offered = start
         if action == "ask" and rule["anchor"] == "start":
@@ -1020,7 +1070,37 @@ def add_rules(video, make_segment, key, store_):
         segment.rule_end = end
         segment.corrected = bool(rule.get("corrected"))
         segment.snap_pending = True
+        segment.replaced = replaced
         video.intros.append(segment)
+
+
+def taken_over(segments):
+    """1.7.5: the segments the rules' segments among ``segments`` took over
+    (`add_rules`: the server's or the chapters' Intro or Outro), each as it
+    was, through a rule that took another rule's place. `bridge_skip.
+    refresh_rules` puts them back before the rules are added again: a rule
+    kept takes its Intro or Outro over again (it became a "Commercial" after
+    an Add, Yes or Forget mid-episode), and a forgotten rule's comes back at
+    once. One the rule's part had already skipped or offered in this episode
+    (``has_triggered``) stays so: it is the same part."""
+    out = []
+    for segment in segments:
+        if getattr(segment, "source", None) != SOURCE_RULE:
+            continue
+        triggered = bool(getattr(segment, "has_triggered", False))
+        other, seen = getattr(segment, "replaced", None), 0
+        while (other is not None and seen < 32
+               and getattr(other, "source", None) == SOURCE_RULE):
+            triggered = triggered or bool(getattr(other, "has_triggered",
+                                                  False))
+            other, seen = getattr(other, "replaced", None), seen + 1
+        if (other is None or getattr(other, "source", None) == SOURCE_RULE
+                or any(other is o for o in out)):
+            continue
+        if triggered:
+            other.has_triggered = True
+        out.append(other)
+    return out
 
 
 def carry_rule_state(before, segment, position):

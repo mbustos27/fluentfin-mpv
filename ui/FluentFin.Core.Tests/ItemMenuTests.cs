@@ -173,7 +173,7 @@ public sealed class ItemMenuTests
 
 		Assert.Equal(["Play", "Mark as watched", "Add to favorites", "Reset watch progress", "Media info", "Edit metadata…", "Edit images…",
 			"Edit segments", "Edit subtitles…", "Identify…", "Refresh metadata…", "Delete movie…"], texts);
-		Assert.Contains("Remove from Continue Watching", ItemMenu.For(item, Admin, true, true, inContinueWatching: true).SelectMany(x => x).Select(x => x.Text));
+		Assert.Contains("Remove from Continue watching", ItemMenu.For(item, Admin, true, true, inContinueWatching: true).SelectMany(x => x).Select(x => x.Text));
 
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Converters/JellyfinFlyoutConverter.cs"));
 		Assert.Contains("ItemMenuCommand.Identify => new SymbolIcon { Symbol = Symbol.Find }", code);

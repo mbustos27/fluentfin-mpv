@@ -45,6 +45,9 @@ public sealed partial class EditorialHomePage : Page
 	public EditorialHomePage()
 	{
 		InitializeComponent();
+		// Nixie 1.7.5: kept whole by the frame for Back (its rows, its scroll, the card left from, at once); a new visit makes it anew
+		// (NavigationService.KeptWhole)
+		NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Enabled;
 		// Nixie 1.7.4 (the rows stream): the genre tabs are fitted to the strip's width whenever it changes (a window made
 		// narrower, or genres that came before the strip had a width, left every tab there, the last ones cut off at the
 		// strip's edge where the keyboard still went)
@@ -554,6 +557,9 @@ public sealed partial class EditorialHomePage : Page
 		return false;
 	}
 
+	// Nixie 1.7.5: Back's restore, held while it waits for the rows
+	private Microsoft.UI.Dispatching.DispatcherQueueTimer? _restoreTimer;
+
 	private void RestorePlace()
 	{
 		if (_restore is not { } place)
@@ -563,7 +569,9 @@ public sealed partial class EditorialHomePage : Page
 
 		_restore = null;
 		var started = System.Diagnostics.Stopwatch.GetTimestamp();
-		var timer = DispatcherQueue.CreateTimer();
+		// Nixie 1.7.5: held by the page while it waits (a timer only a local holds can be collected before it ticks)
+		_restoreTimer?.Stop();
+		var timer = _restoreTimer = DispatcherQueue.CreateTimer();
 		timer.Interval = TimeSpan.FromMilliseconds(50);
 		timer.Tick += (t, _) =>
 		{
@@ -578,12 +586,13 @@ public sealed partial class EditorialHomePage : Page
 				return;
 			}
 
-			if (PageScroller.ScrollableHeight < place.Offset - 1 && ViewModel.IsLoading && System.Diagnostics.Stopwatch.GetElapsedTime(started) < TimeSpan.FromSeconds(4))
+			if (HomePlace.Waits(PageScroller.ScrollableHeight, place.Offset, ViewModel.IsLoading, System.Diagnostics.Stopwatch.GetElapsedTime(started))) // Nixie 1.7.4: laid out too
 			{
 				return;
 			}
 
 			t.Stop();
+			FluentFin.Services.NavigationService.PlaceStep(this, PageScroller.ScrollableHeight >= place.Offset - 1 ? "rows tall enough" : "rows short"); // 1.7.5
 			PageScroller.ChangeView(null, Math.Min(place.Offset, PageScroller.ScrollableHeight), null, disableAnimation: true);
 			PageScroller.UpdateLayout();
 			// Nixie 1.4.0 (review of wip/140-fix2): Back's card takes the keyboard by the app's one arrival rule (not once the user
@@ -593,6 +602,8 @@ public sealed partial class EditorialHomePage : Page
 				ShelfRow.Shown.FirstOrDefault(r => r.Header == header && IsMine(r))?
 					.FocusItem(x => x is BaseItemViewModel vm && vm.Id == id, FocusState.Programmatic);
 			}
+
+			FluentFin.Services.NavigationService.PlacePutBack(this, "place"); // Nixie 1.7.5 (rule 10): Back's place, its time
 		};
 		timer.Start();
 	}

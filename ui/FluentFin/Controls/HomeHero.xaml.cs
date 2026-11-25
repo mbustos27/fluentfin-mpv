@@ -182,13 +182,14 @@ public sealed partial class HomeHero : UserControl
 		BackdropTop.Opacity = 0;
 		BackdropTop.Source = next;
 		// fade in once the picture has arrived, so a slow server shows the old backdrop, not a blank
-		next.ImageOpened += (_, _) =>
+		// 1.7.5 (fx3): nothing once the app is closing (a picture that arrives in the window's teardown)
+		next.ImageOpened += UiDispatch.Routed("Home's hero's backdrop", () =>
 		{
 			if (ReferenceEquals(BackdropTop.Source, next))
 			{
 				Fade(BackdropTop, 0, 1, fade, () => { BackdropBottom.Source = next; BackdropTop.Opacity = 0; });
 			}
-		};
+		});
 
 		TitleText.Text = slide.Title;
 		MetaText.Text = slide.Meta;
@@ -234,11 +235,12 @@ public sealed partial class HomeHero : UserControl
 		Storyboard.SetTargetProperty(animation, "Opacity");
 		var board = new Storyboard();
 		board.Children.Add(animation);
-		board.Completed += (_, _) =>
+		// 1.7.5 (fx3): a fade that ends in the window's teardown sets nothing there
+		board.Completed += UiDispatch.Frame("Home's hero's fade", () =>
 		{
 			target.Opacity = to;
 			done?.Invoke();
-		};
+		});
 		board.Begin();
 	}
 

@@ -40,7 +40,7 @@ public partial class UsersViewModel(IJellyfinClient jellyfinClient,
 
 		if (!await jellyfinClient.DeleteUser(user))
 		{
-			Notice = new ServerNotice(ServerPowerState.Failed, $"{user.Name} wasn't deleted", "The server didn't accept the request. Nothing changed.", NoticeKind.Error);
+			Notice = new ServerNotice(ServerPowerState.Failed, $"{user.Name} wasn't deleted", Admin.ServerPower.NotTaken("The server didn't accept the request. Nothing changed."), NoticeKind.Error);
 			return;
 		}
 

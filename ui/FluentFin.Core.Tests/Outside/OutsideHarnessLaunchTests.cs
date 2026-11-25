@@ -180,24 +180,27 @@ public sealed class OutsideHarnessLaunchTests
 		// TMDb's export files and Wikidata is skipped unless asked for, so the release build refused 1.7.0. It filters that
 		// one category out of the Core run instead, and only it: the trait sits on the live check alone.
 		var script = File.ReadAllText(Path.Combine(RepoRoot, "tools", "release", "build-release.ps1"));
-		// 1.7.1: the library index's opt-in timing on a local Jellyfin (LiveIndexTests) is the second category left out.
-		Assert.Contains(@"Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Core.Tests') @() -Exclude 'Category!=LiveOutside&Category!=LiveIndex'", script, StringComparison.Ordinal);
+		// 1.7.1: the library index's opt-in timing on a local Jellyfin (LiveIndexTests) is the second category left out; 1.7.5
+		// (BH-170-q2), the live check of Trakt and TMDb trending through the app's own requests (LiveTrendingSourcesTests) the third
+		Assert.Contains(@"Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Core.Tests') @() -Exclude 'Category!=LiveOutside&Category!=LiveIndex&Category!=LiveTrending'", script, StringComparison.Ordinal);
 		Assert.Contains("$out = @(& $dotnet test $project @extra @excludeArgs ", script, StringComparison.Ordinal);
 		Assert.Contains("if ($Exclude) { $filter = \"($filter)&($Exclude)\" }", script, StringComparison.Ordinal);
 		Assert.DoesNotContain("NIXIE_LIVE_OUTSIDE", script, StringComparison.Ordinal);   // the release never turns the live check on
 		Assert.DoesNotContain("NIXIE_LIVE_INDEX=", script, StringComparison.Ordinal);    // nor the index timing
 		Assert.DoesNotContain("$env:NIXIE_LIVE_INDEX", script, StringComparison.Ordinal);
+		Assert.DoesNotContain("$env:NIXIE_LIVE_TRENDING", script, StringComparison.Ordinal); // 1.7.5: nor the trending check
 
 		static Func<Type, bool> Live(string category) => t => t.GetCustomAttributesData().Any(a => a.AttributeType == typeof(TraitAttribute)
 			&& a.ConstructorArguments.Select(x => x.Value as string).SequenceEqual(["Category", category]));
 		var assembly = typeof(OutsideHarnessLaunchTests).Assembly;
 		Assert.Equal([typeof(LiveOutsideSourcesTests)], assembly.GetTypes().Where(Live("LiveOutside")).ToList());
 		Assert.Equal([typeof(LiveIndexTests)], assembly.GetTypes().Where(Live("LiveIndex")).ToList());
+		Assert.Equal([typeof(LiveTrendingSourcesTests)], assembly.GetTypes().Where(Live("LiveTrending")).ToList());
 
-		// every test the release can't run (an opt-in Skip) sits in one of the two categories left out, so none is "not run"
+		// every test the release can't run (an opt-in Skip) sits in one of the three categories left out, so none is "not run"
 		var optIn = assembly.GetTypes().Where(t => t.GetMethods().Any(m => m.GetCustomAttributes(typeof(FactAttribute), true)
 			.Cast<FactAttribute>().Any(f => !string.IsNullOrEmpty(f.Skip)))).ToList();
-		Assert.All(optIn, t => Assert.True(Live("LiveOutside")(t) || Live("LiveIndex")(t),
+		Assert.All(optIn, t => Assert.True(Live("LiveOutside")(t) || Live("LiveIndex")(t) || Live("LiveTrending")(t),
 			$"{t.Name} has a test skipped unless asked for, outside the categories the release leaves out: the release build would refuse it"));
 	}
 

@@ -157,14 +157,16 @@ public sealed class RecentPlaysTests : IDisposable
 	public async Task AReportedPlay_IsReadFromTheServer_AgainWhileTheServerDoesNotShowIt()
 	{
 		var item = Episode("Pilot", 1, played: true);
-		_server[item.Id!.Value] = item; // the server has not caught up: still watched, no resume point
+		// the server has not caught up at the first read (still watched, no resume point); at the next it has. 1.7.5: by the read,
+		// not by a 10 ms wait the first read could miss under load (it failed about 1 run in 3 alone, fx1)
+		var reads = 0;
+		_client.Setup(x => x.GetItem(item.Id!.Value)).ReturnsAsync(() =>
+			Interlocked.Increment(ref reads) == 1 ? Copy(item) : Copy(item, position: 20 * Minute + TimeSpan.FromSeconds(1).Ticks));
 		var seen = new List<RecentPlay>();
 		using var _ = _plays.Changes.Subscribe(seen.Add);
 		Play(item, "ps-1", 20 * Minute);
 
 		_events.OnNext(Reported(item.Id!.Value, "ps-1", "sent"));
-		await Task.Delay(10);
-		_server[item.Id!.Value] = Copy(item, position: 20 * Minute + TimeSpan.FromSeconds(1).Ticks); // ... now it has
 		await _plays.CatchingUp;
 
 		var reported = seen.Last();

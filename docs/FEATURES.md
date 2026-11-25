@@ -20,7 +20,7 @@ changed in each version is in [CHANGELOG.md](../CHANGELOG.md); every key is in [
   bar, with search and the Account menu (where Settings is). A narrow window folds the tabs into one menu.
 - **Home, item pages and the player, redesigned.**
   - **Home:** a hero of up to five items new to you that never autoplays trailers, poster rows whose cards lift on
-    hover, and a Continue Watching row you can clean up (remove an item with Undo, or hide what you have not played
+    hover, and a Continue watching row you can clean up (remove an item with Undo, or hide what you have not played
     for a month or more).
   - **Libraries:** one scrolling grid with Sort (it says its direction in words), Filter (check boxes with counts),
     a one-click Unwatched switch, a row of the filters on with their crosses, an A–Z jump, type-to-jump and small,
@@ -62,6 +62,10 @@ changed in each version is in [CHANGELOG.md](../CHANGELOG.md); every key is in [
   however you got there.
 - **Mouse and keyboard.**
   - Mouse buttons 4 and 5, Alt+←/→ and the keyboard's Back and Forward keys go back and forward between pages.
+  - Back to a page you just left (1.7.5) shows it as it was, at once: its items, how far down it was, the card you left
+    from, its Order and Hide watched. A title you marked watched or a favourite meanwhile shows so, and the page checks
+    the server behind it only when something may have changed (search results too; a library waits for R). A big
+    library left before all its titles came reads on from where it stopped. R still loads it again.
   - Shortcuts everywhere: search (Ctrl+F or /), Settings (Ctrl+,), and the usual player keys (Space/K, J/L, ←/→, M,
     C, V, B, F, 0–9 and more).
   - Press **?** or **F1** (or Settings → About → Keyboard shortcuts) for the full list, or see

@@ -117,6 +117,9 @@ public sealed partial class LoadState : ObservableObject
 		LoadOutcome outcome;
 		try
 		{
+			// 1.7.5: what the server answered to this load's requests (Services.AnswerTrace): a page that got null from the client
+			// on a 5xx says the server's words (LoadMessages.CheckServer), not the connection's
+			Services.AnswerTrace.Begin();
 			outcome = await load();
 		}
 		// 1.7.3 (rule 11): the server's words only for the server's failures (an HTTP error, no answer in time: the HTTP client's
@@ -143,6 +146,43 @@ public sealed partial class LoadState : ObservableObject
 			var problem = outcome.Status is LoadStatus.Failed or LoadStatus.Empty || !string.IsNullOrEmpty(outcome.Title);
 			Set(problem && SignInState.Ended ? LoadOutcome.SignedOut(outcome) : outcome);
 		}
+	}
+
+	/// <summary>
+	/// Nixie 1.7.4: <paramref name="load"/> run behind what the page shows (Back showed a kept page, and something may have
+	/// changed since): no loading state at any point. A load that ends Loaded is shown as RunAsync shows it (a part that failed
+	/// says so above the content); one that fails or throws leaves the page as it is (rule 1 and 11: the copy shown
+	/// stays); an empty answer is the server's and is shown. A newer run (a Retry, R's page) wins, as with
+	/// <see cref="RunAsync"/>; Retry still runs the page's own load.
+	/// </summary>
+	/// <returns>Whether the load ended Loaded or Empty and is the newest (what it changed is shown).</returns>
+	public async Task<bool> RefreshBehindAsync(Func<Task<LoadOutcome>> load)
+	{
+		var run = ++_run;
+		LoadOutcome outcome;
+		try
+		{
+			outcome = await load();
+		}
+		catch (Exception ex) when (ex is not OperationCanceledException || LoadMessages.IsTimeout(ex))
+		{
+			outcome = LoadMessages.Failed(_what, ex);
+		}
+		catch (OperationCanceledException)
+		{
+			return false;
+		}
+
+		// (a sign-in the server no longer takes: what came back is not its answer, and the page keeps its copy; the title bar asks
+		// for the sign-in, as it does everywhere)
+		var problem = outcome.Status == LoadStatus.Empty || !string.IsNullOrEmpty(outcome.Title);
+		if (run != _run || outcome.Status is not (LoadStatus.Loaded or LoadStatus.Empty) || (problem && SignInState.Ended))
+		{
+			return false;
+		}
+
+		Set(outcome);
+		return true;
 	}
 
 	/// <summary>Forgets the shown state (the page was left): a load still running ends unseen.</summary>
@@ -201,8 +241,14 @@ public static class LoadMessages
 	/// "FluentFin"), and the button's words ("Try again" below it). 1.7.2 (the owner: "always remember im not a jellyfin
 	/// server admin"): what the user can do on this PC, never a step on the server (it said "Check that the server is running").
 	/// </summary>
-	public static string CheckServer() =>
-		$"{AppIdentity.Name} couldn't get it from {ServerName()} just now. Check this PC's connection, then select Try again.";
+	/// <remarks>
+	/// 1.7.5 (stream B's review of 1.7.3): in a load whose server answered with an error of its own (a 5xx, and every request got
+	/// an answer: <see cref="Services.AnswerTrace.ServersFault"/>), the server's words (<see cref="ServerHadAProblem"/>): the client
+	/// answers null for a 5xx, so the page's "couldn't load" said the connection's.
+	/// </remarks>
+	public static string CheckServer() => Services.AnswerTrace.Current is { ServersFault: true }
+		? ServerHadAProblem()
+		: $"{AppIdentity.Name} couldn't get it from {ServerName()} just now. Check this PC's connection, then select Try again.";
 
 	public static LoadOutcome CouldNotLoad(string what) => LoadOutcome.Failed($"Couldn't load {what}", CheckServer());
 
@@ -280,6 +326,12 @@ public static class LoadMessages
 				_ => null,
 			};
 
+			// 1.7.5 (stream B's review of 1.7.3): a captive portal or a proxy's page answering 200 with HTML for the server: Kiota
+			// has no reader for text/html (an InvalidOperationException), or the page came labelled JSON (a JsonException while
+			// the answer was read). The connection, not Nixie's own ("couldn't show this page… restart Nixie"); a JsonException
+			// from reading a file of Nixie's own stays Nixie's
+			status ??= IsAnAnswerThatWasntTheServers(e) ? 0 : null;
+
 			if (status is { } code)
 			{
 				// fix round (BH-173-q2): a 403 or a 404 isn't the connection (every 4xx but 401 got its words). The re-review: a 404
@@ -287,6 +339,7 @@ public static class LoadMessages
 				// for its own item through calls that answer null, so a 404 that reaches here is never the item's
 				return code switch
 				{
+					511 => Cause.Server, // 1.7.5: a captive portal's "sign in to this network first": the connection
 					>= 500 and <= 599 or 404 or 410 => Cause.ServerFault,
 					403 => Cause.NotAllowed,
 					401 or 407 or 408 or 429 => Cause.Server,
@@ -309,6 +362,35 @@ public static class LoadMessages
 		}
 
 		return Cause.Local;
+	}
+
+	/// <summary>
+	/// 1.7.5: <paramref name="e"/> came from reading an answer that wasn't the server's JSON: Kiota's refusal of its content type
+	/// (the JSON reader's "expected a application/json content type", or the registry's "Content type text/html does not have a
+	/// factory registered to be parsed"), or a <see cref="System.Text.Json.JsonException"/> thrown while Kiota (or Flurl) read an
+	/// answer, or in a load whose trace saw such a page (<see cref="Services.AnswerTrace.SawNoAnswer"/>).
+	/// </summary>
+	internal static bool IsAnAnswerThatWasntTheServers(Exception e) => e switch
+	{
+		InvalidOperationException when e.Message.Contains("does not have a factory registered to be parsed", StringComparison.Ordinal) => true,
+		ArgumentException { ParamName: "contentType" } => ThrownReadingAnAnswer(e),
+		System.Text.Json.JsonException => Services.AnswerTrace.Current is { SawNoAnswer: true } || ThrownReadingAnAnswer(e),
+		_ => false,
+	};
+
+	private static bool ThrownReadingAnAnswer(Exception e)
+	{
+		try
+		{
+			return new System.Diagnostics.StackTrace(e, false).GetFrames().Any(frame =>
+				frame.GetMethod()?.DeclaringType?.Assembly.GetName().Name is { } assembly &&
+				(assembly.StartsWith("Microsoft.Kiota", StringComparison.Ordinal) || assembly.StartsWith("Flurl", StringComparison.Ordinal) ||
+				 assembly.StartsWith("Jellyfin.Sdk", StringComparison.Ordinal)));
+		}
+		catch (Exception)
+		{
+			return false;
+		}
 	}
 
 	/// <summary>

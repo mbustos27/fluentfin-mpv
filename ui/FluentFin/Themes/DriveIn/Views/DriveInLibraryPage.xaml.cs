@@ -33,6 +33,9 @@ public sealed partial class DriveInLibraryPage : Page
 	public DriveInLibraryPage()
 	{
 		InitializeComponent();
+		// Nixie 1.7.5: kept whole by the frame for Back to this very page (its grid as it was, at once); a new visit makes it anew
+		// (NavigationService.KeptWhole)
+		NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Enabled;
 
 		GridRepeater.ElementPrepared += (_, _) =>
 		{
@@ -56,22 +59,24 @@ public sealed partial class DriveInLibraryPage : Page
 			Letters.ReadoutPlate = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x2A, 0x08, 0x14));
 			Letters.ReadoutBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xF4, 0xEE));
 		}
-		ViewModel.PropertyChanged += (_, e) =>
+		// Nixie 1.7.4: only while the page is shown (Back hands a kept view model to a new page: WhileLoaded)
+		FluentFin.Services.WhileLoaded.Listen(this, ViewModel, (_, e) =>
 		{
 			if (e.PropertyName is nameof(LibraryViewModel.Density) or nameof(LibraryViewModel.Layout))
 			{
 				ShowView();
 			}
-		};
+		});
 		ShowView();
 
-		ViewModel.State.PropertyChanged += (_, e) =>
+		// Nixie 1.7.4: only while the page is shown (Back hands a kept view model to a new page: WhileLoaded)
+		FluentFin.Services.WhileLoaded.Listen(this, ViewModel.State, (_, e) =>
 		{
 			if (e.PropertyName == nameof(LoadState.Status))
 			{
 				ShowPresets();
 			}
-		};
+		});
 		// 1.6.1: the room kept for the strip while the titles load is its height as it showed
 		PresetStrip.SizeChanged += (_, e) =>
 		{

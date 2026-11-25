@@ -13,6 +13,7 @@ namespace FluentFin.Tests.Mpv;
 /// its <c>reported</c>), FluentFin sends the one Stopped report the backend no longer can, with that session's ids and the
 /// position of the latest position event for its item. Never otherwise.
 /// </summary>
+[Collection(SavedSignInCollection.Name)] // 1.7.5: CloseSequence.RunAsync frees the device slot (static), as CloseSequenceDeviceSlotTests asserts
 public sealed class InterruptedPlaybackTests : IDisposable
 {
 	private static readonly Guid Item = Guid.Parse("0123456789abcdef0123456789abcdef");

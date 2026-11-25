@@ -44,7 +44,7 @@ Press 0x27; Press 0x27
 $col = Focus-Info
 Press 0x28 1000  # Down
 $down = Focus-Info
-Check 'rows: Down moves to the Next Up row' ($down -and $down.type -eq 'ListItem' -and (Row-Cards 'Next Up') -contains $down.name -and $down.name -ne $col.name) ($down.name)
+Check 'rows: Down moves to the Next Up row' ($down -and $down.type -eq 'ListItem' -and (Row-Cards 'Up next') -contains $down.name -and $down.name -ne $col.name) ($down.name)
 Check 'rows: ... in the same column (centres within one card)' ($down -and [math]::Abs(($down.rect[0] + $down.rect[2] / 2) - ($col.rect[0] + $col.rect[2] / 2)) -lt 400) ("{0} vs {1}" -f $down.rect[0], $col.rect[0])
 Shot 'rows-3-down'
 Press 0x28 1500
@@ -76,7 +76,7 @@ Check 'rows: Tab leaves the row after one stop' ($left -and $left.type -eq 'Hype
 $c = Card-Focus 'A Signal in Winter'
 Press 0x27; Press 0x27
 $third = Focus-Info
-$sa = Find-Ui -Name 'See all Next Up' -Type 'Hyperlink'
+$sa = Find-Ui -Name 'See all Up next' -Type 'Hyperlink'
 [void][OffscreenUi]::SetFocus($sa); Start-Sleep -Milliseconds 500
 Press 0x09 700
 $back = Focus-Info

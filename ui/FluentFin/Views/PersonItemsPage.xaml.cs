@@ -27,8 +27,28 @@ public sealed partial class PersonItemsPage : Page
 
 	// 1.5 huntfix (BH-150-m2): the page opened on the top bar's Back (Enter went back); it opens on its first poster, as a
 	// library does, by the app's one arrival rule (ArrivalFocus: never after the user moved, nor after R or a theme switch)
+	// Nixie 1.7.4: the card the user left the page from, per person: Back (or Forward) puts the keyboard on it again, as a
+	// collection does (it went to the first poster)
+	private static readonly Dictionary<Guid, Guid> LeftFrom = [];
+	private Guid? _returnTo;
+
+	protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
+	{
+		if (Parameter is { } person && _grid.LastItem is BaseItemViewModel { Id: { } item })
+		{
+			LeftFrom[person] = item;
+		}
+
+		base.OnNavigatingFrom(e);
+	}
+
+	private Guid? Parameter => _parameter is Jellyfin.Sdk.Generated.Models.BaseItemDto { Id: { } id } ? id : null;
+	private object? _parameter;
+
 	protected override void OnNavigatedTo(NavigationEventArgs e)
 	{
+		_parameter = e.Parameter;
+		_returnTo = e.NavigationMode is NavigationMode.Back or NavigationMode.Forward && Parameter is { } person && LeftFrom.TryGetValue(person, out var left) ? left : null;
 		_focusedOnArrival = false;
 		ViewModel.Results.PropertyChanged -= OnResultsChanged;
 		ViewModel.Results.PropertyChanged += OnResultsChanged;
@@ -66,6 +86,27 @@ public sealed partial class PersonItemsPage : Page
 			}
 
 			Loaded += OnLoaded;
+			return;
+		}
+
+		// Nixie 1.7.4: Back to the page: the card it was left from
+		var back = -1;
+		for (var i = 0; _returnTo is { } id && i < ViewModel.Items.Count; i++)
+		{
+			if (ViewModel.Items[i].Id == id)
+			{
+				back = i;
+				break;
+			}
+		}
+
+		if (back >= 0)
+		{
+			ArrivalFocus.TryTake(this, "the card Back returns to", () =>
+			{
+				UpdateLayout();
+				return _grid.FocusIndex(back, FocusState.Keyboard);
+			});
 			return;
 		}
 

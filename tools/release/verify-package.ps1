@@ -30,6 +30,11 @@
                  test's marker (NIXIE_UPGRADE_TEST unset), and let through the gate with it, tools\release\
                  installswitch-offscreen.ps1. Nothing is installed: the decoy is no installer, and the unzipped copy is
                  portable.
+      Gate       1.7.5 (design rule 12): the basics gate, tools\gate\run-gate.ps1, on app\Nixie.exe, its dev checks on a
+                 Debug build of this checkout (-GateDevExe, else built by the gate with the package's libmpv); each failed
+                 job is a failed check here. Its runs use the checkout's backend (the runs above check the bundled one).
+                 On -GateSlots (5) slots when the machine is quiet, else 3 (said); its budget is 2 h (nightly-tier
+                 checks, extra themes and sizes, are left to run-gate.ps1 -Nightly).
   - Alongside each run, tools\release\proc_audit.py records every process FluentFin starts (image, command line, every
     DLL loaded). A run fails if any of them comes from the repository, a dev checkout, a Python install, the build's
     work folder or (except mpv.exe and its DLLs in the Mpv run) a WinGet mpv; or if a command line names a token.
@@ -45,12 +50,25 @@ param(
     [Parameter(Mandatory)][string]$Out,
     [string]$HarnessPython,
     [string]$Cache = (Join-Path $env:TEMP 'fluentfin-mpv-harness'),
-    [ValidateSet('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill', 'InstallSwitch')][string[]]$Runs = @('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill', 'InstallSwitch'),
-    [int]$TimeoutSeconds = 600
+    [ValidateSet('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill', 'InstallSwitch', 'Gate')][string[]]$Runs = @('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill', 'InstallSwitch', 'Gate'),
+    [int]$TimeoutSeconds = 600,
+    # Nixie 1.7.5 (rule 12): the basics gate's dev checks run on a Debug build of this checkout; given here, it isn't built
+    [string]$GateDevExe,
+    # the slots the gate takes when the machine is quiet (else 3); 2 h is the runner's budget for its real time
+    [ValidateRange(3, 8)][int]$GateSlots = 5,
+    # 1.7.5 (the review's Minor): -Runs without Gate is refused unless this says the gate is left out on purpose (a release
+    # build runs it)
+    [switch]$NoGate
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# 1.7.5 (the review's Minor): the basics gate is never left out without a word
+if ($Runs -notcontains 'Gate' -and -not $NoGate) { throw "-Runs leaves out the basics gate (Gate), which a release build runs; add Gate, or pass -NoGate to leave it out on purpose" }
+if ($NoGate) {
+    $Runs = @($Runs | Where-Object { $_ -ne 'Gate' })
+    Write-Warning "-NoGate: the basics gate is LEFT OUT of this verify; a release build must run it (tools\gate\run-gate.ps1)"
+}
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $harness = Join-Path $repo 'tools\ui-harness'
 . (Join-Path $harness 'offscreen\prepare.ps1')
@@ -353,6 +371,54 @@ foreach ($run in $Runs) {
             if (Test-Path $json) { (Get-Content $json -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { Check "$($run): $($_.Name)" ([bool]$_.Value.ok) "$($_.Value.detail)" } }
             else { Check "$($run): result" $false "no installswitch.json (see $runOut\hidden_run.log)" }
         }
+        'Gate' {
+            # Nixie 1.7.5 (design rule 12): the basics gate (tools\gate\run-gate.ps1) on the package's app\Nixie.exe, its dev
+            # checks on a Debug build of this checkout (-GateDevExe, else the gate's own -Build, with the package's libmpv beside
+            # it). A failing gate fails the release build like any other check here.
+            $gateOut = Join-Path $Out 'Gate'
+            if (Test-Path $gateOut) { Remove-Item -Recurse -Force $gateOut }
+            # 1.7.5 (the review's Minor): the gate's dev checks run on a Debug build of this checkout, so this checkout must be the
+            # package's commit: build-release.ps1 writes it into sources\SOURCES.txt beside the zip ("git archive of commit <sha>")
+            $head = (& git -C $repo rev-parse HEAD 2>$null | Out-String).Trim()
+            $sourcesTxt = Join-Path (Split-Path $Zip) 'sources\SOURCES.txt'
+            $built = if (Test-Path -LiteralPath $sourcesTxt) { $mm = Select-String -LiteralPath $sourcesTxt -Pattern 'git archive of commit ([0-9a-f]{40})' | Select-Object -First 1; if ($mm) { $mm.Matches[0].Groups[1].Value } }
+            if ($GateDevExe) { Write-Host "  the gate's dev checks run on -GateDevExe $GateDevExe (given: its commit is the caller's to vouch for)" }
+            else {
+                Check 'Gate: this checkout is the package''s commit (the gate''s dev checks build and run it)' ([bool]$built -and $built -eq $head) $(if (-not $built) { "no 'git archive of commit' in ${sourcesTxt}: the package's commit is unknown; pass -GateDevExe built from it" } else { "package $built, checkout $head" })
+            }
+            $gateArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $repo 'tools\gate\run-gate.ps1'), '-Exe', $exe, '-Out', $gateOut,
+                '-Python', $HarnessPython, '-Cache', $Cache)
+            if ($GateDevExe) { $gateArgs += @('-DevExe', [IO.Path]::GetFullPath($GateDevExe)) } else { $gateArgs += @('-Build', '-LibmpvDir', (Join-Path $app 'libmpv')) }
+            # 1.7.5 (the coordinator's decision): the release gate runs on -GateSlots (5) slots when the machine is quiet (every one
+            # of those slots free and the memory for them: no other stream's run, no TV emulator), still through the harness's
+            # lock (NIXIE_HARNESS_PARALLEL); otherwise on the usual 3, and says so. Its budget is the runner's, 2 h
+            $slotsBefore = $env:NIXIE_HARNESS_PARALLEL
+            $free = 0
+            foreach ($i in 1..$GateSlots) {
+                $m = New-Object System.Threading.Mutex($false, (Get-HarnessRunSlotName $i))
+                try { $got = $false; try { $got = $m.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $got = $true }; if ($got) { $free++; $m.ReleaseMutex() } }
+                finally { $m.Dispose() }
+            }
+            $memory = Get-HarnessMemory
+            $quiet = $free -eq $GateSlots -and $memory.Ram -ge (1.5 * $GateSlots + (Get-HarnessMinFreeGB))
+            $env:NIXIE_HARNESS_PARALLEL = if ($quiet) { [string]$GateSlots } else { '3' }
+            Write-Host ("`n== Gate (the basics gate on {0}; {1}): {2} slots{3}" -f $exe, $gateOut, $env:NIXIE_HARNESS_PARALLEL,
+                $(if ($quiet) { ' (the machine is quiet)' } else { " (not quiet: $free of $GateSlots slots free, $($memory.Ram) GB of RAM free; the real time grows)" }))
+            try { & $ps @gateArgs | Out-Host; $gateCode = $LASTEXITCODE }
+            finally { if ($null -ne $slotsBefore) { $env:NIXIE_HARNESS_PARALLEL = $slotsBefore } else { Remove-Item Env:NIXIE_HARNESS_PARALLEL -ErrorAction SilentlyContinue } }
+            $gateJson = Join-Path $gateOut 'gate.json'
+            if (Test-Path $gateJson) {
+                $gate = Get-Content $gateJson -Raw | ConvertFrom-Json
+                $gateJobs = @($gate.jobs)
+                $gateFailed = @($gateJobs | Where-Object { -not $_.ok })
+                $onDev = @($gateJobs | Where-Object { $_.dev })
+                Write-Host ("  {0} of {1} gate jobs ran on a Debug build of this checkout ({2}), not on the package; {3} on the package's app\Nixie.exe" -f
+                    $onDev.Count, $gateJobs.Count, $(if ($gate.dev_exe) { $gate.dev_exe } else { 'none' }), ($gateJobs.Count - $onDev.Count))
+                Check "Gate: the basics gate passed ($($gateJobs.Count - $gateFailed.Count)/$($gateJobs.Count) jobs, $($onDev.Count) on a Debug build of this checkout, $($gate.minutes) min)" ($gateCode -eq 0 -and $gateJobs.Count -gt 0 -and $gateFailed.Count -eq 0) "$gateOut\gate.md"
+                foreach ($j in $gateFailed) { Check "Gate: $($j.id) [$($j.theme)]" $false $j.reason }
+            }
+            else { Check 'Gate: the basics gate ran' $false "exit $gateCode, no gate.json (see the lines above)" }
+        }
         { $_ -in 'Launcher', 'SelfTest', 'Kill' } {
             # Kill: the self-test again, but FluentFin is ended abruptly (a crash): its job must end the bundled backend
             # Launcher: the self-test started through the top Nixie.exe, with a data folder whose name has a space
@@ -393,4 +459,5 @@ Check 'nothing was written into the unzipped folder' ($changed.Count -eq 0) (($c
 [IO.File]::WriteAllText((Join-Path $Out 'verify.json'), (ConvertTo-Json -Depth 5 -InputObject $results), [Text.UTF8Encoding]::new($false))
 $failed = @($results.Keys | Where-Object { -not $results[$_].ok })
 Write-Host ("`n{0} checks, {1} failed{2}" -f $results.Count, $failed.Count, $(if ($failed) { ': ' + ($failed -join '; ') }))
+if ($NoGate) { Write-Warning "-NoGate: the basics gate was LEFT OUT; this verify is not a release's" }
 if ($failed) { exit 1 }

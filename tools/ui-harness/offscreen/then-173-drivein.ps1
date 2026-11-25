@@ -46,7 +46,7 @@ elseif ($env:UPNEXT_EMPTY) {
     Check "drivein173 ($dvTag): Next Up empty: the board says Nothing up next" ([bool]$dvEmpty) ''
     Check "drivein173 ($dvTag): Next Up empty: no link counting what the board doesn't list" (-not $dvLink) "$(if ($dvLink) { $dvLink.Current.Name })"
     Check "drivein173 ($dvTag): Next Up empty: no entries on the board" ($dvEntries.Count -eq 0) $dvNames
-    $dvContinue = Find-Ui -Name 'Continue Watching' -Contains -OffscreenToo
+    $dvContinue = Find-Ui -Name 'Continue watching' -Contains -OffscreenToo
     Check "drivein173 ($dvTag): Next Up empty: Continue Watching still shows" ([bool]$dvContinue) ''
 }
 else {

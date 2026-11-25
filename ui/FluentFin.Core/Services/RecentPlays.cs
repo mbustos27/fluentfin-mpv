@@ -136,6 +136,8 @@ public sealed class RecentPlays : IDisposable
 	private readonly Lock _publishing = new(); // reader threads and catch-up reads: one OnNext at a time
 	private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
 	private readonly List<RecentPlay> _recent = [];
+	/// <summary>1.7.5 (BH-151-m8): plays whose Stopped report the server refused (the sign-in ended mid-playback), by session.</summary>
+	private readonly Dictionary<string, RecentPlay> _owed = new(StringComparer.Ordinal);
 	private readonly IDisposable _subscription;
 	private Session? _current;
 	private Task _catchingUp = Task.CompletedTask;
@@ -153,7 +155,15 @@ public sealed class RecentPlays : IDisposable
 		_ui = ui;
 		_logger = logger;
 		_subscription = events.Subscribe(Handle);
+		SignInState.Changed += OnSignInChanged;
+		ItemUserData.Changed += OnUserDataChanged;
 	}
+
+	/// <summary>1.7.5 (BH-151-m8): how long a refused play's place is kept for a new sign-in (a later one doesn't write an old place).</summary>
+	internal static readonly TimeSpan OwedFor = TimeSpan.FromHours(12);
+
+	/// <summary>Completes when the places sent after the last new sign-in are written (tests).</summary>
+	internal Task SendingOwed { get; private set; } = Task.CompletedTask;
 
 	/// <summary>How long to wait before reading the item again while the server does not show the play (then its answer wins).</summary>
 	internal IReadOnlyList<TimeSpan> CatchUpRetries { get; set; } = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)];
@@ -186,6 +196,8 @@ public sealed class RecentPlays : IDisposable
 
 	public void Dispose()
 	{
+		SignInState.Changed -= OnSignInChanged;
+		ItemUserData.Changed -= OnUserDataChanged;
 		_subscription.Dispose();
 		_changes.Dispose();
 	}
@@ -217,6 +229,7 @@ public sealed class RecentPlays : IDisposable
 					Bridge.Events.Position => OnPosition(e),
 					Bridge.Events.Ended => OnEnded(e),
 					Bridge.Events.Reported => OnReported(e),
+					Bridge.Events.Error => OnError(e),
 					_ => null,
 				};
 			}
@@ -283,6 +296,8 @@ public sealed class RecentPlays : IDisposable
 			}
 
 			session = _sessions[playSessionId] = new Session(playSessionId, itemId, _client.BaseUrl, _client.UserId) { Rules = Task.Run(ReadRulesAsync) };
+			// 1.7.5 (the review of BH-151-m8): the item plays again: a place still owed from an earlier play is older than this one
+			DropOwed(itemId);
 		}
 
 		if (state.DurationTicks is > 0)
@@ -349,7 +364,160 @@ public sealed class RecentPlays : IDisposable
 			_current = null;
 		}
 
-		return session.Play(reported.Outcome ?? "", _time.GetUtcNow());
+		var play = session.Play(reported.Outcome ?? "", _time.GetUtcNow());
+		if (session.Refused && reported.Outcome == BridgeReported.Failed && play.PositionTicks is not null)
+		{
+			// 1.7.5 (BH-151-m8): its place is sent after the user signs in again (SendOwedAsync)
+			if (_owed.Count >= MaxSessions)
+			{
+				_owed.Remove(_owed.Values.MinBy(x => x.At)!.PlaySessionId);
+			}
+
+			_owed[play.PlaySessionId] = play;
+
+			// 1.7.5 (the review): signed in again while it still played (the player's own Sign in again, a saved sign-in, then
+			// Back): the stop was refused after the new sign-in came, so it is sent now, not at some later sign-in
+			if (!SignInState.Ended && SignInState.Generation != session.RefusedGeneration)
+			{
+				StartSendingLocked();
+			}
+		}
+
+		return play;
+	}
+
+	/// <summary>1.7.5 (the review of BH-151-m8): the places owed for <paramref name="itemId"/> are dropped (a newer play or mark).</summary>
+	private void DropOwed(Guid itemId)
+	{
+		foreach (var key in _owed.Where(x => x.Value.ItemId == itemId).Select(x => x.Key).ToList())
+		{
+			_owed.Remove(key);
+		}
+	}
+
+	// 1.7.5 (the review of BH-151-m8): a Mark watched or unwatched (or the server's newer answer) of an item whose place is owed:
+	// the place would undo it (a watched mark or a resume point back), so it is dropped
+	private void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
+	{
+		if (e.Failed)
+		{
+			return;
+		}
+
+		lock (_lock)
+		{
+			DropOwed(e.ItemId);
+		}
+	}
+
+	// 1.7.5 (BH-151-m8): the server refused the playing item's progress or Stopped report (auth_failed, docs/BRIDGE.md §5: once
+	// per play session, 401 or 403): its Stopped may be refused too, and then its place is owed to the next sign-in
+	private RecentPlay? OnError(BridgeEvent e)
+	{
+		if (e.DataAs<BridgeError>() is { Code: "auth_failed" } && _current is { } session)
+		{
+			session.Refused = true;
+			session.RefusedGeneration = SignInState.Generation; // 1.7.5: the sign-in the refusal came under
+		}
+
+		return null;
+	}
+
+	// 1.7.5 (BH-151-m8): a new sign-in (Sign in again): the places of the plays it ended are sent, for the same server and user
+	private void OnSignInChanged()
+	{
+		if (SignInState.Ended)
+		{
+			return;
+		}
+
+		lock (_lock)
+		{
+			if (_owed.Count == 0)
+			{
+				return;
+			}
+
+			StartSendingLocked();
+		}
+	}
+
+	// under _lock
+	private void StartSendingLocked()
+	{
+		var sending = Task.Run(SendOwedAsync);
+		SendingOwed = SendingOwed.IsCompleted ? sending : Task.WhenAll(SendingOwed, sending);
+	}
+
+	/// <summary>
+	/// 1.7.5 (BH-151-m8): after Sign in again, each play whose Stopped report the ended sign-in refused gets the place the player
+	/// last saw, by the server's rules (<see cref="RecentPlay.Guess"/>): watched, its resume point, or none; with the time it
+	/// stopped as its last play. A play of the item since (a later last play on the server) is never overwritten. It writes the
+	/// item's user data (as Mark as watched does), not a playback report: the backend is the one reporter.
+	/// </summary>
+	private async Task SendOwedAsync()
+	{
+		List<RecentPlay> due;
+		var since = _time.GetUtcNow() - OwedFor;
+		lock (_lock)
+		{
+			due = [.. _owed.Values.Where(x => x.At >= since && x.IsOf(_client.BaseUrl, _client.UserId)).OrderBy(x => x.At)];
+			foreach (var play in _owed.Values.Where(x => x.At < since || due.Contains(x)).ToList())
+			{
+				_owed.Remove(play.PlaySessionId);
+			}
+		}
+
+		foreach (var play in due.GroupBy(x => x.ItemId).Select(g => g.Last()))
+		{
+			try
+			{
+				var watch = System.Diagnostics.Stopwatch.StartNew();
+				var now = (await _client.GetItem(play.ItemId))?.UserData;
+				if (now is null)
+				{
+					// not read: its watched state isn't known, so nothing is written over it
+					_logger?.LogInformation("[plays] {ItemId} couldn't be read after the new sign-in: its refused stop's place isn't sent", play.ItemId);
+					continue;
+				}
+
+				if (now.LastPlayedDate is { } last && last > play.At)
+				{
+					_logger?.LogInformation("[plays] {ItemId} was played again since its refused stop: its place is the server's", play.ItemId);
+					continue;
+				}
+
+				var (played, position) = play.Guess switch
+				{
+					PlayGuess.Watched => (true, 0L),
+					PlayGuess.Resumable => (now.Played ?? false, play.PositionTicks ?? 0),
+					PlayGuess.NoResumePoint => (now.Played ?? false, 0L),
+					_ => (false, -1L),
+				};
+				if (position < 0)
+				{
+					continue; // not known where it stopped: nothing guessed
+				}
+
+				var answer = await _client.SetPlace(play.ItemId, played, position, play.At);
+				_logger?.LogInformation("[plays] the place of {ItemId}, whose stop the ended sign-in refused, {Result} after the new sign-in in {Ms} ms ({Guess})",
+					play.ItemId, answer is null ? "couldn't be sent" : "was sent", watch.ElapsedMilliseconds, play.Guess);
+				if (answer is not null && _ui is not null)
+				{
+					_ui.Schedule(() =>
+					{
+						if (play.IsOf(_client.BaseUrl, _client.UserId))
+						{
+							ItemUserData.Publish(play.ItemId, answer);
+						}
+					});
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger?.LogInformation("[plays] the place of {ItemId} couldn't be sent after the new sign-in: {Error}", play.ItemId, ex.GetType().Name);
+			}
+		}
 	}
 
 	// the server's resume rules, read as the play starts (a setting changed meanwhile counts); Jellyfin's defaults when they cannot be
@@ -438,6 +606,12 @@ public sealed class RecentPlays : IDisposable
 		public long? RuntimeTicks { get; set; }
 
 		public string? EndedReason { get; set; }
+
+		/// <summary>1.7.5 (BH-151-m8): the server refused its reports (<c>auth_failed</c>).</summary>
+		public bool Refused { get; set; }
+
+		/// <summary>1.7.5 (the review): <see cref="SignInState.Generation"/> when its reports were refused.</summary>
+		public int RefusedGeneration { get; set; }
 
 		public Task<ResumeRules>? Rules { get; init; }
 

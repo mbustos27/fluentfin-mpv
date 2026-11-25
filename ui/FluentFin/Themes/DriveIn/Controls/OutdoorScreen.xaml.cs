@@ -193,13 +193,14 @@ public sealed partial class OutdoorScreen : UserControl
 		var fade = animate && SafeMotion.Allowed ? FadeTime : animate ? TimeSpan.FromMilliseconds(150) : TimeSpan.Zero;
 		BackdropTop.Opacity = 0;
 		BackdropTop.Source = next;
-		next.ImageOpened += (_, _) =>
+		// 1.7.5 (fx3): nothing once the app is closing (a picture that arrives in the window's teardown)
+		next.ImageOpened += UiDispatch.Routed("Drive-in's outdoor screen's backdrop", () =>
 		{
 			if (ReferenceEquals(BackdropTop.Source, next))
 			{
 				Fade(BackdropTop, 0, 1, fade, () => { BackdropBottom.Source = next; BackdropTop.Opacity = 0; });
 			}
-		};
+		});
 
 		Kicker.Text = "FEATURE PRESENTATION";
 		TitleText.Text = MarqueeSign.Upper(slide.Title);
@@ -271,11 +272,12 @@ public sealed partial class OutdoorScreen : UserControl
 		Storyboard.SetTargetProperty(animation, "Opacity");
 		var board = new Storyboard();
 		board.Children.Add(animation);
-		board.Completed += (_, _) =>
+		// 1.7.5 (fx3): a fade that ends in the window's teardown sets nothing there
+		board.Completed += UiDispatch.Frame("Drive-in's outdoor screen's fade", () =>
 		{
 			target.Opacity = to;
 			done?.Invoke();
-		};
+		});
 		board.Begin();
 	}
 

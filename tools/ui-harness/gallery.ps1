@@ -18,7 +18,8 @@
     outside Nixie's own data folders (run-offscreen.ps1 refuses those too). Each run gets a fresh data folder.
   - Nothing is written to docs\screenshots unless -Publish is given. Look at <Scratch>\gallery\contact.png first: no
     server name, user name, path or token may show in any shot.
-  - -Part runs one stage: home (the four Home shots), detail (the rest), pack (packs what the runs left), or all.
+  - -Part runs one stage: home (the four Home shots), detail (the rest), collections (the Collections shot alone), pack
+    (packs what the runs left), or all.
 
 .EXAMPLE
   .\gallery.ps1 -Scratch C:\scratch\gallery -Exe C:\scratch\build\Nixie.exe -Video C:\scratch\episode-beverly-hillbillies-s01e01.ogv
@@ -35,7 +36,7 @@ param(
     [string]$Python,
     [ValidateSet('DriveIn', 'Cinematic', 'Editorial', 'Classic')][string[]]$Themes = @('DriveIn', 'Cinematic', 'Editorial', 'Classic'),
     [ValidateSet('DriveIn', 'Cinematic', 'Editorial', 'Classic')][string]$DetailTheme = 'DriveIn',
-    [ValidateSet('all', 'home', 'detail', 'pack')][string]$Part = 'all',
+    [ValidateSet('all', 'home', 'detail', 'collections', 'pack')][string]$Part = 'all',
     [switch]$Publish
 )
 $ErrorActionPreference = 'Stop'
@@ -103,6 +104,8 @@ function Invoke-GalleryRun([string]$Theme, [string]$What) {
 
 if ($Part -in 'all', 'home') { foreach ($t in $Themes) { Invoke-GalleryRun $t 'home' } }
 if ($Part -in 'all', 'detail') { Invoke-GalleryRun $DetailTheme 'detail' }
+# 1.7.5: the Collections shot alone (no player, so no -Video)
+if ($Part -eq 'collections') { Invoke-GalleryRun $DetailTheme 'collections' }
 
 # pack: the newest shot of each name, as WebP under 300 KB with a 640 px thumbnail, and a contact sheet
 $pack = @('-B', '-I', (Join-Path $PSScriptRoot 'gallery_pack.py'), '--runs', (Join-Path $Scratch 'runs'), '--out', (Join-Path $Scratch 'gallery'))

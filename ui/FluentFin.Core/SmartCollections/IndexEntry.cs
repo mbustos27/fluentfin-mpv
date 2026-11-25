@@ -27,7 +27,24 @@ public sealed record IndexEntry
 	// 1.7.3 (P0-2): every library the server lists this title in, LibraryId first; empty in an index saved before 1.7.3
 	// (then LibraryId alone). Stream I fills it; read it through InLibrary. BH-173-q3: a damaged saved index's null is empty
 	// (InLibrary and the load's Once threw on it); so for every list below
+	// 1.7.5 (fx1): saved only for a title in another library than LibraryId (SavedLibraryIds); one saved since loads empty
+	[System.Text.Json.Serialization.JsonIgnore]
 	public Guid[] LibraryIds { get; init => field = value ?? []; } = [];
+
+	/// <summary>
+	/// 1.7.5 (fx1; stream I's review of 1.7.3): what the saved index keeps of <see cref="LibraryIds"/>, under that name: the
+	/// libraries of a title in more than its <see cref="LibraryId"/>'s, else nothing (about 1.8 MB on 34,000 titles, nearly all
+	/// in one library each). Loaded without it, a title's <see cref="LibraryIds"/> is empty: <see cref="LibraryId"/> alone, as
+	/// 1.7.3 reads an index saved before it.
+	/// </summary>
+	[System.Text.Json.Serialization.JsonPropertyName("LibraryIds")]
+	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+	[System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+	public Guid[]? SavedLibraryIds
+	{
+		get => Array.Exists(LibraryIds, x => x != LibraryId) ? LibraryIds : null;
+		init => LibraryIds = value ?? [];
+	}
 	public int? Year { get; init; }
 	public string? PremiereDate { get; init; }
 	public string? TmdbCollection { get; init; }
@@ -253,12 +270,15 @@ public sealed record IndexProgress(int Read, int? Total, IndexKind? Only)
 	/// </summary>
 	public bool About { get; init; }
 
-	/// <summary>"12,000 of 25,736 films", "200 of about 25,736 films", "300 of 1,200 titles", "12,000 films": what the reading line says.</summary>
+	/// <summary>"12,000 of 25,736 films", "200 of about 25,736 titles", "300 of 1,200 titles", "12,000 films": what the reading line says.</summary>
+	/// 1.7.5 (fx1; stream I's review of 1.7.3): "titles" while the total is only "about". The check counts every film and show of
+	/// the user once, in libraries the index skips too, so "of about 34,006 films" could count shows and was followed by "of
+	/// 37,173 films" once each library's own count was in (a title in two libraries counted in both).
 	public string Text
 	{
 		get
 		{
-			var noun = Only switch { IndexKind.Movie => "films", IndexKind.Series => "shows", _ => "titles" };
+			var noun = About ? "titles" : Only switch { IndexKind.Movie => "films", IndexKind.Series => "shows", _ => "titles" };
 			var read = Read.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
 			return Total is { } total ? $"{read} of {(About ? "about " : "")}{total.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)} {noun}" : $"{read} {noun}";
 		}

@@ -19,14 +19,16 @@ public sealed partial class EditorialSeriesPage : Page
 	public EditorialSeriesPage()
 	{
 		InitializeComponent();
-		ViewModel.PropertyChanged += (_, e) =>
+		// Nixie 1.7.4: only while the page is in the window (Back hands a kept view model to a new page: WhileLoaded; Loaded below
+		// refreshes the panel)
+		FluentFin.Services.WhileLoaded.Listen(this, ViewModel, (_, e) =>
 		{
 			if (e.PropertyName is nameof(SeriesViewModel.Seasons) or nameof(SeriesViewModel.SelectedSeason) or nameof(SeriesViewModel.Dto)
 				or nameof(SeriesViewModel.PlayTarget) or nameof(SeriesViewModel.Episodes))
 			{
 				QueueRefresh();
 			}
-		};
+		});
 		SizeChanged += (_, e) => Layout(e.NewSize.Width);
 		Loaded += (_, _) =>
 		{

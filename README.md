@@ -36,7 +36,7 @@ What's new: [CHANGELOG.md](CHANGELOG.md).
       <a href="docs/screenshots/home-drive-in.webp">
         <img src="docs/screenshots/thumbs/home-drive-in.webp"
         alt="Home in the Drive-in theme: Charade on a drive-in screen at dusk under a striped sun, an Up next
-        marquee board with The Beverly Hillbillies, and Continue Watching below">
+        marquee board with The Beverly Hillbillies, and Continue watching below">
       </a><br><b>Drive-in</b>, the default
     </td>
     <td width="50%">
@@ -58,7 +58,7 @@ What's new: [CHANGELOG.md](CHANGELOG.md).
     <td width="50%">
       <a href="docs/screenshots/home-classic.webp">
         <img src="docs/screenshots/thumbs/home-classic.webp"
-        alt="Home in the Classic theme: The Beverly Hillbillies as the hero, with Continue Watching and Up next
+        alt="Home in the Classic theme: The Beverly Hillbillies as the hero, with Continue watching and Up next
         below">
       </a><br><b>Classic</b>
     </td>
@@ -122,8 +122,8 @@ Everything it does: [docs/FEATURES.md](docs/FEATURES.md). Every key: [docs/SHORT
     <td width="50%">
       <a href="docs/screenshots/collections.webp">
         <img src="docs/screenshots/thumbs/collections.webp"
-        alt="The Collections page: the server's collections, Blender open movies and Silent era, and Nixie's own,
-        such as Short films">
+        alt="The Collections page: the server's collections, Blender open movies and Silent era, and Nixie's own
+        picks, such as Under 90 minutes">
       </a><br>Collections
     </td>
     <td width="50%">

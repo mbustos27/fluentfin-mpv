@@ -67,7 +67,9 @@ public static class AppShortcuts
 	/// </summary>
 	public static AppShortcut? For(int virtualKey, bool control, bool shift, bool alt, bool inTextInput, bool repeat = false, bool ownsLetters = false)
 	{
-		if (inTextInput || (ownsLetters && !control && !alt && virtualKey is >= 0x41 and <= 0x5A))
+		// Nixie 1.7.5: the Back and Forward keys type nothing, so they step back and forward from a text box too. After a search
+		// the keyboard stays in the search box, and the Back key did nothing there (the back gate's two searches, Back)
+		if ((inTextInput && virtualKey is not (Keys.BrowserBack or Keys.BrowserForward)) || (ownsLetters && !control && !alt && virtualKey is >= 0x41 and <= 0x5A))
 		{
 			return null;
 		}
@@ -161,10 +163,10 @@ public static class ShortcutCatalog
 		]),
 		new("Home page",
 		[
-			new("N", "Go to the Next Up row (Enter plays)", ShortcutScope.Page),
-			new("C", "Go to the Continue Watching row (Enter plays)", ShortcutScope.Page),
+			new("N", "Go to the Up next row (Enter plays)", ShortcutScope.Page),
+			new("C", "Go to the Continue watching row (Enter plays)", ShortcutScope.Page),
 			// 1.5 (the button review's L3): it was only on the notice's tooltip
-			new("Ctrl+Z", "Undo the last removal from Continue Watching, while its notice shows", ShortcutScope.Page),
+			new("Ctrl+Z", "Undo the last removal from Continue watching, while its notice shows", ShortcutScope.Page),
 		]),
 		// Nixie 1.4.0: R refreshes; while you're typing a title, R is a letter; R titles: the A to Z bar
 		new("Library grids",

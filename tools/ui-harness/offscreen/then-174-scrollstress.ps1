@@ -102,8 +102,10 @@ function Ss-Page([string]$What) {
     Ss-Alive "$What's mixed bursts and keys"
 }
 
-Say "scroll stress: Drive-in? NIXIE_LAYOUT=$env:NIXIE_LAYOUT; $ssRounds rounds; maximised"
-[SsUi]::Maximize($script:hwnd, $script:ui.Id)
+# 1.7.5 (fx3): SS_SIZE=<w>x<h> runs it in a window of that size (1280x720); unset or 'max', maximised (2560 x 1392 here)
+$ssSize = if ($env:SS_SIZE -and $env:SS_SIZE -ne 'max') { @($env:SS_SIZE -split 'x' | ForEach-Object { [int]$_ }) } else { $null }
+Say "scroll stress: Drive-in? NIXIE_LAYOUT=$env:NIXIE_LAYOUT; $ssRounds rounds; $(if ($ssSize) { "$($ssSize[0]) x $($ssSize[1])" } else { 'maximised' })"
+if ($ssSize) { [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, $ssSize[0], $ssSize[1]) } else { [SsUi]::Maximize($script:hwnd, $script:ui.Id) }
 Start-Sleep -Milliseconds 1500
 $ssOk = $true
 
@@ -166,6 +168,19 @@ foreach ($ssFile in @(Get-ChildItem (Join-Path $DataDir 'Logs') -Filter 'log*.tx
 $ssUiFailed = @($ssLines | Where-Object { $_ -match '\[ui\] .* failed' })
 $ssFirst = @($ssLines | Where-Object { $_ -match '\[first-chance\]' })
 foreach ($l in ($ssFirst | Select-Object -First 6)) { Say "app: $l" }
+# 1.7.5 (fx3): each first-chance entry whole (its stack and the last things done in the window), the first 3, so the run's
+# own log says what threw where without the app's data folder
+$ssShown = 0
+for ($ssI = 0; $ssI -lt $ssLines.Count -and $ssShown -lt 3; $ssI++) {
+    if ($ssLines[$ssI] -notmatch '\[first-chance\]') { continue }
+    $ssShown++
+    # the first frames of its stack, then the line with the last things done in the window
+    for ($ssJ = $ssI + 1; $ssJ -lt $ssLines.Count -and $ssLines[$ssJ] -notmatch '^\S+ \S+ [+-]\d\d:\d\d \['; $ssJ++) {
+        if ($ssJ -le $ssI + 10 -or $ssLines[$ssJ] -match '^last in the window: ') { Say "app:   $($ssLines[$ssJ].Trim())" }
+    }
+}
+# 1.7.5 (fx3): what reached the app's last handlers (XAML's unhandled exception, an unhandled error), with the last UI action
+foreach ($l in @($ssLines | Where-Object { $_ -match '\[crash-trail\] (?!listening|UnhandledErrorDetected isn)' } | Select-Object -First 4)) { Say "app: $l" }
 Say "scroll stress: $ssParts parts; $ssJumpErrors UI Automation jumps refused; $($ssFirst.Count) first-chance lines; $($ssUiFailed.Count) [ui] failures"
 Check 'scroll stress: Nixie never crashed' $ssOk "$ssParts parts"
 Check 'scroll stress: no queued UI work failed ([ui] ... failed)' ($ssUiFailed.Count -eq 0) $(if ($ssUiFailed) { ($ssUiFailed | Select-Object -First 2) -join ' | ' } else { 'none' })

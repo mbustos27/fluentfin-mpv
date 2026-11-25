@@ -145,13 +145,14 @@ public sealed partial class CinematicPreviewStage : UserControl
 		BackdropTop.Source = picture;
 		if (picture is Microsoft.UI.Xaml.Media.Imaging.BitmapImage bitmap)
 		{
-			bitmap.ImageOpened += (_, _) =>
+			// 1.7.5 (fx3): nothing once the app is closing (a picture that arrives in the window's teardown)
+			bitmap.ImageOpened += UiDispatch.Routed("Cinematic's preview stage's backdrop", () =>
 			{
 				if (ReferenceEquals(BackdropTop.Source, bitmap))
 				{
 					Fade(BackdropTop, fade, () => { BackdropBottom.Source = bitmap; BackdropTop.Opacity = 0; });
 				}
-			};
+			});
 		}
 		else
 		{
@@ -231,7 +232,7 @@ public sealed partial class CinematicPreviewStage : UserControl
 		Storyboard.SetTargetProperty(animation, "Opacity");
 		var board = new Storyboard();
 		board.Children.Add(animation);
-		board.Completed += (_, _) => { target.Opacity = 1; done?.Invoke(); };
+		board.Completed += UiDispatch.Frame("Cinematic's preview stage's fade", () => { target.Opacity = 1; done?.Invoke(); }); // 1.7.5 (fx3)
 		board.Begin();
 	}
 

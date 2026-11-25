@@ -116,6 +116,20 @@ public sealed partial class LoginPage
 	/// <summary>1.1.4 (states): Enter in the username box goes on to the password (or signs in when one is there already).</summary>
 	private void UsernameBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
 	{
+		// 1.7.5 (the basics gate; switching back to a user): a saved user taken from the list (clicked, or Enter on it) signs in
+		// at once with their saved sign-in, as a start does (LoginViewModel.SignInAs): their saved password or their Quick Connect
+		// token, never as a typed password (the review's Major: a refused one went again at every pick, and was never forgotten)
+		if (args.ChosenSuggestion is SavedUser chosen)
+		{
+			if (SavedSignIns.CanSignIn(chosen))
+			{
+				PasswordBox.Password = "";
+				_ = ViewModel.SignInAs(chosen);
+			}
+
+			return;
+		}
+
 		if (args.ChosenSuggestion is not null)
 		{
 			return;
@@ -164,6 +178,8 @@ public sealed partial class LoginPage
 			return;
 		}
 
-		PasswordBox.Password = ViewModel.Unprotect(user.Password);
+		// 1.7.5: the name only; the saved sign-in is used as it is (LoginViewModel.Login: no password typed and a saved one), so a
+		// stale password typed for someone else doesn't go with this name, and a saved password is never sent as a typed one
+		PasswordBox.Password = "";
 	}
 }

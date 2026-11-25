@@ -6,6 +6,7 @@ using FluentFin.Dialogs;
 using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
 
 namespace FluentFin.Converters;
@@ -85,6 +86,22 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 	/// </summary>
 	public static Visibility CardMenuVisibility(BaseItemDto? dto) =>
 		dto is not null && Groups(dto, includePlay: true).Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+	/// <summary>
+	/// Nixie 1.7.5 (the basics gate's menus check): an item page's More options. Its menu leaves out Play and the toggles (they
+	/// are beside it), so for a user who isn't an administrator a series' or a season's has nothing (no video, no
+	/// administration): the button showed, and a click opened nothing. It shows only with something in it, as a card's does
+	/// (<see cref="CardMenuVisibility"/>). Every item header sets its More options through this (ItemHero, the themes').
+	/// </summary>
+	public static void ApplyPageMenu(Button more, BaseItemDto? dto)
+	{
+		var menu = PageMenuHasItems(dto) ? new JellyfinFlyoutConverter { IncludeToggles = false }.Convert(dto!, typeof(object), null!, "") as FlyoutBase : null;
+		more.Flyout = menu;
+		more.Visibility = menu is null ? Visibility.Collapsed : Visibility.Visible;
+	}
+
+	/// <summary>Whether an item page's More options has anything in it (no Play, no toggles) for the user signed in.</summary>
+	public static bool PageMenuHasItems(BaseItemDto? dto) => dto is not null && Groups(dto, includePlay: false, includeToggles: false).Count > 0;
 
 	// Seaglass 1.1.4: a card of Home's Continue Watching row (its item record is registered by the row) offers to take it out
 	private static IReadOnlyList<IReadOnlyList<ItemMenuEntry>> Groups(BaseItemDto dto, bool includePlay, bool includeToggles = true) =>

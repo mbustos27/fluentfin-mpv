@@ -22,4 +22,13 @@ public static class HeroLayout
 		windowHeight > 0 ? Math.Clamp(Math.Round(windowHeight * share), Min, Max) : Max;
 
 	public static bool IsCompact(double heroHeight) => heroHeight < CompactBelow;
+
+	/// <summary>
+	/// Nixie 1.7.5 (the gate's g3, at 1280 x 720): the hero grows to hold its words. A short window's hero (60 % of 720: 432
+	/// px) was shorter than an episode's two-line title with its series' logo, the actions and the overview, and the words,
+	/// held at its bottom, ran up under the top bar: the way up (the crumbs) out of view and the logo cut by the bar.
+	/// <paramref name="words"/> is their height with their margins; <paramref name="top"/> what the hero keeps clear at its
+	/// top (the bar its artwork runs under).
+	/// </summary>
+	public static double Fit(double height, double words, double top) => Math.Max(height, Math.Ceiling(words + top));
 }

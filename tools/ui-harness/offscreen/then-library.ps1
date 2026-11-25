@@ -170,7 +170,7 @@ Check 'library: End then Tab at once leaves the grid (the scroll''s end does not
 
 # --- the See all grid (Continue Watching): the same model; nothing above it in the page, so Up stays on the card
 Open-Nav 'Home'
-$seeAll = Wait-Ui -Name 'See all Continue Watching' -Type 'Hyperlink' -Seconds 15
+$seeAll = Wait-Ui -Name 'See all Continue watching' -Type 'Hyperlink' -Seconds 15
 Check 'see all: Continue Watching has its See all' ([bool]$seeAll)
 if ($seeAll) {
     Invoke-Element $seeAll | Out-Null
@@ -179,7 +179,7 @@ if ($seeAll) {
     $saCard = Find-Ui -Name 'Electric Ravenmoor' -Type 'ListItem' -Contains
     if ($saCard) { [void][OffscreenUi]::SetFocus($saCard); Start-Sleep -Milliseconds 600 }
     $sa1 = Info
-    Check 'see all: the first card says "1 of n" in a list named Continue Watching' ($sa1 -and $sa1.Pos -eq 1 -and $sa1.Size -ge 2 -and $sa1.ListType -eq 'List' -and $sa1.ListName -eq 'Continue Watching') ("$(Describe $sa1); $($sa1.ListType) '$($sa1.ListName)'")
+    Check 'see all: the first card says "1 of n" in a list named Continue Watching' ($sa1 -and $sa1.Pos -eq 1 -and $sa1.Size -ge 2 -and $sa1.ListType -eq 'List' -and $sa1.ListName -eq 'Continue watching') ("$(Describe $sa1); $($sa1.ListType) '$($sa1.ListName)'")
     Press 0x27   # Right
     Check 'see all: Right moves to the next card' ((Info).Pos -eq 2)
     Press 0x26 900   # Up from the first line: nothing above in the page

@@ -32,6 +32,21 @@ public partial class ServerPower(IJellyfinClient jellyfinClient) : ObservableObj
 	/// <summary>A restart is under way, or the server was shut down: nothing more is sent to it from here.</summary>
 	public bool IsBusy => Notice is { Busy: true } or { State: ServerPowerState.ShutDown };
 
+	/// <summary>
+	/// 1.7.5 (the 1.6.1 streams): why the server didn't take a request from the administration pages: an ended sign-in says so
+	/// (the server answered 401 and no longer takes this sign-in, <see cref="SignInState.Ended"/>), with Sign in again, rather
+	/// than "the server didn't accept the request"; anything else <paramref name="otherwise"/>.
+	/// </summary>
+	public static string NotTaken(string otherwise) => SignInState.Ended
+		? $"Your sign-in to {LoadMessages.ServerName()} ended, so nothing changed. {SignInAgainHere} Then try again."
+		: otherwise;
+
+	/// <summary>
+	/// 1.7.5 (the review): how to sign in again from the administration pages, which have no Sign in again button of their own
+	/// (only a page's load state and the player have one): the account menu's Switch user, there on every page.
+	/// </summary>
+	public const string SignInAgainHere = "Sign in again with Switch user in the account menu.";
+
 	/// <summary>The notice when it is about <paramref name="serverId"/> (a dashboard of another server shows none).</summary>
 	public ServerNotice? NoticeFor(string? serverId) => serverId == ServerId ? Notice : null;
 
@@ -51,13 +66,16 @@ public partial class ServerPower(IJellyfinClient jellyfinClient) : ObservableObj
 		Notice = new ServerNotice(ServerPowerState.Restarting, $"Restarting {serverName}…", "Playback on every device stops. This page goes on once the server answers again.", NoticeKind.Info, Busy: true);
 		if (!await jellyfinClient.Restart())
 		{
-			Notice = new ServerNotice(ServerPowerState.Failed, $"{serverName} didn't restart", "The server didn't accept the request. Nothing changed.", NoticeKind.Error);
+			Notice = new ServerNotice(ServerPowerState.Failed, $"{serverName} didn't restart", NotTaken("The server didn't accept the request. Nothing changed."), NoticeKind.Error);
 			return;
 		}
 
 		Notice = await WaitUntilBack()
 			? new ServerNotice(ServerPowerState.Back, $"{serverName} restarted", "It is answering again.", NoticeKind.Success)
-			: new ServerNotice(ServerPowerState.NotBack, $"{serverName} hasn't come back yet", "It may still be starting. If it doesn't, start it again on its computer.", NoticeKind.Warning);
+			: SignInState.Ended
+				// 1.7.5: the sign-in ended while it restarted: whether it is back can't be asked (it said "start it again on its computer")
+				? new ServerNotice(ServerPowerState.NotBack, $"{serverName} was restarting", $"Your sign-in to {serverName} ended, so {AppIdentity.Name} can't tell whether it is back. {SignInAgainHere}", NoticeKind.Warning)
+				: new ServerNotice(ServerPowerState.NotBack, $"{serverName} hasn't come back yet", "It may still be starting. If it doesn't, start it again on its computer.", NoticeKind.Warning);
 	}
 
 	/// <summary>Sends the shut down (once); the server then stays off, and nothing more is sent to it from here.</summary>
@@ -72,7 +90,7 @@ public partial class ServerPower(IJellyfinClient jellyfinClient) : ObservableObj
 		Notice = new ServerNotice(ServerPowerState.Restarting, $"Shutting down {serverName}…", "Playback on every device stops.", NoticeKind.Info, Busy: true);
 		Notice = await jellyfinClient.Shutdown()
 			? new ServerNotice(ServerPowerState.ShutDown, $"{serverName} is shutting down", "It stays off until someone starts it again on its computer.", NoticeKind.Warning)
-			: new ServerNotice(ServerPowerState.Failed, $"{serverName} didn't shut down", "The server didn't accept the request. Nothing changed.", NoticeKind.Error);
+			: new ServerNotice(ServerPowerState.Failed, $"{serverName} didn't shut down", NotTaken("The server didn't accept the request. Nothing changed."), NoticeKind.Error);
 	}
 
 	/// <summary>Clears the notice (its bar was closed); not while a restart is under way, nor once the server is shut down.</summary>
@@ -95,6 +113,11 @@ public partial class ServerPower(IJellyfinClient jellyfinClient) : ObservableObj
 		{
 			await Delay(PollEvery);
 			var info = await jellyfinClient.GetSystemInfo();
+			if (SignInState.Ended)
+			{
+				return false; // 1.7.5: nothing more can be asked of it (the notice says why)
+			}
+
 			if (info is null || info.IsShuttingDown == true)
 			{
 				sawDown = true;

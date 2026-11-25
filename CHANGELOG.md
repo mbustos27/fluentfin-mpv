@@ -1,5 +1,111 @@
 # Changelog
 
+## 1.7.5
+
+Back is instant, every fix left from earlier releases, and the basics gate on every release build.
+
+- **Back is instant.** Going back to a page you just left shows it as it was, at once, with no loading: a collection
+  you left for one of its films, a playlist, a Made by Nixie collection, a library, a show, a season, a film, an
+  episode, search results, a person's titles, Collections and Home. Its items, how far down it was, the card you left
+  from, and a collection's Order and Hide watched are as you left them.
+  - A title you marked watched or a favourite meanwhile shows so. The page asks the server behind it only when
+    something may have changed, and search results that may be out of date are searched again behind them. A library
+    isn't asked again (it would mean reading all of it): R does that.
+  - A big library left before all its titles came reads on from where it stopped.
+  - Forward shows the page as it was too. R still loads a page again.
+  - A film page and its "More like this" row no longer stay in memory after Back or after playback.
+- **The library index reads less:**
+  - A library that changes every day no longer means reading every title at the start. Nixie asks only for the titles
+    the server saved since its last read, one request a library, and reads every title as before when that can't
+    explain the change.
+  - Played episodes that keep failing no longer hold back a library's change for up to a day.
+  - An upgrade read that stopped is tried again after an hour, not only at the next start.
+  - The reading line says "titles" while its total is only an estimate.
+  - Pinned Made by Nixie collections and a library's filter strip are made with less work, and the saved index is
+    smaller (about 1.8 MB less on 34,000 titles).
+  - A trending list turned off is never kept, even one that was arriving as you turned it off. An outside list whose
+    titles changed but not their number is picked up without a restart.
+- **Signing in:**
+  - **Switch user keeps a remembered sign-in.** Switching back to a Quick Connect user needs no new code, and a
+    remembered user picked from the list signs in at once. Only Sign out forgets a saved sign-in.
+  - **The place after Sign in again.** If the sign-in ended while you watched, the server refused where you stopped.
+    Nixie now sends it once you sign in again, unless you've played or marked that title since.
+  - **Restart to update stays one device.** A Nixie that opened while the last one was still closing (Restart to
+    update, or a close and a quick start) signed in as a second device, which a server that lets in only known devices
+    refuses. A damaged device file is repaired.
+  - **An ended sign-in is said.** Watched and Favourite say why they sprang back: the sign-in ended (and how to sign in
+    again), the server had a problem, or this PC's connection. The administration pages' notices say so too.
+- **Errors name the right side.** A page answered by a Wi-Fi sign-in page or a proxy reads as this PC's connection, not
+  as Nixie's fault. A server error that said to check this PC's connection now says the server had a problem, and that
+  its owner may need to know.
+- **Menus:**
+  - **More options** on a show's or a season's page did nothing for an account that isn't an administrator. It shows
+    now only when it has something in it.
+  - Editorial: Escape on an episode's menu gives the keyboard back to that episode, not to the one up next.
+  - Save as playlist no longer takes another user's public playlist of the same name for one of yours.
+- **Back and R work while the Undo notice shows.** After a season or a show was marked watched, Back, R and the
+  window's other keys did nothing for the notice's 10 seconds.
+- **Changing the theme can't close Nixie.** Leaving Drive-in with one of its film or show pages open could end it.
+- **Pages:**
+  - In a 1280 x 720 window an episode's page opens at its top, with its way up (the show and the season) in view. It
+    opened scrolled, with them under the top bar.
+  - A film that couldn't load shows only the message and Try again. Editorial showed Play and an empty Audio list
+    behind it.
+  - Drive-in: an item page's board keeps its top lights below the top bar in windows under 1400 px wide.
+  - **Home's rows are named in sentence case,** "Continue watching", as the rest of the app, and so are the menu's
+    "Remove from Continue watching" and its Settings.
+  - "With <name>" lists every show a person was in, past their first 200 episodes. It shows the first page at once,
+    reads the rest behind it, and says "or more" only where some may be missing.
+  - The Collections page opened from Libraries keeps trying longer, on a busy PC, to give the keyboard to its first
+    tile.
+  - "Nixie couldn't finish reading…" shows only once the rows it read are on the page.
+- **Skipping:** a skip rule that took the place of the server's intro or credits still says "Skip intro" or "Skip
+  credits" after you add, confirm or forget another rule mid-episode (it said "Skip extra"), and forgetting it brings
+  the server's own back at once. Skip marks a newer Nixie saved are kept when this one saves.
+- **When something goes wrong,** Nixie's log now holds the last things done in the window before a crash (keys by
+  name only, never what you type), and each step of a slow close. Pictures and fades that arrive at the close no
+  longer touch the closing window.
+- **The basics gate.** One command, `tools\gate\run-gate.ps1`, runs every basic path off-screen in all four themes, at
+  1280 x 720 and maximised, and fails the release build on any failure:
+  - each sign-in method across a close, a crash and an update; Switch user, Sign out, a wrong password and a sign-in
+    ended on the server;
+  - two servers added, switched and removed;
+  - every menu by mouse, keyboard and gamepad, each item doing only what it says;
+  - every row to its last card, the top bar, the way up, search, and each item page's buttons;
+  - playback and the player's controls after each interruption; Settings across a restart; minimise, offline and
+    quick restarts.
+
+  It runs against a test server of real shape: seasons of 13 and 24 episodes, long names, a cast of 48 and a library
+  of 5,000. Its checks fail on 1.7.3 where 1.7.4's fixes live, and it found the fixes above for Switch user, More
+  options, the Undo notice, the theme switch, a film that couldn't load and the way up at 1280 x 720.
+
+**Verified**
+
+- Eight streams: the four that fixed things were each reviewed as they merged, and the gate's own fixes were reviewed
+  together after. Every Blocker and Major the reviews found was fixed before the build, among them Back showing one
+  library's title over another's cards and the place after Sign in again sent hours late. Each fix has a test that
+  fails without it.
+- Back, off-screen in all four themes with every server answer held back 2.5 s: every page back within 1.2 s, with its titles, scroll and card. Fifty Backs between a
+  show and an episode keep two pages in memory, not one more each time.
+- The index's change read on a test Jellyfin with 25,736 films: 0.2 s in 2 requests, against 9.5 s in 28 for every
+  title. The place after Sign in again and Save as playlist's check on our test servers (Jellyfin 10.11 and 12.4),
+  and the trending lists through Nixie's own requests to Trakt and TMDb.
+- The basics gate, its first run on a release package: 55 of 74 jobs, in 205 min on a busy PC. It found one bug,
+  fixed before this build (a season page kept for Back showed an episode's old progress after playback), and five
+  checks of its own that were wrong, fixed. On this package every job that failed ran again: menus, the top bar,
+  playback and lifecycle passed in all four themes; Back passed 133 of 140 cells, and in the 7 others the app showed
+  the page in 4 to 33 ms while the check read it slowly on a loaded PC. The rows at 2560 × 1392 didn't run (the large
+  monitor kept dropping off); every other size passed.
+- The release build: Core 5,724 tests passed; UI 1,846 of 1,847 in the full run, the other passed on its own;
+  the backend's 571. The package's own checks: 142, none failed. Windows Defender: no threats in the folder, the
+  installer or the zip.
+- The upgrade, in Windows Sandbox as a standard user: <Sandbox>.
+
+**For a hand check** (off-screen runs can't do these): a display at 150 % scale, Windows' text size at 125 % and 150 %
+on tiles, a real right-click on cards and pages, and a precision touchpad's sideways swipe on a row.
+
+**Known issue:** a Narrator scroll of a row (not the wheel) moves the keyboard to the page's first stop.
+
 ## 1.7.4
 
 A basics release: what a friend found in one evening of using Nixie, and the ways in and back around it.

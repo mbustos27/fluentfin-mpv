@@ -119,6 +119,35 @@ public sealed class LiveIndexTests
 			};
 			Assert.False(page.IsReadingIndex);
 			again.Dispose();
+
+			// 1.7.5 (fx1, BH-171-m5): a library change read as the titles each library saved since the last read (MinDateLastSaved;
+			// nothing added here: what that read costs when the check finds a change), against every title above. The review of
+			// 1.7.5: the server honours MinDateLastSaved (every title saved since 1970, none since tomorrow)
+			var views = (await client.GetUserViewsOrNull())!.Where(v => JellyfinClient.IndexKinds(v) is not null).ToList();
+			var biggest = views.MaxBy(v => saved.Entries.Count(x => x.InLibrary(v.Id!.Value)))!;
+			var all = await client.GetLibraryIndexPageSavedSince(biggest, DateTimeOffset.UnixEpoch, 0, 1, true, CancellationToken.None);
+			var none = await client.GetLibraryIndexPageSavedSince(biggest, DateTimeOffset.UtcNow.AddDays(1), 0, 1, true, CancellationToken.None);
+			var lately = await client.GetLibraryIndexPageSavedSince(biggest, saved.ReadAt - IndexRead.SavedSinceMargin, 0, 1, true, CancellationToken.None);
+			Assert.Equal(saved.Entries.Count(x => x.InLibrary(biggest.Id!.Value)), all?.TotalRecordCount);
+			Assert.Equal(0, none?.TotalRecordCount);
+			var addedLog = new CoreListLogger<LibraryIndex>();
+			var count = IndexRead.CountOf(saved.Check);
+			watch.Restart();
+			var (merged, why) = await new IndexRead(client, TimeProvider.System, addedLog).AddedAsync(saved, count, count, saved.Check!, CancellationToken.None);
+			summary["addedSince"] = new JsonObject
+			{
+				["ms"] = watch.ElapsedMilliseconds,
+				["libraries"] = views.Count,
+				["savedSince1970"] = all?.TotalRecordCount,
+				["savedSinceTomorrow"] = none?.TotalRecordCount,
+				["savedSinceTheReadLessADay"] = lately?.TotalRecordCount,
+				["titles"] = merged?.Entries.Count,
+				["why"] = why,
+				["everyTitleMs"] = titlesIn,
+				["log"] = Lines(addedLog),
+			};
+			Assert.NotNull(merged);
+			Assert.Equal(saved.Entries.Count, merged!.Entries.Count);
 		}
 		finally
 		{
@@ -156,7 +185,9 @@ public sealed class LiveIndexTests
 		var user = JsonNode.Parse(await File.ReadAllTextAsync(file))!["user"]!;
 		using var request = new HttpRequestMessage(HttpMethod.Post, "/Users/AuthenticateByName")
 		{
-			Content = JsonContent.Create(new { Username = (string?)user["username"], Pw = (string?)user["password"] }),
+			// 1.7.5: the names as Jellyfin's DTO has them (JsonContent camel-cased them), with a length (JsonContent's is chunked):
+			// the fake server's big shape reads it too
+			Content = new StringContent(new JsonObject { ["Username"] = (string?)user["username"], ["Pw"] = (string?)user["password"] }.ToJsonString(), System.Text.Encoding.UTF8, "application/json"),
 		};
 		request.Headers.TryAddWithoutValidation("Authorization", Client);
 		using var answer = await http.SendAsync(request);

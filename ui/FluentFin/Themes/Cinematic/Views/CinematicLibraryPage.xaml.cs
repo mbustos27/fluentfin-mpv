@@ -25,13 +25,17 @@ public sealed partial class CinematicLibraryPage : Page
 	{
 		CinematicResources.Ensure();
 		InitializeComponent();
+		// Nixie 1.7.5: kept whole by the frame for Back to this very page (its grid as it was, at once); a new visit makes it anew
+		// (NavigationService.KeptWhole)
+		NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Enabled;
 
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
 		_grid.ForwardWheel(LibraryRoot);
 		_host = new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters);
 		// Nixie 1.4.0 (item 15): the first still's time ([perf]) and the placeholders' cells against the grid's, in the log
 		LibraryProbe.Attach(this, Placeholders, GridRepeater, i => LibraryProbe.SlotOf(Placeholders, i, this), i => LibraryProbe.SlotOf(GridRepeater, i, this), logFirstCard: true);
-		ViewModel.PropertyChanged += (_, e) =>
+		// Nixie 1.7.4: only while the page is shown (Back hands a kept view model to a new page: WhileLoaded)
+		FluentFin.Services.WhileLoaded.Listen(this, ViewModel, (_, e) =>
 		{
 			switch (e.PropertyName)
 			{
@@ -55,12 +59,15 @@ public sealed partial class CinematicLibraryPage : Page
 					Layout();
 					break;
 			}
-		};
+		});
 
 		// Nixie 1.3.1 (the UX review's C-B1): the stage shows the still the pointer rests on, else the one the keyboard is on in
 		// the grid, else the first one in view, and it follows every sort, filter, section, load and scroll; with nothing
 		// left to show it goes, Play with it (StageTarget).
-		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, _) => QueueStage();
+		// Nixie 1.7.4: only while the page is shown (WhileLoaded)
+		var items = (System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items;
+		System.Collections.Specialized.NotifyCollectionChangedEventHandler itemsChanged = (_, _) => QueueStage();
+		FluentFin.Services.WhileLoaded.Hold(this, () => items.CollectionChanged += itemsChanged, () => items.CollectionChanged -= itemsChanged);
 		GridRepeater.GotFocus += (_, _) => QueueStage();
 		GridRepeater.LostFocus += (_, _) => QueueStage();
 		GridRepeater.AddHandler(PointerEnteredEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>

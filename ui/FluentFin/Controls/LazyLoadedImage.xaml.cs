@@ -15,11 +15,12 @@ public sealed partial class LazyLoadedImage : UserControl
 	{
 		InitializeComponent();
 
-		ImageFadeIn.Completed += (object sender, object e) =>
+		// 1.7.5 (fx3): a fade that ends in the window's teardown sets nothing there
+		ImageFadeIn.Completed += Services.UiDispatch.Frame("a picture's fade in", () =>
 		{
 			EnableBlurHash = false;
 			BlurHashImageSource = null;
-		};
+		});
 	}
 
 	[GeneratedDependencyProperty]
@@ -36,6 +37,11 @@ public sealed partial class LazyLoadedImage : UserControl
 
 	private void ImageOpened(object sender, RoutedEventArgs e)
 	{
+		if (App.IsClosing)
+		{
+			return; // 1.7.5 (fx3): nothing in the window's teardown (a picture that arrives there)
+		}
+
 		ImageFadeIn.Begin();
 	}
 }

@@ -22,9 +22,10 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 								   HomeCache homeCache,
 								   ILocalSettingsService? localSettings = null,
 								   TimeProvider? time = null,
-								   RecentPlays? recentPlays = null) : ObservableObject, INavigationAware, IContinueWatchingRow
+								   RecentPlays? recentPlays = null) : ObservableObject, INavigationAware, IContinueWatchingRow, IKeptOnBack
 {
-	private readonly CompositeDisposable _disposable = [];
+	// (Nixie 1.7.4: made again when the page comes back: Back shows a kept view model, OnNavigatedFrom disposed the last one)
+	private CompositeDisposable _disposable = [];
 	private readonly TimeProvider _time = time ?? TimeProvider.System;
 
 	// Seaglass 1.1.4: the server's last answers for Continue Watching and Next Up, less what was taken out here: the rows
@@ -130,7 +131,34 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		ListenToUserDataChanges();
 		ListenToPlays();
 
-		await State.RunAsync(LoadSections);
+		await State.RunAsync(() => LoadSections());
+	}
+
+	// ---- Nixie 1.7.4: Back shows Home as it was (IKeptOnBack) ----------------------------------------------------------------
+
+	public bool CanKeep => State.Status is LoadStatus.Loaded or LoadStatus.Empty && !IsLoading;
+
+	/// <summary>
+	/// Back or Forward shows Home as it was: its rows, its hero (the page puts the scroll and the card back). It listens again to
+	/// the server's watch states and to the player's plays (one that ended meanwhile shows at once); when something may have
+	/// changed since, its sections are refreshed behind, as the saved page is (the same cards stay where nothing changed).
+	/// </summary>
+	public async Task Returned(object parameter, bool stale)
+	{
+		// the last visit's notice ("Removed ... · Undo") was for that visit: it goes (the removal stays), as its time ran out
+		if (Notice is { } notice)
+		{
+			DismissNotice(notice);
+		}
+
+		_shown = true;
+		_disposable = [];
+		ListenToUserDataChanges();
+		ListenToPlays();
+		if (stale)
+		{
+			await State.RefreshBehindAsync(() => LoadSections(behind: true));
+		}
 	}
 
 	/// <summary>
@@ -141,9 +169,11 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	/// answers a failed request with null; a failed "Recently added" row only drops its placeholder (or keeps its cached
 	/// cards), so the rows count as content, not as failures.
 	/// </summary>
-	private async Task<LoadOutcome> LoadSections()
+	/// <param name="behind">Nixie 1.7.4: behind a kept Home Back showed: what it shows stays (no saved page shown over it, no
+	/// placeholders), and the sections are asked again when the saved page is not fresh, as on a first load.</param>
+	private async Task<LoadOutcome> LoadSections(bool behind = false)
 	{
-		var retry = _loads++ > 0;
+		var retry = !behind && _loads++ > 0;
 		// fluentfin-mpv: the session this load is for, read once: the page is saved under it, and only if it is still the
 		// signed-in one when the answers are in (a load that ends after a sign-out and someone else's sign-in is nobody's)
 		var serverUrl = JellyfinClient.BaseUrl;
@@ -152,7 +182,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		try
 		{
 			var cached = await homeCache.Get(serverUrl, userId);
-			if (!retry && cached.Snapshot is { } snapshot)
+			if (!retry && !behind && cached.Snapshot is { } snapshot)
 			{
 				Show(snapshot);
 			}
@@ -735,7 +765,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		ContinueItems.Remove(item);
 		_continueAnswer = [.. _continueAnswer.Where(x => x.Id != id)];
 		ShowNextUp();
-		Notice = new HomeNotice($"Removed {ContinueWatchingRules.NameOf(item.Dto)} from Continue Watching", removal);
+		Notice = new HomeNotice($"Removed {ContinueWatchingRules.NameOf(item.Dto)} from Continue watching", removal);
 
 		removal.Done = JellyfinClient.SetResumePosition(id, 0);
 		var ok = await removal.Done;

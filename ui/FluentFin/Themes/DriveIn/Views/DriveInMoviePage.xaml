@@ -30,7 +30,7 @@
     </Page.Resources>
 
     <Grid>
-        <ScrollViewer x:Name="PageContent">
+        <ScrollViewer x:Name="PageContent" Visibility="{x:Bind c:ItemRowConverters.ItemContent(ViewModel.State.Status), Mode=OneWay}">
             <StackPanel>
                 <dc:ItemStage x:Name="Stage" Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" LeftOf="{x:Bind ViewModel.Dto, Mode=OneWay}">
                     <dc:ItemStage.PrimaryActions>

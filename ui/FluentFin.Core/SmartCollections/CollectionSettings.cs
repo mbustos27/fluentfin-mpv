@@ -201,18 +201,9 @@ public static class RetiredCollections
 
 		try
 		{
-			var gone = 0;
-			foreach (var pin in (await store.FavoritesAsync().ConfigureAwait(false)).Where(IsGone).ToList())
-			{
-				await store.SetFavorite(pin, false).ConfigureAwait(false);
-				gone++;
-			}
-
-			foreach (var saved in (await store.SavedAsync().ConfigureAwait(false)).Where(x => IsGone(x.Filter?.PresetId)).ToList())
-			{
-				gone += await store.RemoveSaved(saved.Id).ConfigureAwait(false) ? 1 : 0;
-			}
-
+			// 1.7.5 (fx1; M2's review of 1.7.3): one locked store call, the file written once; Home's call and the Collections
+			// page's at the same time count each pin once between them, so the line is said once
+			var gone = await store.RemoveWhere(IsGone).ConfigureAwait(false);
 			if (gone > 0)
 			{
 				log?.LogInformation("Made by Nixie: {Count} pinned or saved collections of directors, actors, studios or networks were removed (Nixie no longer makes them)", gone);

@@ -38,5 +38,10 @@ $noAgent = Get-Status '' ''
 "  without a User-Agent: $noAgent (403 expected)"
 $unknown = Get-Status 'Nixie/0.0.1' '1999-01-01'
 "  with API version 1999-01-01: $unknown (400, or 200 from GitHub's lenient servers)"
+# 1.7.5 (stream B's review): a 200 passes, but not silently: GitHub may be moving to taking any version, and the fake
+# release's 400 would then be stricter than the real one
+if ($unknown -eq 200) {
+    Write-Warning "GitHub answered 200 to an API version it doesn't know (1999-01-01). Still a pass (its servers differ since 2026-11-22); if it keeps answering 200, the fake release's 400 is stricter than GitHub."
+}
 if (-not $passed -or $noAgent -ne 403 -or $unknown -notin @(400, 200)) { 'FAILED'; exit 1 }
 'PASSED'

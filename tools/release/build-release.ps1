@@ -41,7 +41,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '1.7.4',
+    [string]$Version = '1.7.5',
     [string]$SourceUrl,
     [switch]$Reuse,
     [switch]$SkipTests,  # only to try the packaging itself; a release runs them
@@ -295,8 +295,9 @@ if ($SkipTests) {
 else {
     Step 'tests (UI suites, backend bridge tests)'
     # 1.7.0: the opt-in live check of TMDb's export files and Wikidata stays out of a release's run (it asks the real hosts);
-    # 1.7.1: so does the opt-in timing of the library index against a local Jellyfin (LiveIndex, NIXIE_LIVE_INDEX)
-    Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Core.Tests') @() -Exclude 'Category!=LiveOutside&Category!=LiveIndex'
+    # 1.7.1: so does the opt-in timing of the library index against a local Jellyfin (LiveIndex, NIXIE_LIVE_INDEX); 1.7.5: and
+    # the opt-in live check of Trakt and TMDb trending through the app's own requests (LiveTrending, NIXIE_LIVE_TRENDING)
+    Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Core.Tests') @() -Exclude 'Category!=LiveOutside&Category!=LiveIndex&Category!=LiveTrending'
     # the libmpv probe tests run against the release's libmpv folder (bug hunt m2: without it they were skipped)
     $savedRequire = $env:FLUENTFIN_MPV_REQUIRE_LIBMPV
     $env:FLUENTFIN_MPV_REQUIRE_LIBMPV = '1'

@@ -57,7 +57,7 @@ function CwFocused {
 }
 # the cards of the Continue Watching row, in order (the row is a list named after it; its cards are list items)
 function CwCards {
-    $list = Find-Ui -Name 'Continue Watching' -Type 'List'
+    $list = Find-Ui -Name 'Continue watching' -Type 'List'
     if (-not $list) { return @() }
     $cond = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
     @($list.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond) | ForEach-Object { $_.Current.Name })
@@ -68,7 +68,7 @@ function CwOpenMenu([string]$CardName) {
     if (-not $card) { return $null }
     [void][OffscreenUi]::SetFocus($card); Start-Sleep -Milliseconds 500
     Key 0x5D   # the menu key (Shift+F10 cannot be posted: WinUI reads the real Shift)
-    Wait-Ui -Name 'Remove from Continue Watching' -Type 'MenuItem' -Seconds 4
+    Wait-Ui -Name 'Remove from Continue watching' -Type 'MenuItem' -Seconds 4
 }
 
 [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
@@ -91,7 +91,7 @@ if ($entry) { [void](Invoke-Element $entry) }
 # 1080-pixel one brings in the next card when one goes (1.2.0)
 $gone = Wait-Until { $c = CwCards; if ($c -notcontains $target -and $c.Count -ge 2 -and $c[0] -eq $cwBefore[0] -and $c[1] -eq $cwBefore[2]) { $c } } -Seconds 5 -PollMs 100
 Check 'continue: the card leaves the row at once' ([bool]$gone) (($gone | Select-Object -First 3) -join ' | ')
-$notice = Wait-Ui -Name 'from Continue Watching' -Type 'Text' -Contains -Seconds 3
+$notice = Wait-Ui -Name 'from Continue watching' -Type 'Text' -Contains -Seconds 3
 $undo = Find-Ui -Name 'Undo' -Type 'Button'
 Check 'continue: a notice says so, with Undo' ($notice -and $undo) $(if ($notice) { $notice.Current.Name })
 Start-Sleep -Milliseconds 700
@@ -106,7 +106,7 @@ if ($undo) { [void](Invoke-Element $undo) }
 $back = Wait-Until { $c = CwCards; if ($c.Count -ge 3 -and $c[0] -eq $cwBefore[0] -and $c[1] -eq $target -and $c[2] -eq $cwBefore[2]) { $c } } -Seconds 5 -PollMs 100
 Check 'continue: Undo puts the card back where it was' ($back -and $back[1] -eq $target) (($back | Select-Object -First 3) -join ' | ')
 Check 'continue: ... and its resume point (a second POST)' ([bool](Wait-Until { if ((CwUserDataPosts $t0) -ge 2) { $true } } -Seconds 5))
-Check 'continue: ... and the notice goes, its Undo too' ([bool](Wait-Until { -not (Find-Ui -Name 'from Continue Watching' -Type 'Text' -Contains) -and -not (Find-Ui -Name 'Undo' -Type 'Button') } -Seconds 3))
+Check 'continue: ... and the notice goes, its Undo too' ([bool](Wait-Until { -not (Find-Ui -Name 'from Continue watching' -Type 'Text' -Contains) -and -not (Find-Ui -Name 'Undo' -Type 'Button') } -Seconds 3))
 Start-Sleep -Milliseconds 500
 $f = CwFocused
 Check 'continue: ... and the keyboard is on the card that came back (Undo had it)' ($f -and $f.Name -eq $target) ("{0} [{1}]" -f $f.Name, $f.Class)
@@ -119,7 +119,7 @@ if ($movieCard) {
     Key 0x5D
     $any = Wait-Ui -Name 'Add to favorites' -Type 'MenuItem' -Seconds 4
     if (-not $any) { $any = Find-Ui -Name 'Remove from favorites' -Type 'MenuItem' }
-    Check 'continue: a card of another row has a menu without "Remove from Continue Watching"' ($any -and -not (Find-Ui -Name 'Remove from Continue Watching' -Type 'MenuItem')) $fixture.movie.name
+    Check 'continue: a card of another row has a menu without "Remove from Continue Watching"' ($any -and -not (Find-Ui -Name 'Remove from Continue watching' -Type 'MenuItem')) $fixture.movie.name
     Key 0x1B; Start-Sleep -Milliseconds 500
 }
 
@@ -130,7 +130,7 @@ $entry2 = CwOpenMenu $target
 if ($entry2) { [void](Invoke-Element $entry2) }
 Start-Sleep -Milliseconds 800
 CwShot 'cw-5-removed-again'
-$expired = Wait-Until { -not (Find-Ui -Name 'from Continue Watching' -Type 'Text' -Contains) } -Seconds 16 -PollMs 500
+$expired = Wait-Until { -not (Find-Ui -Name 'from Continue watching' -Type 'Text' -Contains) } -Seconds 16 -PollMs 500
 Check 'continue: the notice goes by itself after about ten seconds' ([bool]$expired)
 $after = CwCards
 Check 'continue: ... and the card stays out of the row' ($after -notcontains $target -and $after.Count -ge 2 -and $after[0] -eq $cwBefore[0] -and $after[1] -eq $cwBefore[2]) (($after | Select-Object -First 3) -join ' | ')

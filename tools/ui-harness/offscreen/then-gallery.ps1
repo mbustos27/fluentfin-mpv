@@ -1,7 +1,7 @@
 # repo polish: the README's screenshots, off-screen and silent, against the showcase library (FAKESERVER_SHOWCASE,
 # tools\ui-harness\fakeserver\showcase.py). Run by tools\ui-harness\gallery.ps1; by hand:
 #   $env:FAKESERVER_SHOWCASE='<manifest folder>'; $env:NIXIE_LAYOUT='<DriveIn|Cinematic|Editorial|Classic>'
-#   $env:GALLERY_PART='home' (or 'detail')
+#   $env:GALLERY_PART='home' (or 'detail', or 'collections': the Collections page alone)
 #   run-offscreen.ps1 -DataDir <scratch> -Out <scratch> -Script wait:2 -NoA11y -Then offscreen\then-gallery.ps1
 # Dot-sourced by drive.ps1 on Home after the sign-in. The window is 1920 x 1080. Shots: <Out>\shots\NN-gallery-<what>.png
 #   home:   Home at the top of the page, once its pictures have landed.
@@ -58,6 +58,16 @@ if ($glShowcase.on) {
     Check "gallery $glTheme | the showcase manifest has no problems" (@($glShowcase.problems).Count -eq 0) (@($glShowcase.problems) -join '; ')
 }
 
+# the Collections page from its tab, at its top, its pictures in (1.7.5: also a part of its own, GALLERY_PART=collections)
+function GL-Collections {
+    Open-Nav 'Collections'
+    Check "gallery $glTheme | the Collections tab opens the Collections page" ([bool](Wait-Ui -Id 'TitleText' -Name 'Collections' -OffscreenToo -Seconds 20))
+    GL-Settle 2000
+    GL-Top
+    GL-Pictures
+    GL-Shot 'collections'
+}
+
 if ($glPart -eq 'home') {
     GL-Top
     GL-Pictures 15
@@ -103,12 +113,7 @@ elseif ($glPart -eq 'detail') {
     Step-Leave
 
     # Collections
-    Open-Nav 'Collections'
-    Check "gallery $glTheme | the Collections tab opens the Collections page" ([bool](Wait-Ui -Id 'TitleText' -Name 'Collections' -OffscreenToo -Seconds 20))
-    GL-Settle 2000
-    GL-Top
-    GL-Pictures
-    GL-Shot 'collections'
+    GL-Collections
 
     # Settings, at "Look up lists online"
     Open-Nav 'Settings'
@@ -120,4 +125,5 @@ elseif ($glPart -eq 'detail') {
         GL-Shot 'settings-lists'
     }
 }
-else { Check "gallery: GALLERY_PART is home or detail" $false $glPart }
+elseif ($glPart -eq 'collections') { GL-Collections }
+else { Check "gallery: GALLERY_PART is home, detail or collections" $false $glPart }

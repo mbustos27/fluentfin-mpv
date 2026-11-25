@@ -61,7 +61,7 @@ public static class CollectionPlaces
 /// Shuffle, the Watched and Favourite toggles, an Order menu and Hide watched; no genre filter, and an A to Z only from
 /// <see cref="CollectionBrowse.LettersFrom"/> items. A playlist opens here too, as an ordered list (its own order, 1.3.1's).
 /// </summary>
-public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalCommands commands) : ObservableObject, INavigationAware
+public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalCommands commands) : ObservableObject, INavigationAware, IKeptOnBack
 {
 	private IReadOnlyList<BaseItemDto> _serverOrder = [];
 
@@ -174,6 +174,71 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 
+	// ---- Nixie 1.7.4: Back shows the collection as it was (IKeptOnBack; NavigationService keeps it) -------------------------
+
+	/// <summary>Kept for Back once its films are in (a set left while it loads, or one that failed, loads again).</summary>
+	public bool CanKeep => State.Status is LoadStatus.Loaded or LoadStatus.Empty && Collection is not null;
+
+	/// <summary>
+	/// Back or Forward shows the collection as it was: its cards, its Order and Hide watched. An A to Z jump of the visit that
+	/// left is not made again. When something may have changed since (a film marked watched on its page, a play), the set and its
+	/// films are asked again behind the cards (<see cref="RefreshBehind"/>).
+	/// </summary>
+	public async Task Returned(object parameter, bool stale)
+	{
+		FocusRequest = -1;
+		if (!stale)
+		{
+			return;
+		}
+
+		if (Nixie is { } nixie)
+		{
+			await State.RefreshBehindAsync(async () =>
+			{
+				if (await nixie.LoadItems(JellyfinClient) is not { } items)
+				{
+					return LoadMessages.CouldNotLoad("this collection");
+				}
+
+				_serverOrder = [.. items];
+				Update(keepCards: true);
+				return _serverOrder.Count == 0 ? EmptyOutcome(nixie.Collection) : LoadOutcome.Loaded;
+			});
+		}
+		else if (Collection is { Id: { } id } shown)
+		{
+			await State.RefreshBehindAsync(() => RefreshBehind(id, shown));
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.7.4: the set and its films asked again together (one round trip), behind the cards Back showed: the same films in the
+	/// same places keep their cards (a watch state or a favourite changed shows on its card: <see cref="KeptCards"/>), so the
+	/// focus and the scroll stay; the header, the summary, the progress and Play follow; Hide watched hides a film marked meanwhile.
+	/// </summary>
+	private async Task<LoadOutcome> RefreshBehind(Guid id, BaseItemDto shown)
+	{
+		var fresh = JellyfinClient.GetItem(id);
+		var items = await ItemsOf(shown);
+		var known = await fresh;
+		if (known is null || items?.Items is not { } list)
+		{
+			return LoadMessages.CouldNotLoad($"this {Kind.ToLowerInvariant()}");
+		}
+
+		Collection = known;
+		_serverOrder = [.. list];
+		Update(keepCards: true);
+		if (_serverOrder.Count == 0)
+		{
+			var (title, message) = CollectionBrowse.EmptyText(Kind, LoadMessages.ServerName());
+			return LoadOutcome.Empty(title, message);
+		}
+
+		return LoadOutcome.Loaded;
+	}
+
 	public async Task OnNavigatedTo(object parameter)
 	{
 		// 1.6 collections: a Nixie collection loads through its source (CollectionViewModel.Nixie.cs)
@@ -264,7 +329,8 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 		}
 	}
 
-	private void Update()
+	/// <param name="keepCards">Nixie 1.7.4: a refresh behind the cards Back showed: the same films in the same places keep their cards.</param>
+	private void Update(bool keepCards = false)
 	{
 		var own = CollectionBrowse.Ordered(_serverOrder, CollectionOrder.Collection, IsPlaylist, OwnDisplayOrder);
 		var places = own.Select((item, i) => (item, i)).ToDictionary(x => x.item, x => x.i + 1, ReferenceEqualityComparer.Instance);
@@ -273,7 +339,11 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 
 		// 1.6 colpage (LB1): places only where the order means something (a franchise's release order, a playlist, an album)
 		var numbered = Order == CollectionOrder.Collection && (PositionsOverride ?? CollectionBrowse.PositionsMeanSomething(Order, IsPlaylist, OwnDisplayOrder));
-		Entries = [.. shown.Select(x => new CollectionEntry(BaseItemViewModel.FromDto(x), places[x], numbered))];
+		var samePlaces = Entries.Count == shown.Count && Entries.Zip(shown).All(x => x.First.Position == places[x.Second] && x.First.ShowsPosition == numbered);
+		if (!(keepCards && samePlaces && KeptCards.Refresh([.. Entries.Select(x => x.Item)], shown)))
+		{
+			Entries = [.. shown.Select(x => new CollectionEntry(BaseItemViewModel.FromDto(x), places[x], numbered))];
+		}
 		Header = CollectionBrowse.Header(Collection, own, Kind, PositionsOverride ?? CollectionBrowse.PositionsMeanSomething(CollectionOrder.Collection, IsPlaylist, OwnDisplayOrder), HeaderEyebrow, HeaderWhy);
 		Summary = CollectionBrowse.Summary(_serverOrder, IsPlaylist);
 		ShownText = CollectionBrowse.ShownText(shown.Count, _serverOrder);

@@ -25,6 +25,12 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
 - FAKESERVER_BIG_SERIES=<seasons>x<episodes> (e.g. 10x20): a second showcase series in Shows, "A Tide of Seasons", every
   episode named uniquely in it; the fixture's "big_series" lists its seasons and episodes (null when off). Nixie 1.7.4: the
   series and its seasons have a cast of 16 with long names (library.py's LONG_CAST; the fixture's "big_series"."cast").
+- FAKESERVER_REAL_SHAPE=1 (Nixie 1.7.5, the basics gate; rule 12's real shape): after everything else, with random sources
+  of its own (the rest unchanged): "A Very Long-Running Chronicle of ..." in Shows (Season 1 of 13 episodes, Season 2 of 24,
+  long names and one with no space to break at, the long cast; Season 1 and S2 E1-E5 watched, S2 E6 in progress: Continue
+  watching's first card), a film with a long title and a cast of 48 in Movies, LONG_CAST's "Anneliese van der Westhuizen"
+  in 40 films besides, and with FAKESERVER_COLLECTIONS a box set of 40 with a long name. Their names sort right after
+  the showcase titles. The fixture's "real_shape" names them (null when off).
 - Segments: POST /__harness/segments {"outro_seconds": N}: the end credits (Outro) run the last N seconds (40).
 - Streams: POST /__harness/streams {"encode_subtitle": true} serves the last embedded subtitle as burnt in
   ("Encode"), so picking it renegotiates the stream (a track change that can fail, with a PlaybackInfo rule).

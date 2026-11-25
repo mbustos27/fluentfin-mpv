@@ -39,6 +39,8 @@ internal static class UndoToast
 
 		s_listening = true;
 		ItemUserData.UndoOffered += (_, offer) => App.MainWindow.DispatcherQueue.TryEnqueue(() => Show(offer.Message, offer));
+		// 1.7.5: a toggle that sprang back says why (the sign-in ended, the server's error, the connection), with no Undo
+		ItemUserData.Refused += (_, message) => App.MainWindow.DispatcherQueue.TryEnqueue(() => Show(message, null));
 	}
 
 	/// <summary>Whether the notice should still show: its time is not up, or the pointer or the keyboard is on it.</summary>

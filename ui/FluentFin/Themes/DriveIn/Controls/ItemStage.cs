@@ -89,6 +89,20 @@ public sealed partial class ItemStage : Grid
 	/// <summary>The page's side margin at a width: 40 at 1100, 96 at 1920 (the concept's), as the lot's.</summary>
 	public static double MarginFor(double width) => DriveInLayout.MarginFor(width);
 
+	/// <summary>
+	/// The board's margin at a width. Nixie 1.7.5 (fx3): its top is <see cref="BoardTop"/> at every width. The page runs
+	/// under the 48 px top bar (TopBar.ExtendsUnder) and the board's top row of lights sits 12 px into it (the letter
+	/// board's BulbFrame), so under 1400 px the 20 px top put those lights under the bar (seen at 1100 x 900).
+	/// </summary>
+	internal static Thickness BoardMargin(double width)
+	{
+		var margin = MarginFor(width);
+		return new Thickness(margin, BoardTop, margin, 28);
+	}
+
+	/// <summary>The board's top in the stage: its lights (12 px into it, 3 px lamps) come out below the 48 px top bar.</summary>
+	internal const double BoardTop = 40;
+
 	private void ApplyWidth(double width)
 	{
 		if (width <= 0)
@@ -101,7 +115,7 @@ public sealed partial class ItemStage : Grid
 		_board.Compact = compact;
 		// the board takes about three fifths of a narrow window, so the art still shows beside it
 		_board.Width = Math.Min(compact ? Math.Max(560, Math.Round(width * 0.6)) : 820, width - 2 * margin);
-		_board.Margin = new Thickness(margin, compact ? 20 : 40, margin, 28);
+		_board.Margin = BoardMargin(width);
 		_creditsPlate.Margin = new Thickness(0, 0, margin, 36);
 		_creditsPlate.Visibility = _credits.Inlines.Count == 0 ? Visibility.Collapsed : width - _board.Width - 2 * margin > 320 ? Visibility.Visible : Visibility.Collapsed;
 		_art.Width = Math.Max(0, width * (compact ? 1 : 0.64));

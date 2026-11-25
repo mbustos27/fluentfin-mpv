@@ -147,7 +147,7 @@ public sealed class CollectionsRow(string title, CollectionsSection section, Sma
 /// server's rows show at once and "Made by Nixie" says it is reading.
 /// </summary>
 public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, GlobalCommands commands, LibraryIndex index, SmartCollectionStore store,
-	ILocalSettingsService? settings = null, TimeProvider? time = null, ILogger<CollectionsViewModel>? logger = null) : ObservableObject, INavigationAware
+	ILocalSettingsService? settings = null, TimeProvider? time = null, ILogger<CollectionsViewModel>? logger = null) : ObservableObject, INavigationAware, IKeptOnBack
 {
 	/// <summary>How many tiles a row shows before its "See all".</summary>
 	public const int RowLength = 12;
@@ -272,11 +272,112 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 
 	public Task OnNavigatedFrom()
 	{
+		_kindsOffLeft = KindsOffNow(); // Nixie 1.7.5 (review Major 2): Back sees a kind turned off meanwhile
 		index.Changed -= OnIndexChanged;
 		index.Progress -= OnIndexProgress; // 1.7.1
 		Outside.OutsideListsSnapshot.SharedChanged -= OnOutsideChanged; // 1.7 keyless
 		UnwatchTrending(); // 1.7 trending
 		return Task.CompletedTask;
+	}
+
+	// ---- Nixie 1.7.4: Back shows the Collections page as it was (IKeptOnBack) ------------------------------------------------
+
+	public bool CanKeep => _loaded && State.Status is LoadStatus.Loaded or LoadStatus.Empty;
+
+	/// <summary>
+	/// Back or Forward shows the page as it was (its rows, its tiles). It listens again to the index, the outside lists and the
+	/// trending lists; an index that came in while it was away (a first read finished) is shown now, from what is in memory
+	/// (never a read).
+	/// </summary>
+	public async Task Returned(object parameter, bool stale)
+	{
+		_ui = SynchronizationContext.Current;
+		index.Changed -= OnIndexChanged;
+		index.Changed += OnIndexChanged;
+		index.Progress -= OnIndexProgress;
+		index.Progress += OnIndexProgress;
+		Outside.OutsideListsSnapshot.SharedChanged -= OnOutsideChanged;
+		Outside.OutsideListsSnapshot.SharedChanged += OnOutsideChanged;
+		WatchTrending();
+
+		// Nixie 1.7.5 (review Major 2): what the page left may have changed of the page's own: a saved filter removed (its page goes
+		// Back by itself), a pin, a kind turned off in Settings > Collections. They are read again from this PC, and when the
+		// server's may have changed (stale), its box sets and playlists behind the page (a playlist saved); the rows are shown
+		// again from the index in memory when anything differs (the same rows keep their tiles). A read that fails keeps the page.
+		var changed = false;
+		try
+		{
+			var (saved, favorites) = await PinsAndFilters();
+			if (!saved.Select(x => (x.Id, x.Title)).SequenceEqual(_saved.Select(x => (x.Id, x.Title))) || !favorites.SetEquals(_favorites))
+			{
+				(_saved, _favorites) = (saved, favorites);
+				changed = true;
+			}
+		}
+		catch (Exception)
+		{
+			// the page keeps what it shows
+		}
+
+		changed |= KindsOffNow() != _kindsOffLeft;
+		if (stale)
+		{
+			var boxSets = JellyfinClient.GetBoxSets();
+			var playlists = JellyfinClient.GetPlaylists();
+			try
+			{
+				await Task.WhenAll(boxSets, playlists);
+			}
+			catch (Exception)
+			{
+				// (either failed: what came is compared below, the rest stays)
+			}
+
+			static bool Same(IReadOnlyList<BaseItemDto> a, IReadOnlyList<BaseItemDto> b) =>
+				a.Select(x => (x.Id, x.Name, x.ChildCount, x.UserData?.UnplayedItemCount)).SequenceEqual(b.Select(x => (x.Id, x.Name, x.ChildCount, x.UserData?.UnplayedItemCount)));
+			if (boxSets.IsCompletedSuccessfully && boxSets.Result?.Items is { } sets && !Same(sets, _boxSets))
+			{
+				_boxSets = sets;
+				changed = true;
+			}
+
+			if (playlists.IsCompletedSuccessfully && playlists.Result?.Items is { } lists && !Same(lists, _playlists))
+			{
+				_playlists = lists;
+				changed = true;
+			}
+		}
+
+		if (changed)
+		{
+			try
+			{
+				await ShowAsync(index.Current ?? _latest);
+			}
+			catch (Exception)
+			{
+				// (Made by Nixie couldn't be made again: the rows shown stay)
+			}
+		}
+		else if (index.Current is { } current && !ReferenceEquals(current, _latest))
+		{
+			OnIndexChanged(this, current);
+		}
+	}
+
+	// Nixie 1.7.5 (review Major 2): the kinds turned off when the page was left (OnNavigatedFrom), against the ones now
+	private string _kindsOffLeft = "";
+
+	private string KindsOffNow()
+	{
+		try
+		{
+			return string.Join(",", CollectionSettings.KindsOff(settings).Order());
+		}
+		catch (Exception)
+		{
+			return _kindsOffLeft;
+		}
 	}
 
 	public Task OnNavigatedTo(object parameter)
@@ -432,6 +533,14 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		}
 		finally
 		{
+			// Nixie 1.7.5: a read that stopped waits for its pages' rows still being made (a show pending: the pages came just
+			// before the stop, and a cold first build takes a while), so that the line saying they are not all never shows
+			// before them, with no Made by Nixie rows under it. ShowAsync's Shown never throws
+			if (read is null && _pending is { Snapshot.Reading: not null } pending)
+			{
+				await pending.Shown;
+			}
+
 			IsReadingIndex = false;
 			if (read is null && _latest is { Reading: not null } && index.Current is null)
 			{

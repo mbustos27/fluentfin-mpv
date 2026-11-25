@@ -62,7 +62,7 @@ function SrBox { Find-Ui -Name 'Search' -Type 'Edit' -Contains }
 function SrText { $b = SrBox; if ($b) { try { ($b.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)).Current.Value } catch { $null } } }
 function SrRows { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'ListViewItem')))) }
 # still on Home: its Continue Watching row (Classic, Drive-in) or its Up next shelf or list (Cinematic, Editorial: 1.5)
-function SrHome { [bool](Find-Ui -Name 'Continue Watching' -Type 'Text' -OffscreenToo) -or [bool](Find-Ui -Name 'Up next' -Type 'Text' -OffscreenToo -Contains) }
+function SrHome { [bool](Find-Ui -Name 'Continue watching' -Type 'Text' -OffscreenToo) -or [bool](Find-Ui -Name 'Up next' -Type 'Text' -OffscreenToo -Contains) }
 # '/' focuses the box (WindowShortcuts) when it does not have the keyboard already (then '/' would be typed): UI Automation
 # otherwise; the characters go as WM_CHAR to the window WinUI reads keys from
 function SrType([string]$Text, [switch]$Slash) {

@@ -74,7 +74,10 @@ class Libmpv:
 
     def __init__(self, dll_path):
         if os.name == "nt":
-            dll = ctypes.CDLL(dll_path, _LOAD_FLAGS)
+            # 1.7.5 (BH-161-q4): the search flags are ``winmode``; the second
+            # positional is ``mode``, which Windows ignores (it worked only
+            # because Python's default flags are these)
+            dll = ctypes.CDLL(dll_path, winmode=_LOAD_FLAGS)
         else:
             dll = ctypes.CDLL(dll_path)
         p, s, i = ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int

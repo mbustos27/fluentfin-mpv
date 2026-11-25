@@ -17,7 +17,7 @@ namespace FluentFin.Core.ViewModels;
 /// the opened groups outlive Back and R for the same query (<see cref="SearchPageMemory"/>); a new search starts on All.
 /// </para>
 /// </summary>
-public partial class SearchResultsViewModel(IJellyfinClient jellyfinClient) : ObservableObject, INavigationAware
+public partial class SearchResultsViewModel(IJellyfinClient jellyfinClient) : ObservableObject, INavigationAware, IKeptOnBack
 {
 	private RankedResults _ranked = RankedResults.Empty("");
 
@@ -79,6 +79,87 @@ public partial class SearchResultsViewModel(IJellyfinClient jellyfinClient) : Ob
 		SearchPageMemory.Forgotten -= OnForgotten;
 		return Task.CompletedTask;
 	}
+
+	// ---- Nixie 1.7.4: Back shows the results as they were (IKeptOnBack) --------------------------------------------------------
+
+	public bool CanKeep => Results.Status is LoadStatus.Loaded or LoadStatus.Empty;
+
+	/// <summary>
+	/// Back or Forward shows the results as they were (the chip lit, the groups opened); a title marked watched or a favourite
+	/// since shows on its card (the navigation service tells the cards). Nixie 1.7.5: when something may have changed since (the
+	/// server's changes, or kept over five minutes), the search runs again behind them (<see cref="SearchAgain"/>); until 1.7.5 a
+	/// title added on the server showed only after R.
+	/// </summary>
+	public async Task Returned(object parameter, bool stale)
+	{
+		SearchPageMemory.Forgotten -= OnForgotten;
+		SearchPageMemory.Forgotten += OnForgotten;
+		if (stale && _ranked.Query.Length > 0)
+		{
+			await Results.RefreshBehindAsync(SearchAgain);
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.7.5: the search again, behind the results Back showed. The same titles in the same places keep their cards (the
+	/// keyboard and the scroll stay where Back put them; each card takes the server's watch state); anything else (a title
+	/// added, gone or moved) shows the new results, with the chip and the opened groups as they were. A search that fails
+	/// leaves the results as they are (RefreshBehindAsync).
+	/// </summary>
+	private async Task<LoadOutcome> SearchAgain()
+	{
+		if (await SearchRunner.Run(JellyfinClient, Query) is not { } ranked)
+		{
+			return LoadOutcome.Failed($"Couldn't search {LoadMessages.ServerName()}", LoadMessages.CheckServer());
+		}
+
+		if (SameResults(_ranked, ranked))
+		{
+			var fresh = new Dictionary<Guid, Jellyfin.Sdk.Generated.Models.BaseItemDto>();
+			foreach (var record in Records(ranked))
+			{
+				if (record.Id is { } id)
+				{
+					fresh.TryAdd(id, record);
+				}
+			}
+
+			IEnumerable<IReadOnlyList<BaseItemViewModel>> shown = [.. TopResult is { } top ? [[top]] : Array.Empty<IReadOnlyList<BaseItemViewModel>>(),
+				.. CardGroups.Select(g => (IReadOnlyList<BaseItemViewModel>)[.. g.Strong, .. g.Weak])];
+			foreach (var cards in shown)
+			{
+				KeptCards.Refresh(cards, [.. cards.Select(c => c.Dto?.Id is { } id && fresh.TryGetValue(id, out var record) ? record : c.Dto!)]);
+			}
+
+			_ranked = ranked;
+			return LoadOutcome.Loaded;
+		}
+
+		var (_, expanded) = SearchPageMemory.Recall(Query);
+		_ranked = ranked;
+		var found = ranked.Groups.SelectMany(g => g.Strong.Concat(g.Weak)).Select(x => x.Item);
+		CollectionNames.NoteBoxSets(ranked.Top is { } best ? found.Prepend(best.Item) : found);
+		if (ranked.Count == 0)
+		{
+			Clear();
+			return LoadOutcome.Empty($"No results for “{Query}”", "Check the spelling, or try fewer words.");
+		}
+
+		Kind = Kind is { } k && ranked.GroupOf(k) is not null ? Kind : null;
+		Chips = []; // made again: the counts may have changed
+		Show(expanded);
+		return LoadOutcome.Loaded;
+	}
+
+	/// <summary>Nixie 1.7.5: the same top result and the same groups, each with the same titles in the same order.</summary>
+	public static bool SameResults(RankedResults shown, RankedResults fresh) =>
+		shown.Top?.Item.Id == fresh.Top?.Item.Id && shown.Groups.Count == fresh.Groups.Count
+		&& shown.Groups.Zip(fresh.Groups).All(p => p.First.Kind.Kind == p.Second.Kind.Kind
+			&& KeptCards.SameItems(p.First.Strong.Select(x => x.Item.Id), p.Second.Strong.Select(x => x.Item.Id))
+			&& KeptCards.SameItems(p.First.Weak.Select(x => x.Item.Id), p.Second.Weak.Select(x => x.Item.Id)));
+
+	private static IEnumerable<Jellyfin.Sdk.Generated.Models.BaseItemDto> Records(RankedResults ranked) =>
+		(ranked.Top is { } top ? [top.Item] : Array.Empty<Jellyfin.Sdk.Generated.Models.BaseItemDto>()).Concat(ranked.Groups.SelectMany(g => g.Strong.Concat(g.Weak)).Select(x => x.Item));
 
 	/// <summary>
 	/// Enter in the search box with this page's own query: the navigation service shows nothing new for the same page and

@@ -52,10 +52,11 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		_settings.SetAccessToken(_token);
 		_settings.SetServerUrl(baseUrl);
 		ForgetUserViews(); // fluentfin-mpv: another server or user (GetUserViews)
-		// 1.5.1 fixes (BH-150-M2): a token the server stops taking makes the pages ask for a new sign-in (SignInWatch)
-		SignInState.SignedIn();
 		_jellyfinApiClient = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(_settings), _settings,
 			WatchedHttpClient(baseUrl, authResult.AccessToken)));
+		// 1.5.1 fixes (BH-150-M2): a token the server stops taking makes the pages ask for a new sign-in (SignInWatch). 1.7.5: once the
+		// new sign-in's API client is made (still after its token), so what SignInState.Changed starts asks with it (RecentPlays)
+		SignInState.SignedIn();
 
 		// fluentfin-mpv: capabilities, plugins and views do not depend on each other: asked together they cost one round
 		// trip instead of three before the window and Home show. The views stay in GetUserViews, so Home does not ask again.
@@ -76,10 +77,17 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 	/// 1.5.1 fixes (BH-150-M2): Kiota's own client (its retry, redirect and other handlers, as the SDK made it before) over
 	/// <see cref="SignInWatch"/>, which watches this sign-in's token.
 	/// </summary>
-	private HttpClient WatchedHttpClient(string baseUrl, string token) =>
-		Microsoft.Kiota.Http.HttpClientLibrary.KiotaClientFactory.Create(new SignInWatch(() => baseUrl, () => _token == token ? token : "", logger)
+	private HttpClient WatchedHttpClient(string baseUrl, string token) => WatchedHttpClient(() => baseUrl, () => _token == token ? token : "", logger);
+
+	/// <summary>
+	/// 1.7.5: the client's handlers, over <paramref name="network"/> (the default handler; tests give their own server): Kiota's,
+	/// then <see cref="SignInWatch"/>, then <see cref="AnswerWatch"/>, which notes each answer in its work's trace (a page's
+	/// load), whose words then say whose failure it was.
+	/// </summary>
+	internal static HttpClient WatchedHttpClient(Func<string> baseUrl, Func<string> token, ILogger logger, HttpMessageHandler? network = null) =>
+		Microsoft.Kiota.Http.HttpClientLibrary.KiotaClientFactory.Create(new SignInWatch(baseUrl, token, logger)
 		{
-			InnerHandler = Microsoft.Kiota.Http.HttpClientLibrary.KiotaClientFactory.GetDefaultHttpMessageHandler(),
+			InnerHandler = new AnswerWatch { InnerHandler = network ?? Microsoft.Kiota.Http.HttpClientLibrary.KiotaClientFactory.GetDefaultHttpMessageHandler() },
 		});
 
 	/// <summary>
@@ -162,6 +170,13 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		{
 			logger.LogError(ex, @"Unhandled exception");
 		}
+	}
+
+	/// <inheritdoc/>
+	public void LeaveSession()
+	{
+		StopWebSocket();
+		logger.LogInformation("[sign-in] Switch user: this session is kept on the server for the saved sign-in; the websocket stops until the next sign-in");
 	}
 
 	public async Task<int> BitrateTest()

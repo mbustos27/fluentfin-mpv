@@ -103,7 +103,7 @@
                     <!--  Continue watching: the marquee, "5 in progress", the stills with their time left in tubes  -->
                     <StackPanel x:Name="ContinueSection" Visibility="{x:Bind local:DriveInHomePage.SectionVisibility(ViewModel.IsContinueLoading, ViewModel.HasContinueItems), Mode=OneWay}">
                         <StackPanel Visibility="{x:Bind ViewModel.IsContinueLoading, Mode=OneWay}">
-                            <dc:MarqueeSign Margin="0,0,0,8" Text="Continue Watching" />
+                            <dc:MarqueeSign Margin="0,0,0,8" Text="Continue watching" />
                             <StackPanel Orientation="Horizontal">
                                 <ctkl:Shimmer Style="{StaticResource StillPlaceholder}" />
                                 <ctkl:Shimmer Style="{StaticResource StillPlaceholder}" />
@@ -115,7 +115,7 @@
                         <lc:ShelfRow
                             x:Name="ContinueRow"
                             dc:DriveInRows.Marquee="True"
-                            Header="Continue Watching"
+                            Header="Continue watching"
                             HasSeeAll="True"
                             ItemTemplate="{StaticResource DriveInStill}"
                             ItemsSource="{x:Bind ContinueShown}"

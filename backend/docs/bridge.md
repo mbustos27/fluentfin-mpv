@@ -204,8 +204,10 @@ outcome stands): a 401 or 403 hands ``(item_id, play_session_id)`` to
 `Bridge._report_refused`, which queues a non-fatal ``auth_failed`` with
 `Bridge.REPORT_REFUSED`, once per play session (progress is refused every
 few seconds). Playback goes on; the UI asks ``Users/Me`` itself and, if the
-sign-in has ended, offers Sign in again. That playback's place is not
-kept for after the sign-in (KNOWN-ISSUES). `ReportRefusedTest`,
+sign-in has ended, offers Sign in again. 1.7.5: after Sign in again the UI
+writes that playback's place (where it last saw it, by the server's resume
+rules) as the item's user data (`RecentPlays`), not as a playback report:
+the backend stays the one reporter, and nothing changes here. `ReportRefusedTest`,
 `ReportRefusedSaidTest`.
 
 A new `connect` with a server **retires** the old client, stops playback,
@@ -860,7 +862,15 @@ bar mpv draws (section 4a); written on change and again for a new mpv.
 `skip-rules.json` (rules, the one-seek learned intros with 1.5.1's "moves",
 candidates, refusals; keyed `<server>:<user>:<series>`, the account set at
 `connect` by `bridge_skip.account_connected`, which also migrates
-`learned-intros.json` once). `intro_sources.augment` adds a show's rules as
+`learned-intros.json` once). 1.7.5: keys the store doesn't know (in the file,
+a show, a season's record or an intro) are a newer backend's and are written
+back as read, never dropped (BH-151-m4; a 1.5.0 backend dropped 1.5.1's
+"moves"). When a rule takes a server's (or the chapters') Intro or Outro over,
+its segment keeps the one it replaced (`replaced`), and `refresh_rules` puts
+it back before the rules are added again (`skip_rules.taken_over`): the rule
+stays an Intro or Outro after an Add, Yes or Forget mid-episode, and a
+forgotten rule gives the server's back at once (skipped already if the rule's
+part was). `intro_sources.augment` adds a show's rules as
 segments with source `rule` and their own `action` (`player.update` reads the
 segment's action before the type's). `skip_rules.SkipWatcher` replaces 1.4's
 `SkipLearner` on the monitor tick: seeks one after another are one skip

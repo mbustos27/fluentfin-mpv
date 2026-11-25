@@ -217,7 +217,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	/// 174-sessions: the page opens with no name (it is for someone else; the saved ones are in its list).
 	/// </summary>
 	[RelayCommand(CanExecute = nameof(CanSignOut))]
-	public Task SwitchUser() => SignOut(notice => _setupNavigationService.NavigateTo<LoginViewModel>((notice ?? new SetupNotice("")) with { Server = CurrentServer, Username = "" }));
+	public Task SwitchUser() => SignOut(notice => _setupNavigationService.NavigateTo<LoginViewModel>((notice ?? new SetupNotice("")) with { Server = CurrentServer, Username = "" }), switchUser: true);
 
 	/// <summary>174-signin: Sign out's one line when the saved Quick Connect sign-in couldn't be removed from this PC.</summary>
 	public static string ForgetFailedNotice =>
@@ -283,7 +283,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	/// revoked (bounded, <see cref="MpvPlaybackService.StopForSignOutAsync"/>), which is shown meanwhile. One at a time: both
 	/// commands are disabled until it is done, and one invoked anyway (back to back, before the first got that far) does nothing.
 	/// </summary>
-	private async Task SignOut(Action<SetupNotice?> navigate, bool forgetPassword = false)
+	private async Task SignOut(Action<SetupNotice?> navigate, bool forgetPassword = false, bool switchUser = false)
 	{
 		if (IsSigningOut)
 		{
@@ -298,7 +298,12 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 			SignOutStatus = "Signing out…";
 			var signedOut = User?.Name;
 			User = null;
-			// 174-signin: the token ends on the server next, so a saved Quick Connect sign-in goes with it (a password stays).
+			// 1.7.5 (the basics gate; decided as a basics bug): Switch user keeps the leaving user's saved sign-in. A remembered
+			// Quick Connect sign-in is its token: it stays saved and its session stays on the server (no Logout), so switching
+			// back signs in with it at once, with no new code (1.7.4 ended it here and forgot it). Only Sign out forgets a saved
+			// sign-in and ends its session; a token the server refuses is still forgotten when it is used (401).
+			var keepSession = switchUser && SavedSignIns.WithToken(CurrentServer, signedOut) is not null;
+			// 174-signin: Sign out ends the token on the server next, so a saved sign-in goes with it.
 			// A settings file that can't be written must not stop the sign-out halfway (no page change, the token alive on the
 			// server): the sign-out goes on and says it in one line; the next start removes the refused token.
 			// 174-sessions (BS-M1): Sign out forgets a saved password too (the name stays for the sign-in page)
@@ -312,8 +317,9 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 					SessionInfo.CurrentUserCrendentials = null!; // nothing of it in memory either (Sign in again, Jellyseerr)
 					SavedSignIns.Forget(CurrentServer, signedOut);
 				}
-				else
+				else if (!keepSession)
 				{
+					// Sign in again: the server refused this session, so a saved Quick Connect token of it is dead (174-signin)
 					SavedSignIns.ForgetToken(CurrentServer, signedOut);
 				}
 			}
@@ -324,7 +330,18 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 			}
 
 			navigate(notice);
-			await _jellyfinClient.Logout();
+			// 1.7.5 (the review's Major): the shell went with this page change: its frame is let go, so nothing (a cast, a remote
+			// command still arriving) navigates or plays in it; and a kept session stops in this app (its websocket closes:
+			// no Play On, no cast reaching it) while it stays on the server for the saved sign-in
+			_navigationService.Release();
+			if (keepSession)
+			{
+				_jellyfinClient.LeaveSession();
+			}
+			else
+			{
+				await _jellyfinClient.Logout();
+			}
 		}
 		finally
 		{

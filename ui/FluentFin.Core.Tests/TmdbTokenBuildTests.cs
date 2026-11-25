@@ -125,9 +125,13 @@ public sealed class TmdbTokenBuildTests
 		Assert.DoesNotMatch(@"Write-(Host|Output|Warning|Verbose|Information)", helper);
 		Assert.DoesNotMatch(@"""[^""\n]*\$\(?\$(found\.Value|value|raw)\b", helper);
 		Assert.Contains("$NixieTmdbPublishVariable = 'FluentFinTmdbToken'", helper);
-		// the live check may use the app token when its own isn't set
+		// the live check may use the app token when its own isn't set. 1.7.5 (BH-170-q2): its TMDb leg is the LiveTrending test,
+		// which reads the variables itself; the script says only whether each is set
 		var live = File.ReadAllText(Path.Combine(Tools, "live", "live_trending_sources.ps1"));
-		Assert.Contains("if (-not $token) { $token = Get-Secret 'NIXIE_TMDB_TOKEN' }", live);
+		Assert.Contains("Get-KeyNote 'NIXIE_LIVE_TMDB_TOKEN', 'NIXIE_TMDB_TOKEN'", live);
+		Assert.Contains("--filter 'Category=LiveTrending'", live);
+		var test = File.ReadAllText(Path.Combine(HomeAndLibraryXamlTests.RepoRoot, "FluentFin.Core.Tests", "Outside", "LiveTrendingSourcesTests.cs"));
+		Assert.Contains("Secret(\"NIXIE_LIVE_TMDB_TOKEN\", \"NIXIE_TMDB_TOKEN\")", test);
 	}
 
 	[Fact]

@@ -118,7 +118,7 @@ public sealed class Ui173Tests
 					body = method < 0 ? "" : string.Join("\n", lines.Skip(method).Take(8));
 				}
 
-				if (!body.Contains("App.IsClosing", StringComparison.Ordinal))
+				if (!CodeOnly(body).Contains("App.IsClosing", StringComparison.Ordinal)) // 1.7.5 review: a comment naming it is no guard
 				{
 					unguarded.Add($"{Path.GetFileName(file)}:{i + 1}");
 				}
@@ -128,6 +128,98 @@ public sealed class Ui173Tests
 		Assert.True(sites >= 30, $"{sites} Tick handlers found"); // 1.7.3: 29; 1.7.4: the bars' settle
 		Assert.Empty(unguarded);
 	}
+
+	[Fact]
+	public void TheClose_EveryFrameDrivenHandlerInTheApp_DoesNothingOnceClosing()
+	{
+		// 1.7.5 (fx3; 1.7.3's and 1.7.4's Left): what a frame drives rather than a timer, outside the player page too (Home's
+		// heroes): CompositionTarget.Rendering, a storyboard's Completed and a picture's ImageOpened, in code or named in XAML.
+		// Each goes through UiDispatch.Frame or UiDispatch.Routed, or checks App.IsClosing first
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "App.xaml.cs")))!;
+		string[] events = ["CompositionTarget.Rendering += ", ".Completed += ", ".ImageOpened += "];
+		var sites = new List<string>();
+		var unguarded = new List<string>();
+		foreach (var file in Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories).Where(f => (f.EndsWith(".cs", StringComparison.Ordinal) || f.EndsWith(".xaml", StringComparison.Ordinal))
+			&& !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+			&& !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
+		{
+			var lines = File.ReadAllLines(file);
+			var code = file.EndsWith(".xaml", StringComparison.Ordinal) && File.Exists(file + ".cs") ? File.ReadAllLines(file + ".cs") : lines;
+			for (var i = 0; i < lines.Length; i++)
+			{
+				if (lines[i].TrimStart().StartsWith("//", StringComparison.Ordinal))
+				{
+					continue;
+				}
+
+				string? handler = null;
+				if (file.EndsWith(".cs", StringComparison.Ordinal))
+				{
+					foreach (var e in events)
+					{
+						if (lines[i].IndexOf(e, StringComparison.Ordinal) is >= 0 and var at)
+						{
+							handler = lines[i][(at + e.Length)..].Trim();
+						}
+					}
+				}
+				else if (System.Text.RegularExpressions.Regex.Match(lines[i], "\\b(?:ImageOpened|Completed)=\"(\\w+)\"") is { Success: true } named)
+				{
+					handler = named.Groups[1].Value + ";";
+				}
+
+				if (handler is null)
+				{
+					continue;
+				}
+
+				sites.Add($"{Path.GetFileName(file)}:{i + 1}");
+				if (handler.StartsWith("UiDispatch.Frame(", StringComparison.Ordinal) || handler.StartsWith("UiDispatch.Routed(", StringComparison.Ordinal)
+					|| handler.StartsWith("Services.UiDispatch.Frame(", StringComparison.Ordinal))
+				{
+					continue;
+				}
+
+				string body;
+				if (handler.StartsWith('('))
+				{
+					body = string.Join("\n", lines.Skip(i).Take(8));
+				}
+				else
+				{
+					var name = handler.TrimEnd(';');
+					var method = Array.FindIndex(code, l => l.Contains($" void {name}(", StringComparison.Ordinal));
+					body = method < 0 ? "" : string.Join("\n", code.Skip(method).Take(8));
+				}
+
+				if (!CodeOnly(body).Contains("App.IsClosing", StringComparison.Ordinal)) // 1.7.5 review: a comment naming it is no guard
+				{
+					unguarded.Add($"{Path.GetFileName(file)}:{i + 1}");
+				}
+			}
+		}
+
+		// 1.7.5: the player's three Rendering handlers, Home's three heroes and Cinematic's preview stage (each a picture and a
+		// fade), the backdrop's two fades and its picture, a picture's fade in and the theme switch's fade
+		Assert.True(sites.Count >= 17, $"{sites.Count} frame-driven handlers found: {string.Join(", ", sites)}");
+		Assert.Empty(unguarded);
+	}
+
+	[Theory]
+	[InlineData("Home's hero's fade")]
+	[InlineData("Cinematic's hero's fade")]
+	[InlineData("Drive-in's outdoor screen's fade")]
+	public void TheClose_HomesHeroes_FadeThroughTheGuard(string what)
+	{
+		// the brief's case by name (1.7.3's Left: "Home's heroes"): their fades and pictures go through the guard
+		var all = string.Join("\n", new[] { Code("Controls", "HomeHero.xaml.cs"), Code("Themes", "Cinematic", "Controls", "CinematicHero.xaml.cs"), Code("Themes", "DriveIn", "Controls", "OutdoorScreen.xaml.cs") });
+		Assert.Contains($"board.Completed += UiDispatch.Frame(\"{what}\"", all);
+		Assert.Contains($"next.ImageOpened += UiDispatch.Routed(\"{what.Replace("fade", "backdrop", StringComparison.Ordinal)}\"", all);
+	}
+
+	/// <summary>The code of <paramref name="body"/> without its // comments (1.7.5 review: a guard removed but named in a comment passed).</summary>
+	private static string CodeOnly(string body) =>
+		string.Join("\n", body.Split('\n').Select(l => l.IndexOf("//", StringComparison.Ordinal) is >= 0 and var at ? l[..at] : l));
 
 	[Fact]
 	public void TheLog_IsOnlyNixiesMaskedFile_NotTheWindowsEventLog()

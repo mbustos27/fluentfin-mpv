@@ -201,4 +201,20 @@ public sealed class NavigationServiceTests
 		Assert.True(set > 0 && set < arrival.IndexOf("return;", StringComparison.Ordinal));
 		Assert.Equal(1, nav.Split("_currentParameter = ").Length - 1);
 	}
+	/// <summary>
+	/// 1.7.5 (the review's Major): Sign out and Switch user let the old shell's frame go (Release): it has no frame, nothing
+	/// navigates (a cast or a remote command that still arrived played in the detached frame, with no page or controls), and
+	/// its Frame doesn't fall back to the window's root frame (where the player would open over the sign-in page).
+	/// </summary>
+	[Fact]
+	public void Released_HasNoFrame_AndNavigatesNowhere()
+	{
+		var nav = new NavigationService(Mock.Of<FluentFin.UI.Core.Contracts.Services.IPageService>());
+
+		nav.Release();
+
+		Assert.Null(nav.Frame); // the getter would read App.MainWindow (null here: it threw)
+		Assert.False(nav.NavigateTo("FluentFin.ViewModels.VideoPlayerViewModel", "a cast"));
+		Assert.False(nav.CanGoBack);
+	}
 }

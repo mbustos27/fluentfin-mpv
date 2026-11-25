@@ -50,7 +50,7 @@ function Shot114([string]$Name) {
     Say "shot $Name -> $file ($info)"
 }
 function Cw-Cards {
-    $list = Find-Ui -Name 'Continue Watching' -Type 'List'
+    $list = Find-Ui -Name 'Continue watching' -Type 'List'
     if (-not $list) { return @() }
     $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
     @($list.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond) | ForEach-Object { $_.Current.Name })
@@ -66,7 +66,7 @@ foreach ($size in @(@(1920, 1080), @(1100, 900))) {
     $card = Find-Ui -Name $cards[1] -Type 'ListItem'
     [void][OffscreenUi]::SetFocus($card); Settle 500
     Key 0x5D
-    $entry = Wait-Ui -Name 'Remove from Continue Watching' -Type 'MenuItem' -Seconds 4
+    $entry = Wait-Ui -Name 'Remove from Continue watching' -Type 'MenuItem' -Seconds 4
     Settle 400
     Shot114 "$tag-cw-menu-$($size[0])"
     if (-not $entry) { Key 0x1B; continue }

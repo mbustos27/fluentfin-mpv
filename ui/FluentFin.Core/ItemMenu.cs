@@ -75,7 +75,7 @@ public static class ItemMenu
 
 		if (inContinueWatching && dto.Id is not null)
 		{
-			yours.Add(new(ItemMenuCommand.RemoveFromContinueWatching, "Remove from Continue Watching"));
+			yours.Add(new(ItemMenuCommand.RemoveFromContinueWatching, "Remove from Continue watching"));
 		}
 		else if (video && dto.UserData?.PlaybackPositionTicks is > 0 && dto.Id is not null)
 		{

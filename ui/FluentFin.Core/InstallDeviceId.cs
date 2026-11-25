@@ -76,18 +76,43 @@ public static class InstallDeviceId
 				}
 
 				// 1.6.1 (the review): never throws: every sign-in asks for it outside its own try (a failure here broke sign-in)
+				string id;
 				try
 				{
-					var id = Stored(_dataFolder, PcId(), AppContext.BaseDirectory, user, _installed);
+					id = Stored(_dataFolder, PcId(), AppContext.BaseDirectory, user, _installed);
+				}
+				catch (Exception)
+				{
+					id = For(SafePcId(), _dataFolder, AppContext.BaseDirectory, user);
+				}
+
+				// 1.7.5 (BH-161-q2): the window's slot whatever the id came from (the fallback skipped it, so two windows shared one id)
+				try
+				{
 					var (slot, claim) = ClaimWindow(id);
 					_window = claim;
 					return _current = ForWindow(id, slot);
 				}
 				catch (Exception)
 				{
-					return _current = For(SafePcId(), _dataFolder, AppContext.BaseDirectory, user);
+					return _current = id;
 				}
 			}
+		}
+	}
+
+	/// <summary>
+	/// 1.7.5: this window is closing (<see cref="Mpv.CloseSequence"/>, right after the window hides): its slot is free at once, so a
+	/// window opened meanwhile (Restart to update reopening Nixie, a close and a quick start) is the same device on the server,
+	/// not the copy's second window (a device of its own, which a per-device allow list refuses). This window keeps sending its
+	/// id for its last reports: the same device and sign-in as the new one.
+	/// </summary>
+	public static void ReleaseWindow()
+	{
+		lock (Gate)
+		{
+			_window?.Dispose();
+			_window = null;
 		}
 	}
 
@@ -135,11 +160,12 @@ public static class InstallDeviceId
 		var file = Path.Combine(dataFolder, FileName);
 		var key = PcKey(pcId, user, installed);
 		JsonObject? root = null;
+		var repair = false;
 		try
 		{
 			if (File.Exists(file))
 			{
-				root = JsonNode.Parse(File.ReadAllText(file)) as JsonObject;
+				root = ReadLastWins(File.ReadAllText(file), out repair);
 			}
 		}
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -153,12 +179,21 @@ public static class InstallDeviceId
 			root = null; // not JSON: worked out again and written over (nothing in it could be read)
 		}
 
+		string id;
 		if (root?["ids"] is JsonObject known && known[key] is JsonValue value && value.TryGetValue<string>(out var kept) && IsId(kept))
 		{
-			return kept;
+			if (!repair)
+			{
+				return kept;
+			}
+
+			id = kept; // 1.7.5 (BH-161-q2): a key given twice: its last value, and the file written again without the twin
+		}
+		else
+		{
+			id = For(pcId, dataFolder, programFolder, user);
 		}
 
-		var id = For(pcId, dataFolder, programFolder, user);
 		string? temp = null;
 		try
 		{
@@ -232,6 +267,53 @@ public static class InstallDeviceId
 		}
 
 		return (WindowSlots - 1, new Mutex(false));
+	}
+
+	/// <summary>
+	/// 1.7.5 (BH-161-q2): <paramref name="text"/> read as JSON reads it: a key given twice keeps its last value
+	/// (<paramref name="hadTwins"/>, so the file is written again without the twin). <see cref="JsonNode.Parse(string, JsonNodeOptions?, JsonDocumentOptions)"/>
+	/// threw at the first look at such an object, out of <see cref="Stored"/>, and the file was never repaired. Null for JSON
+	/// that isn't an object; <see cref="JsonException"/> for text that isn't JSON.
+	/// </summary>
+	internal static JsonObject? ReadLastWins(string text, out bool hadTwins)
+	{
+		using var document = JsonDocument.Parse(text, new JsonDocumentOptions { AllowDuplicateProperties = true });
+		var twins = false;
+		var root = Copy(document.RootElement, ref twins);
+		hadTwins = twins;
+		return root as JsonObject;
+
+		static JsonNode? Copy(JsonElement element, ref bool twins)
+		{
+			switch (element.ValueKind)
+			{
+				case JsonValueKind.Object:
+					var obj = new JsonObject();
+					foreach (var property in element.EnumerateObject())
+					{
+						if (obj.Remove(property.Name))
+						{
+							twins = true;
+						}
+
+						obj[property.Name] = Copy(property.Value, ref twins);
+					}
+
+					return obj;
+				case JsonValueKind.Array:
+					var array = new JsonArray();
+					foreach (var item in element.EnumerateArray())
+					{
+						array.Add(Copy(item, ref twins));
+					}
+
+					return array;
+				case JsonValueKind.Null or JsonValueKind.Undefined:
+					return null;
+				default:
+					return JsonValue.Create(element.Clone()); // its own copy: the document goes
+			}
+		}
 	}
 
 	private static string PcKey(string pcId, string user, bool installed) =>

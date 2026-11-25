@@ -49,7 +49,7 @@ public partial class ScheduledTasksViewModel(IJellyfinClient jellyfinClient) : O
 
 		Notice = await jellyfinClient.RunScheduledTask(task.Id)
 			? new ServerNotice(ServerPowerState.None, $"Started: {task.Name}", "The server runs it now; this page shows the task's last result next time it is opened.", NoticeKind.Success)
-			: new ServerNotice(ServerPowerState.Failed, $"{task.Name} didn't start", "The server didn't accept the request.", NoticeKind.Error);
+			: new ServerNotice(ServerPowerState.Failed, $"{task.Name} didn't start", Admin.ServerPower.NotTaken("The server didn't accept the request."), NoticeKind.Error);
 	}
 }
 

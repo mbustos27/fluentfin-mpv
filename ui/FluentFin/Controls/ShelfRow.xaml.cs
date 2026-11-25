@@ -115,24 +115,15 @@ public sealed partial class ShelfRow : UserControl
 		Repeater.Loaded += (_, _) => UpdateNames();
 		RegisterPropertyChangedCallback(HeaderProperty, (_, _) => UpdateNames());
 		RegisterPropertyChangedCallback(HasSeeAllProperty, (_, _) => UpdateNames());
-		RegisterPropertyChangedCallback(ItemsSourceProperty, (_, _) => { _lastIndex = -1; WatchSource(); DispatcherQueue.TryEnqueue(() => { UpdateNames(); _edge.UpdateArrows(); }); });
+		// Nixie 1.7.5 (BH-175-M1): the row hears its items only while it is loaded. Back keeps a page's view model (PageKeep) and
+		// hands it to each new page: a row that never let go of a kept collection (a film's "More like this") kept every page
+		// that ever showed it alive, one more film page (10 to 13 MB) for each Back or return from the player
+		_watch = new LoadedSourceWatch(Source_CollectionChanged);
+		Services.WhileLoaded.Hold(this, () => _watch.Loaded(IsLoaded ? ItemsSource : null), _watch.Unloaded);
+		RegisterPropertyChangedCallback(ItemsSourceProperty, (_, _) => { _lastIndex = -1; _watch.SourceChanged(ItemsSource, IsLoaded); DispatcherQueue.TryEnqueue(() => { UpdateNames(); _edge.UpdateArrows(); }); });
 	}
 
-	private System.Collections.Specialized.INotifyCollectionChanged? _source;
-
-	private void WatchSource()
-	{
-		if (_source is not null)
-		{
-			_source.CollectionChanged -= Source_CollectionChanged;
-		}
-
-		_source = ItemsSource as System.Collections.Specialized.INotifyCollectionChanged;
-		if (_source is not null)
-		{
-			_source.CollectionChanged += Source_CollectionChanged;
-		}
-	}
+	private readonly LoadedSourceWatch _watch;
 
 	/// <summary>
 	/// Seaglass 1.1.4: the card the user was on leaves the row (Remove from Continue Watching, from its menu): once the menu is
@@ -531,6 +522,54 @@ public sealed partial class ShelfRow : UserControl
 		}
 	}
 
+}
+
+/// <summary>
+/// Nixie 1.7.5 (BH-175-M1): a row's hold on its items' CollectionChanged, only while the row is loaded. The items can be a
+/// kept view model's (Back keeps it and gives it to the next page): heard after the row left, they kept the row and its page
+/// alive. <see cref="Loaded"/> listens to the items the row shows now, <see cref="Unloaded"/> lets go, and items given while
+/// the row is not in the window are only heard from its next Loaded.
+/// </summary>
+internal sealed class LoadedSourceWatch(System.Collections.Specialized.NotifyCollectionChangedEventHandler handler)
+{
+	private System.Collections.Specialized.INotifyCollectionChanged? _source;
+
+	/// <summary>Whether it holds a source now (tests).</summary>
+	internal bool Listening => _source is not null;
+
+	/// <summary>The row is in the window: it hears <paramref name="items"/> (null: nothing).</summary>
+	public void Loaded(object? items)
+	{
+		Unloaded();
+		_source = items as System.Collections.Specialized.INotifyCollectionChanged;
+		if (_source is not null)
+		{
+			_source.CollectionChanged += handler;
+		}
+	}
+
+	/// <summary>The row left the window: it lets go.</summary>
+	public void Unloaded()
+	{
+		if (_source is not null)
+		{
+			_source.CollectionChanged -= handler;
+			_source = null;
+		}
+	}
+
+	/// <summary>The row's items changed: heard at once while it is loaded, else from its next Loaded.</summary>
+	public void SourceChanged(object? items, bool loaded)
+	{
+		if (loaded)
+		{
+			Loaded(items);
+		}
+		else
+		{
+			Unloaded();
+		}
+	}
 }
 
 /// <summary>Seaglass scrolling: moves a scroll viewer by an animation unless motion is off, adding up wheel notches that arrive while it runs.</summary>

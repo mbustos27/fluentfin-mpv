@@ -171,7 +171,8 @@ public sealed partial class EditorialItemHeader : UserControl
 		var dto = Dto;
 		WatchedButton.IsChecked = dto?.UserData?.Played;
 		FavoriteButton.IsChecked = dto?.UserData?.IsFavorite;
-		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter { IncludeToggles = false }.Convert(dto, typeof(object), null!, "") as FlyoutBase;
+		// 1.7.5: shown only with something in it (a series' or a season's had nothing for a user who isn't an administrator)
+		JellyfinFlyoutConverter.ApplyPageMenu(MoreButton, dto);
 		UpdateNames();
 	}
 

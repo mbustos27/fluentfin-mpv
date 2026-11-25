@@ -573,16 +573,46 @@ public sealed class SessionsTests : IDisposable
 		var signIn = new LoginViewModel(first.Auth, first.Setup.Object, first.LocalSettings);
 		await signIn.OnNavigatedTo(Pages(first).Last().Parameter!);
 		Assert.Equal(("", false), (signIn.Username, signIn.KeepMeLoggedIn));
-		// picked from the list: the page puts in her name and her saved password (LoginPage.AutoSuggestBox_SuggestionChosen)
-		signIn.Username = "alice";
-		signIn.Password = signIn.Unprotect(server.Users.Single(x => x.Username == "alice").Password);
-		await signIn.Login();
+		// picked from the list: 1.7.5, the page signs her in at once with her saved sign-in (LoginPage, LoginViewModel.SignInAs)
+		await signIn.SignInAs(server.Users.Single(x => x.Username == "alice"));
 
 		Assert.Equal(["alice", "bob"], server.Users.Select(x => x.Username).Order());
 		var asked = SignIns().Count;
 		var again = await Restart();
 		Assert.Equal(Shell, OnlyPage(again).Page);
 		Assert.Equal(("alice", 200), Assert.Single(SignIns().Skip(asked)));
+	}
+
+	/// <summary>
+	/// 1.7.5 (the review's Major): a saved user picked from the list whose saved password the server refuses (changed
+	/// elsewhere) is sent once, then forgotten, and the page says the saved sign-in no longer works. Sent as a typed password,
+	/// it went again at every pick and was never forgotten, and the page said "Wrong username or password" though nothing was
+	/// typed; Jellyfin disables an account after 3, and only the server's owner can enable it again.
+	/// </summary>
+	[Fact]
+	public async Task PickingASavedUser_WhoseSavedPasswordIsRefused_SendsItOnce_ThenForgetsIt()
+	{
+		var first = Start();
+		var server = AddServer(first);
+		Assert.Null(await first.Auth.Authenticate(server, "bob", "b0b-pw", remember: true));
+		// alice saved with a password the server no longer takes (changed on another device)
+		SavedSignIns.Remember(server, new SavedUser { Username = "alice", Password = "an-old-password".Protect(first.LocalSettings.GetEntropyBytes()) });
+		await TitleBar(first, server, "bob").SwitchUser();
+		var signIn = new LoginViewModel(first.Auth, first.Setup.Object, first.LocalSettings);
+		await signIn.OnNavigatedTo(Pages(first).Last().Parameter!);
+		var asked = SignIns().Count;
+		var shells = Pages(first).Count(p => p.Page == Shell);
+
+		// three picks, as long as the list (the server's saved users) offers her
+		for (var i = 0; i < 3 && server.Users.FirstOrDefault(x => x.Username == "alice") is { } saved; i++)
+		{
+			await signIn.SignInAs(saved);
+		}
+
+		Assert.Equal([("alice", 401)], SignIns().Skip(asked));
+		Assert.DoesNotContain(server.Users, x => x.Username == "alice");
+		Assert.Equal("The saved sign-in to home no longer works. Sign in again.", signIn.ErrorMessage);
+		Assert.Equal(shells, Pages(first).Count(p => p.Page == Shell));
 	}
 
 	/// <summary>The review's Major: "Remember me" off means "don't keep this one", never "forget the one kept before".</summary>

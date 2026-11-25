@@ -307,13 +307,14 @@ public sealed partial class CinematicHero : UserControl
 		var fade = animate && SafeMotion.Allowed ? HomeHero.FadeTime : animate ? TimeSpan.FromMilliseconds(150) : TimeSpan.Zero;
 		BackdropTop.Opacity = 0;
 		BackdropTop.Source = next;
-		next.ImageOpened += (_, _) =>
+		// 1.7.5 (fx3): nothing once the app is closing (a picture that arrives in the window's teardown)
+		next.ImageOpened += UiDispatch.Routed("Cinematic's hero's backdrop", () =>
 		{
 			if (ReferenceEquals(BackdropTop.Source, next))
 			{
 				Fade(BackdropTop, 0, 1, fade, () => { BackdropBottom.Source = next; BackdropTop.Opacity = 0; });
 			}
-		};
+		});
 
 		var dto = slide.Dto;
 		KickerText.Text = CinematicLabels.Kicker(dto, slide.IsResume).ToUpper(System.Globalization.CultureInfo.CurrentCulture);
@@ -426,11 +427,12 @@ public sealed partial class CinematicHero : UserControl
 		Storyboard.SetTargetProperty(animation, "Opacity");
 		var board = new Storyboard();
 		board.Children.Add(animation);
-		board.Completed += (_, _) =>
+		// 1.7.5 (fx3): a fade that ends in the window's teardown sets nothing there
+		board.Completed += UiDispatch.Frame("Cinematic's hero's fade", () =>
 		{
 			target.Opacity = to;
 			done?.Invoke();
-		};
+		});
 		board.Begin();
 	}
 
