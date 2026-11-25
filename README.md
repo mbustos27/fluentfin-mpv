@@ -28,6 +28,13 @@ Nothing else needs installing: .NET, the playback backend and libmpv are inside.
 SmartScreen asks the first time (**More info → Run anyway**). Your settings and data go to `%LOCALAPPDATA%\Nixie`.
 What's new: [CHANGELOG.md](CHANGELOG.md).
 
+## Nixie for TV
+
+**Nixie for TV** is Nixie for Android TV and Google TV, based on
+[Glacier](https://github.com/Glacier-Jellyfin/glacier-androidtv): three of the four themes (Drive-in, Cinematic and
+Editorial) and a player built for the remote. On the TV, type `is.gd/nixietv` into Downloader, or enter the code
+`6673217` in Downloader. Its releases and source: [mbustos27/nixie-tv](https://github.com/mbustos27/nixie-tv).
+
 ## The four themes
 
 <table>

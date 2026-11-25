@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: A security problem
+    url: https://github.com/mbustos27/nixie/security/advisories/new
+    about: Report it privately, never in a public issue. SECURITY.md explains what to include.
   - name: A problem with the Jellyfin server itself
     url: https://jellyfin.org/docs/general/getting-help/
     about: Libraries, transcoding settings, users and plugins belong to the server. Jellyfin's own community helps with those.
