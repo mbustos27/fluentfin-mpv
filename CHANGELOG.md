@@ -34,6 +34,35 @@ no longer hold on to memory.
 - **First start:** on a new install, Made by Nixie, the Collections page and the Movies and Shows tabs could stop
   working, and settings stopped saving, until Nixie was restarted.
 
+**Verified**
+
+- Three streams, each reviewed when it was done and again after its fixes. The reviews' one Major (a Back check that
+  could pass a slow Back on the app's own timing) was reverted before the merge, and the collection fixes had a second
+  review of their own. Every fix has a test that fails without it.
+- Made by Nixie's fixes come from running 1.8.0's own picks offline on a real library of 30,000 titles (copies of its
+  index and history, no server contacted): 4 of This week's 9 picks fitted before.
+- A bug hunt on the merged build: its Major, a first start's settings race in old code (1 in 9 first starts), was fixed
+  before the final build, with a test of 8 threads at once and a harness check that now fails any run showing it. Its
+  Minor ("Next after" the very film offered) was fixed too.
+- Memory: a page come back to by Back kept 5.7 to 11.5 MB a round in 1.8.0, and 0.2 to 1 MB now, in two new checks of
+  the basics gate.
+- The release build: Core 6,004 tests and UI 1,879 passed, none failed; the package's 150 checks passed; Windows
+  Defender found no threats in the installer or the zip.
+- The basics gate on the release package: 92 of 98 jobs in 86 min. No app bug: the rows at 2560 × 1392 didn't run (the
+  large monitor was off, 4 jobs); one Drive-in Back cell was slow only under load and passed 38 of 38 alone; and one
+  check couldn't set up its case because the people read finished first (the same case passed in the other themes).
+
+**For a hand check** (off-screen runs can't do these): Narrator itself on a Collection page's places ("2 of 24").
+
+**Known issues:**
+
+- Back to Drive-in's Home at 1280 × 720 can take 1.1 to 1.2 s late in a long session (1.8.0 too).
+- Reopening Nixie right after closing it during a film can leave its window unresponsive for up to about 2 s while the
+  closing copy lets go of its device; that wait is what keeps it one device.
+- Closing during playback in Windows Media Player can still let a quick reopen sign in before that player's last report.
+- Christmas collections with fewer than 8 unwatched titles don't reach This week or Home.
+- Editorial's library at its largest size was seen to jump after Back once; it hasn't been seen since.
+
 ## 1.8.0
 
 Collections, better: Made by Nixie picks about ten collections for the week and says why each is there, among them

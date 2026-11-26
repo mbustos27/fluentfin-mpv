@@ -174,6 +174,47 @@ runs post keys and cannot move the real cursor or hear sound).
     its reason and count, and its badges; the button as "Newest first, switch to oldest first", and the new words after
     a press (off-screen runs read the UI Automation names, not what Narrator says): not run, for the owner.
 
+## Nixie 1.8.1: the fix release
+Released 2026-11-25 at 9:41 PM (`eae19dd6`, tag `v1.8.1`). Three streams (back, mem, minors), each reviewed when done and
+again after its fixes, a second review of the collection fixes, a bug hunt (`docs\bughunt\BH-181.md`, local) and a
+hotfix for its Major. CHANGELOG.md has what it fixed.
+
+**Fixed** (beyond the 1.8.1 queue): BH-181-M1, a first start's settings race in `LocalSettingsService` (one lock for
+every read and write, a temp file per write; `drive.ps1` now fails a run whose app log shows XAML's unhandled exception or
+a failed index read); BH-181-m1, "Next after" the very film offered (now the film watched last); Made by Nixie's fixes
+from the offline run on the owner's library (`docs\reports\Made by Nixie on the owner's library 2026-11-25.md`, local).
+
+**Left (the next fix release):**
+- **A reopen during a close freezes the new window up to about 2.3 s** (new in 1.8.1): the startup sign-in runs on the UI
+  thread and waits on `InstallDeviceId`'s lock while the slot claim waits for the closing copy (`InstallDeviceId.cs:73-111`,
+  `App.xaml.cs:146-151`, `DefaultActivationHandler.cs:75`). Fix: expose the startup claim as a Task and await it before
+  `Authenticate`.
+- **The lifecycle gate's restart-playing-wait passed without waiting in Cinematic and Editorial**, and `-Quick` made slot 1
+  unseen by its "one device" check (`8-lifecycle.ps1:67-102`, `g4-common.ps1:200-208`). Fix: require the closing copy's
+  `[close] … slot (0): kept until…` line and a claim time no shorter than the let-go delay; read `[device] … slot 0` from the
+  new copy's log. App hardening: decide `owed` and release the slot before `sender.Hide()` (`App.xaml.cs:533-547`).
+- **Closing during Windows Media Player playback** still frees the slot while its Stopped is owed (`CloseSequence.cs:34`):
+  add `IJellyfinClient.HasUpstreamPlayback` (`_currentItem is not null`) to `owed`.
+- **A crash of the closing copy during the wait** keeps the starting copy waiting out the 3 s (`InstallDeviceId.cs:353-358`):
+  also wait on the closing process's handle.
+- **A play dated ahead of the PC's clock** ranks as "dated" until the clock passes it, then "fresh", moving Home's first row
+  (`Hold.cs:41`): allow a small future tolerance.
+- **No page-level test** that a two-film franchise pinned in 1.8.0 lands in Saved after the update (only `Find` is tested).
+- **BH-181-m2:** Christmas with fewer than 8 unwatched titles never reaches This week or Home, though Settings promises it
+  from 20 November.
+- **BH-181-q1 to q5** (nits): See all, a tile, Back, Back loses See all (since 1.7.4); See all's grid tiles say no place to
+  Narrator; the Collections page's check behind Back isn't newest-only; a reopen past 3 s is slot 1 for its run (as
+  designed); the per-library counts' edge cases. Details in the report.
+- **The focus180 gate check can't set up its case** when the people read finishes before This week shows (seen in the
+  release gate in Cinematic, and alone in Cinematic and Drive-in): hold the people read in the fake server until the tile
+  has the keyboard.
+- **Drive-in's Home Back at 1280 × 720 or maximised** late in a long run (1.1 to 1.9 s under load; 38 of 38 alone), 1.8.0
+  too: in the back stream's entry above.
+- **For the owner's call:** each library's preset strip still offers two-film franchise pairs nobody started
+  (`NixiePresets.cs:90-91`); the 3+ rule covers the Collections page and its count.
+- **TV:** the new reason-line wording and the collection rules (`ReasonLine`, the franchise floor, Christmas from
+  20 November) are desktop only; Nixie for TV needs the same in 1.0.1.
+
 ## Nixie 1.8.0: Collections, better
 - **The plan** (the owner, 2026-11-22: "Yes, with P1", a release of its own before the player; 2026-11-23: "we should be
   able to reverse the direction of the sort in collections"): the four P1 items of the local report
