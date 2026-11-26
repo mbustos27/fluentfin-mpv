@@ -51,6 +51,9 @@ no longer hold on to memory.
 - The basics gate on the release package: 92 of 98 jobs in 86 min. No app bug: the rows at 2560 × 1392 didn't run (the
   large monitor was off, 4 jobs); one Drive-in Back cell was slow only under load and passed 38 of 38 alone; and one
   check couldn't set up its case because the people read finished first (the same case passed in the other themes).
+- The upgrade, in Windows Sandbox as a standard user, right after publishing (9:50 to 10:04 PM): passed, every check.
+  1.8.1 installs over 1.8.0 and keeps its data; Restart to update installs quietly and opens Nixie again; and 1.8.0's
+  own Restart to update brings 1.8.1, which says "Updated".
 
 **For a hand check** (off-screen runs can't do these): Narrator itself on a Collection page's places ("2 of 24").
 
