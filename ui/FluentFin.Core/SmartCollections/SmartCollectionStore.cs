@@ -107,13 +107,17 @@ public sealed class SmartCollectionStore : Builders.ISpotlightPicks
 	/// <summary>How many weeks' Spotlight picks are kept.</summary>
 	public const int SpotlightWeeksKept = 8;
 
-	/// <summary>1.8: the Spotlight picked each week, on this PC (by ISO week, "2026-W48"); forgotten with the user's files on sign-out.</summary>
-	public async Task<IReadOnlyDictionary<string, string>> SpotlightPicksAsync()
+	/// <summary>
+	/// 1.8: the Spotlight picked each week, on this PC (by ISO week, "2026-W48"); forgotten with the user's files on sign-out.
+	/// 1.8.1 (BH-180-q1): of <paramref name="of"/>'s server and user only (an index's key): none when another sign-in is now.
+	/// </summary>
+	public async Task<IReadOnlyDictionary<string, string>> SpotlightPicksAsync(string? of = null)
 	{
 		await _lock.WaitAsync().ConfigureAwait(false);
 		try
 		{
-			return new Dictionary<string, string>((await Load().ConfigureAwait(false)).Spotlight, StringComparer.Ordinal);
+			var state = await Load().ConfigureAwait(false);
+			return of is not null && of != _key ? new Dictionary<string, string>(StringComparer.Ordinal) : new Dictionary<string, string>(state.Spotlight, StringComparer.Ordinal);
 		}
 		finally
 		{
@@ -121,13 +125,22 @@ public sealed class SmartCollectionStore : Builders.ISpotlightPicks
 		}
 	}
 
-	/// <summary>1.8: the week's Spotlight, kept so it holds all week and the next week's is another; the newest weeks only.</summary>
-	public async Task SaveSpotlightPick(string week, string id)
+	/// <summary>
+	/// 1.8: the week's Spotlight, kept so it holds all week and the next week's is another; the newest weeks only. 1.8.1
+	/// (BH-180-q1): for <paramref name="of"/>'s server and user only: a Switch user during the Spotlight's build (0.2 to 0.7 s)
+	/// saved user A's pick as user B's week; it is A's to make again at A's next visit.
+	/// </summary>
+	public async Task SaveSpotlightPick(string week, string id, string? of = null)
 	{
 		await _lock.WaitAsync().ConfigureAwait(false);
 		try
 		{
 			var state = await Load().ConfigureAwait(false);
+			if (of is not null && of != _key)
+			{
+				return; // another sign-in's store now
+			}
+
 			if (state.Spotlight.TryGetValue(week, out var was) && was == id)
 			{
 				return;

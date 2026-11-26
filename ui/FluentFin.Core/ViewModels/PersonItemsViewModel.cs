@@ -58,7 +58,9 @@ public partial class PersonItemsViewModel(IJellyfinClient jellyfinClient, ILogge
 	// a read behind Back is running (left again meanwhile: the next Back reads again)
 	private bool _readingBehind;
 
-	private async Task<LoadOutcome> Load(Guid? person, bool behind)
+	/// <param name="newest">1.8.1 (BH-175-q2, the review): behind Back, whether this refresh is still the newest; an older one
+	/// shows nothing (it answered last and overwrote a newer one's titles).</param>
+	private async Task<LoadOutcome> Load(Guid? person, bool behind, Func<bool>? newest = null)
 	{
 		if (person is not { } id)
 		{
@@ -92,6 +94,11 @@ public partial class PersonItemsViewModel(IJellyfinClient jellyfinClient, ILogge
 				var (all, complete, requests) = await RestOfEpisodes(id, episodes, token);
 				var cards = await CardsOf(films, all, complete, token);
 				token.ThrowIfCancellationRequested();
+				if (newest?.Invoke() == false)
+				{
+					return LoadOutcome.Loaded; // 1.8.1 (BH-175-q2): a newer refresh shows its own
+				}
+
 				Show(cards, behind);
 				LogRead(films.Count, all.Count, complete, requests + 1, watch);
 			}
@@ -197,7 +204,7 @@ public partial class PersonItemsViewModel(IJellyfinClient jellyfinClient, ILogge
 		// 1.7.5: a page left before the rest of its episodes came reads them now, behind what it shows
 		if ((stale || _restStopped) && parameter is BaseItemDto { Id: { } id })
 		{
-			await Results.RefreshBehindAsync(() => Load(id, behind: true));
+			await Results.RefreshBehindAsync(newest => Load(id, behind: true, newest));
 		}
 	}
 

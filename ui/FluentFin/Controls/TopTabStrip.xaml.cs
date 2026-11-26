@@ -672,8 +672,12 @@ public sealed partial class TopTabButton : Button
 }
 
 /// <summary>The strip for Narrator: a tab list, its selection the marked tab.</summary>
-internal sealed partial class TopTabStripAutomationPeer(TopTabStrip owner) : FrameworkElementAutomationPeer(owner), ISelectionProvider
+internal sealed partial class TopTabStripAutomationPeer(TopTabStrip element) : FrameworkElementAutomationPeer(element), ISelectionProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private TopTabStrip Element => Owner as TopTabStrip ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Tab;
 
 	protected override string GetClassNameCore() => nameof(TopTabStrip);
@@ -686,12 +690,16 @@ internal sealed partial class TopTabStripAutomationPeer(TopTabStrip owner) : Fra
 	public bool IsSelectionRequired => false;
 
 	public IRawElementProviderSimple[] GetSelection() =>
-		owner.Buttons.Where(b => b.IsSelected).Select(b => ProviderFromPeer(FromElement(b) ?? CreatePeerForElement(b))).ToArray();
+		Element.Buttons.Where(b => b.IsSelected).Select(b => ProviderFromPeer(FromElement(b) ?? CreatePeerForElement(b))).ToArray();
 }
 
 /// <summary>A tab for Narrator: a tab item (its "n of m" from AutomationProperties), selected when marked; Select opens it.</summary>
-internal sealed partial class TopTabButtonAutomationPeer(TopTabButton owner) : ButtonAutomationPeer(owner), ISelectionItemProvider
+internal sealed partial class TopTabButtonAutomationPeer(TopTabButton element) : ButtonAutomationPeer(element), ISelectionItemProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private TopTabButton Element => Owner as TopTabButton ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.TabItem;
 
 	protected override string GetClassNameCore() => nameof(TopTabButton);
@@ -699,17 +707,17 @@ internal sealed partial class TopTabButtonAutomationPeer(TopTabButton owner) : B
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.SelectionItem ? this : base.GetPatternCore(patternInterface);
 
-	public bool IsSelected => owner.IsSelected;
+	public bool IsSelected => Element.IsSelected;
 
 	public IRawElementProviderSimple? SelectionContainer =>
-		owner.Strip is { } strip ? ProviderFromPeer(FromElement(strip) ?? CreatePeerForElement(strip)) : null;
+		Element.Strip is { } strip ? ProviderFromPeer(FromElement(strip) ?? CreatePeerForElement(strip)) : null;
 
-	public void AddToSelection() => owner.Activate();
+	public void AddToSelection() => Element.Activate();
 
 	public void RemoveFromSelection()
 	{
 		// one tab is always the page shown: nothing to remove
 	}
 
-	public void Select() => owner.Activate();
+	public void Select() => Element.Activate();
 }

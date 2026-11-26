@@ -198,8 +198,12 @@ public sealed partial class HalfStarRating : UserControl
 	protected override AutomationPeer OnCreateAutomationPeer() => new HalfStarRatingPeer(this);
 
 	/// <summary>A slider to screen readers: 0-5 stars in steps of a half.</summary>
-	private sealed partial class HalfStarRatingPeer(HalfStarRating owner) : FrameworkElementAutomationPeer(owner), IRangeValueProvider
+	private sealed partial class HalfStarRatingPeer(HalfStarRating element) : FrameworkElementAutomationPeer(element), IRangeValueProvider
 	{
+		// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+		// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+		private HalfStarRating Element => Owner as HalfStarRating ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 		protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Slider;
 
 		protected override string GetClassNameCore() => nameof(HalfStarRating);
@@ -207,7 +211,7 @@ public sealed partial class HalfStarRating : UserControl
 		protected override object GetPatternCore(PatternInterface patternInterface) =>
 			patternInterface == PatternInterface.RangeValue ? this : base.GetPatternCore(patternInterface);
 
-		public bool IsReadOnly => owner.IsReadOnly;
+		public bool IsReadOnly => Element.IsReadOnly;
 
 		public double LargeChange => 1;
 
@@ -217,8 +221,8 @@ public sealed partial class HalfStarRating : UserControl
 
 		public double Minimum => 0;
 
-		public double Value => owner.Value / 2.0;
+		public double Value => Element.Value / 2.0;
 
-		public void SetValue(double value) => owner.SetByUser((int)Math.Round(value * 2, MidpointRounding.AwayFromZero));
+		public void SetValue(double value) => Element.SetByUser((int)Math.Round(value * 2, MidpointRounding.AwayFromZero));
 	}
 }

@@ -573,7 +573,9 @@ public static class CollectionLineup
 		{
 			if (KeepsOrder(group.Key))
 			{
-				queues[group.Key] = new Queue<Seen>(group.OrderBy(x => x.Given));
+				// 1.8.1 (the owner's library, fix 1): a personal slot's picks by their anchor's recency first (fresh, dated, none),
+				// then as their builder gave them
+				queues[group.Key] = new Queue<Seen>(group.OrderBy(x => IsPersonal(x.Slot) ? Anchors.Hold.Recency(x.Collection.AnchoredAt, now) : 0).ThenBy(x => x.Given));
 				continue;
 			}
 
@@ -586,12 +588,16 @@ public static class CollectionLineup
 			queues[group.Key] = new Queue<Seen>(group.OrderByDescending(x => x.Order).ThenBy(x => x.Collection.Id, StringComparer.Ordinal));
 		}
 
-		// greedy: the best of each slot's next one, scored against what is already taken
+		// greedy: the best of each slot's next one, scored against what is already taken. 1.8.1 (the owner's library, fix 1): the
+		// personal slots' next ones are taken by their anchor's recency (a fresh anchor, then a dated one, then one with none),
+		// their score breaking ties within a group; they take their place in the lineup by the best of their scores, as before.
+		// On the owner's library "Next in Ant-Man" (a film with no play date) led Home over "More like What We Do in the
+		// Shadows" (finished two days before): the slot's prior decided
 		var picks = new List<(Seen Seen, double Score)>();
 		var shown = new HashSet<Guid>();
 		while (picks.Count < Slots)
 		{
-			(Seen Seen, double Score)? best = null;
+			var heads = new List<(Seen Seen, double Score)>();
 			foreach (var (slot, queue) in queues.OrderBy(x => x.Key))
 			{
 				if (picks.Count(x => x.Seen.Slot == slot) >= Cap(slot))
@@ -627,14 +633,25 @@ public static class CollectionLineup
 						continue;
 					}
 
-					var score = Prior(slot) * next.Quality * (1 - already);
-					if (best is not { } b || score > b.Score)
-					{
-						best = (next, score);
-					}
-
+					heads.Add((next, Prior(slot) * next.Quality * (1 - already)));
 					break;
 				}
+			}
+
+			// the best of the others by score (an earlier slot wins a tie, as before); the personal ones by recency, then score
+			(Seen Seen, double Score)? best = null;
+			foreach (var head in heads.Where(x => !IsPersonal(x.Seen.Slot)))
+			{
+				if (best is not { } b || head.Score > b.Score)
+				{
+					best = head;
+				}
+			}
+
+			var personal = heads.Where(x => IsPersonal(x.Seen.Slot)).ToList();
+			if (personal.Count > 0 && (best is not { } other || personal.Max(x => x.Score) >= other.Score))
+			{
+				best = personal.OrderBy(x => Anchors.Hold.Recency(x.Seen.Collection.AnchoredAt, now)).ThenByDescending(x => x.Score).ThenBy(x => x.Seen.Slot).First();
 			}
 
 			if (best is not { } taken)
@@ -781,7 +798,7 @@ public static class CollectionLineup
 		var watch = Stopwatch.StartNew();
 		var data = LineupData.Of(index, lists);
 		var collapsed = watch.ElapsedMilliseconds;
-		IReadOnlyList<SmartCollection> all = [.. SmartCollectionCatalog.BuildAll(SmartCollectionCatalog.PublishedBuilders, index, now, boxedFranchises, kindsOff, lists, Log, census: true, titles: data.Titles)
+		IReadOnlyList<SmartCollection> all = [.. SmartCollectionCatalog.BuildAll(SmartCollectionCatalog.PublishedBuilders, index, now, boxedFranchises, kindsOff, lists, Log, census: true, titles: data.Titles, publishing: true)
 			.Where(x => SmartCollectionCatalog.Published.Contains(x.Kind))];
 		var built = watch.ElapsedMilliseconds;
 		Lineup lineup;

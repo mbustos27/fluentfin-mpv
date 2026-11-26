@@ -330,9 +330,10 @@ internal sealed class ItemPagePlace
 			}
 
 			var now = DateTime.UtcNow;
-			if (_loaded())
+			if (_loaded() && loadedAt is null)
 			{
-				loadedAt ??= now;
+				loadedAt = now;
+				Services.NavigationService.PlaceStep(_page, "its data in"); // 1.8.1 (rule 10): Back's place line on the item pages too
 			}
 
 			if (reopen is { } detailsOf && loadedAt is { } loadedSince)
@@ -385,6 +386,7 @@ internal sealed class ItemPagePlace
 				{
 					_scroller.ChangeView(null, offset, null, disableAnimation: true);
 					scrolled = true;
+					Services.NavigationService.PlaceStep(_page, $"scroll asked ({(int)offset} px)"); // 1.8.1 (rule 10)
 				}
 			}
 			else if (!focused && _page.XamlRoot is { } root)
@@ -396,9 +398,11 @@ internal sealed class ItemPagePlace
 				{
 					case FocusStep.Leave:
 						focused = true;
+						Services.NavigationService.PlacePutBack(_page, "place (the keyboard left where it was)"); // 1.8.1 (rule 10)
 						break;
 					case FocusStep.Restore when Target(place) is Control control && control.Focus(RestoreAs(place.FocusFromKeyboard)):
 						focused = true;
+						Services.NavigationService.PlacePutBack(_page, "place"); // 1.8.1 (rule 10): Back's time to its card or row
 						break;
 				}
 			}

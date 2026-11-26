@@ -86,6 +86,13 @@ public sealed record SmartCollection(string Id, SmartCollectionKind Kind, string
 	public bool Ended { get; init; }
 	// end 1.7 trending
 
+	/// <summary>
+	/// 1.8.1 (the owner's library, fix 1): a personal pick's anchor (Next in, More like, More from): when the title it hangs on was
+	/// last played; null with no date known. The lineup takes the personal picks by it (<see cref="Anchors.Hold.Recency"/>): a
+	/// fresh one first, then a dated one, then one with no date, the slot only breaking ties.
+	/// </summary>
+	public DateTimeOffset? AnchoredAt { get; init; }
+
 	/// <summary>"12 films", "3 shows", "8 titles".</summary>
 	public string CountText => SmartCollectionKinds.CountText(ItemIds.Count, Only);
 

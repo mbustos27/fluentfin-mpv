@@ -62,6 +62,14 @@ public interface IMpvBackend
 	Task<bool> WaitForStopReportsAsync(TimeSpan timeout);
 
 	/// <summary>
+	/// 1.8.1 (the review of BH-175-m4): whether the running backend owes a Stopped report now (what <see cref="WaitForStopReportsAsync"/>
+	/// waits for: a play session still waiting for its <c>reported</c>, or an active <c>state</c>; not once its exit is handled).
+	/// Back from a film defers the stop: the page has left it while the backend still reports it. False by default (a backend
+	/// that keeps no sessions).
+	/// </summary>
+	bool OwesStopReport => false;
+
+	/// <summary>
 	/// Kills the backend (and the mpv it started) now, for example when mpv hangs; reported as a crash with this reason.
 	/// Ignored once FluentFin's own stop of that backend has begun (its exit is then the stop's, docs/BRIDGE.md §6).
 	/// Never throws (the watchdog calls it from a timer thread).

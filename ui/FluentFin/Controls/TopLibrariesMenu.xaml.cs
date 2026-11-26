@@ -205,8 +205,12 @@ public sealed partial class TopMenuEntry : MenuFlyoutButton
 	protected override AutomationPeer OnCreateAutomationPeer() => new TopMenuEntryAutomationPeer(this);
 }
 
-internal sealed partial class TopMenuEntryAutomationPeer(TopMenuEntry owner) : ButtonAutomationPeer(owner), ISelectionItemProvider
+internal sealed partial class TopMenuEntryAutomationPeer(TopMenuEntry element) : ButtonAutomationPeer(element), ISelectionItemProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private TopMenuEntry Element => Owner as TopMenuEntry ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.MenuItem;
 
 	protected override string GetClassNameCore() => nameof(TopMenuEntry);
@@ -214,7 +218,7 @@ internal sealed partial class TopMenuEntryAutomationPeer(TopMenuEntry owner) : B
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.SelectionItem ? this : base.GetPatternCore(patternInterface);
 
-	public bool IsSelected => owner.IsCurrent;
+	public bool IsSelected => Element.IsCurrent;
 
 	public IRawElementProviderSimple? SelectionContainer => null;
 

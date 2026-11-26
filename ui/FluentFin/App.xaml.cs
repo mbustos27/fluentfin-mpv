@@ -47,6 +47,9 @@ public partial class App : Application
 
 	// 1.7.3 (verify-package: a close from the player page took 3 to 20 s): when the close began, for the log's durations
 	private static readonly System.Diagnostics.Stopwatch s_closing = new();
+	// 1.8.1: this window's device slot, claimed at the start (an instance field: a static one touched in the constructor ran
+	// App's static initializer early, whose MainWindow needs the host)
+	private Task<(int? Slot, long Ms)>? _deviceSlot;
 
 	public static T GetService<T>()
 		where T : class
@@ -138,6 +141,14 @@ public partial class App : Application
 		// 1.5.1 fixes (BH-150-M2): the device id Jellyfin sees is this copy's (its data folder's), not the PC's; 1.6.1: kept in
 		// that folder (a new version folder or drive letter is the same device), one per running window of the copy
 		Core.InstallDeviceId.UseDataFolder(knownFolders.ApplicationData, UpdateNoticeService.IsMsiInstall());
+		// 1.8.1 (the review of BH-175-m4): this window's slot claimed now, off the UI thread: started while the copy's last window
+		// sends a film's last reports, it waits for that window's slot (a few seconds at most) here, not in the sign-in
+		_deviceSlot = Task.Run(() =>
+		{
+			var watch = System.Diagnostics.Stopwatch.StartNew();
+			_ = Core.InstallDeviceId.Current;
+			return (Core.InstallDeviceId.WindowSlot, watch.ElapsedMilliseconds);
+		});
 
 		Host = Microsoft.Extensions.Hosting.Host
 		.CreateDefaultBuilder()
@@ -396,6 +407,12 @@ public partial class App : Application
 		try
 		{
 			PerfLog.Startup(GetService<ILogger<App>>(), "launched");
+			// 1.8.1 (the review of BH-175-m4): which device the server sees this window as (0: the copy's own), and how long the
+			// claim took (a window started during the copy's last close waits for its slot)
+			var slotLog = GetService<ILogger<App>>();
+			_ = _deviceSlot?.ContinueWith(t => slotLog.LogInformation("[device] this window is the copy's device slot {Slot}, claimed in {Ms} ms",
+				t.Result.Slot?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none", t.Result.Ms), CancellationToken.None,
+				TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
 			// Nixie 1.4.0 (bug hunt M3): what threw on the UI thread is in the log before a crash can end the app
 			Services.FirstChanceTrail.Start();
 			Services.CrashTrail.ListenForUnhandledErrors(GetService<ILogger<App>>()); // 1.7.5 (fx3)

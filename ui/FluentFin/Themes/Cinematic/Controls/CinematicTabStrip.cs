@@ -202,8 +202,12 @@ public sealed partial class CinematicTabButton : Button
 	protected override AutomationPeer OnCreateAutomationPeer() => new CinematicTabButtonAutomationPeer(this);
 }
 
-internal sealed partial class CinematicTabStripAutomationPeer(CinematicTabStrip owner) : FrameworkElementAutomationPeer(owner), ISelectionProvider
+internal sealed partial class CinematicTabStripAutomationPeer(CinematicTabStrip element) : FrameworkElementAutomationPeer(element), ISelectionProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private CinematicTabStrip Element => Owner as CinematicTabStrip ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Tab;
 
 	protected override string GetClassNameCore() => nameof(CinematicTabStrip);
@@ -216,11 +220,15 @@ internal sealed partial class CinematicTabStripAutomationPeer(CinematicTabStrip 
 	public bool IsSelectionRequired => false;
 
 	public IRawElementProviderSimple[] GetSelection() =>
-		[.. owner.Buttons.Where(b => b.Tab.IsSelected).Select(b => ProviderFromPeer(FromElement(b) ?? CreatePeerForElement(b)))];
+		[.. Element.Buttons.Where(b => b.Tab.IsSelected).Select(b => ProviderFromPeer(FromElement(b) ?? CreatePeerForElement(b)))];
 }
 
-internal sealed partial class CinematicTabButtonAutomationPeer(CinematicTabButton owner) : ButtonAutomationPeer(owner), ISelectionItemProvider
+internal sealed partial class CinematicTabButtonAutomationPeer(CinematicTabButton element) : ButtonAutomationPeer(element), ISelectionItemProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private CinematicTabButton Element => Owner as CinematicTabButton ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.TabItem;
 
 	protected override string GetClassNameCore() => nameof(CinematicTabButton);
@@ -228,17 +236,17 @@ internal sealed partial class CinematicTabButtonAutomationPeer(CinematicTabButto
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.SelectionItem ? this : base.GetPatternCore(patternInterface);
 
-	public bool IsSelected => owner.Tab.IsSelected;
+	public bool IsSelected => Element.Tab.IsSelected;
 
 	public IRawElementProviderSimple? SelectionContainer =>
-		owner.Strip is { } strip ? ProviderFromPeer(FromElement(strip) ?? CreatePeerForElement(strip)) : null;
+		Element.Strip is { } strip ? ProviderFromPeer(FromElement(strip) ?? CreatePeerForElement(strip)) : null;
 
-	public void AddToSelection() => owner.Activate();
+	public void AddToSelection() => Element.Activate();
 
 	public void RemoveFromSelection()
 	{
 		// one tab is always the one shown
 	}
 
-	public void Select() => owner.Activate();
+	public void Select() => Element.Activate();
 }

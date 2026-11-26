@@ -30,11 +30,20 @@ public static class InstallDeviceId
 	/// <summary>1.6.1: how many windows of one copy get an id of their own (beyond that they share the last one).</summary>
 	public const int WindowSlots = 16;
 
+	/// <summary>
+	/// 1.8.1 (the review of BH-175-m4): how long a starting window waits for a closing window of its copy that keeps the first
+	/// slot while its last reports are sent (<see cref="Closing"/>). Those take well under a second with a server that answers.
+	/// </summary>
+	public static readonly TimeSpan ClosingWait = TimeSpan.FromSeconds(3);
+
 	private static readonly Lock Gate = new();
 	private static string? _dataFolder;
 	private static bool _installed;
 	private static string? _current;
 	private static IDisposable? _window;
+	private static string? _windowOf; // 1.8.1: the copy's id and the slot this window holds
+	private static int _slot;
+	private static EventWaitHandle? _closing;
 
 	/// <summary>
 	/// The app's start: the data folder this run uses (<see cref="KnownFolders.ApplicationData"/>). From then on the id is the
@@ -49,8 +58,7 @@ public static class InstallDeviceId
 			_dataFolder = dataFolder;
 			_installed = installed;
 			_current = null;
-			_window?.Dispose();
-			_window = null;
+			FreeWindow();
 		}
 	}
 
@@ -87,10 +95,13 @@ public static class InstallDeviceId
 				}
 
 				// 1.7.5 (BH-161-q2): the window's slot whatever the id came from (the fallback skipped it, so two windows shared one id)
+				// 1.8.1 (the review of BH-175-m4): after a closing window of the copy that still sends its last reports, bounded
 				try
 				{
-					var (slot, claim) = ClaimWindow(id);
+					var (slot, claim) = ClaimWindow(id, ClosingWait);
 					_window = claim;
+					_windowOf = id;
+					_slot = slot;
 					return _current = ForWindow(id, slot);
 				}
 				catch (Exception)
@@ -102,19 +113,79 @@ public static class InstallDeviceId
 	}
 
 	/// <summary>
-	/// 1.7.5: this window is closing (<see cref="Mpv.CloseSequence"/>, right after the window hides): its slot is free at once, so a
+	/// 1.7.5: this window is closing (<see cref="Mpv.CloseSequence"/>, right after the window hides): its slot is free, so a
 	/// window opened meanwhile (Restart to update reopening Nixie, a close and a quick start) is the same device on the server,
 	/// not the copy's second window (a device of its own, which a per-device allow list refuses). This window keeps sending its
-	/// id for its last reports: the same device and sign-in as the new one.
+	/// id for its last reports: the same device and sign-in as the new one. 1.8.1 (BH-175-m4): called as the close begins only
+	/// when no play's reports are owed; otherwise once they are sent (or their bounds are over), so a sign-in by name of the
+	/// new window can't end the session those reports are for.
 	/// </summary>
 	public static void ReleaseWindow()
 	{
 		lock (Gate)
 		{
-			_window?.Dispose();
-			_window = null;
+			FreeWindow();
 		}
 	}
+
+	/// <summary>1.8.1: the slot this window holds (0: the copy's own device), null when it holds none (for the log).</summary>
+	public static int? WindowSlot
+	{
+		get
+		{
+			lock (Gate)
+			{
+				return _window is null ? null : _slot;
+			}
+		}
+	}
+
+	/// <summary>
+	/// 1.8.1 (the review of BH-175-m4): this window is closing but keeps its slot while a play's last reports are sent
+	/// (<see cref="Mpv.CloseSequence"/>). When that slot is the first (the copy's own device), a window starting meanwhile waits
+	/// for it (<see cref="ClaimWindow(string, TimeSpan)"/>, at most <see cref="ClosingWait"/>) and is the same device again,
+	/// not the copy's second one for its whole run (which a per-device allow list refuses). Marked until
+	/// <see cref="ReleaseWindow"/>. Never throws.
+	/// </summary>
+	public static void Closing()
+	{
+		lock (Gate)
+		{
+			if (_window is null || _slot != 0 || _windowOf is null || _closing is not null)
+			{
+				return;
+			}
+
+			try
+			{
+				_closing = new EventWaitHandle(false, EventResetMode.ManualReset, ClosingName(_windowOf), out var createdNew);
+				if (!createdNew)
+				{
+					_closing.Reset(); // a mark of an earlier close a starting window still had open
+				}
+			}
+			catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
+			{
+				// a mark this window may not make (a window of the copy running as administrator made one): no wait for it
+			}
+		}
+	}
+
+	// under Gate: the slot first, then the mark, so a window that waited for it finds the slot free
+	private static void FreeWindow()
+	{
+		_window?.Dispose();
+		_window = null;
+		_windowOf = null;
+		if (_closing is { } closing)
+		{
+			_closing = null;
+			closing.Set();
+			closing.Dispose();
+		}
+	}
+
+	private static string ClosingName(string id) => $@"Local\Nixie-device-{id}-closing";
 
 	private static string CurrentUser => $@"{Environment.UserDomainName}\{Environment.UserName}";
 
@@ -267,6 +338,32 @@ public static class InstallDeviceId
 		}
 
 		return (WindowSlots - 1, new Mutex(false));
+	}
+
+	/// <summary>
+	/// 1.8.1 (the review of BH-175-m4): <see cref="ClaimWindow(string)"/> for a window starting. While a window of the copy keeps
+	/// the first slot only to send its last reports (<see cref="Closing"/>), this waits for that slot, at most
+	/// <paramref name="closingWait"/>, so it is the copy's own device again; past that, the next free slot as before. A window
+	/// that is simply running holds its slot with no such mark: no wait.
+	/// </summary>
+	public static (int Slot, IDisposable Claim) ClaimWindow(string id, TimeSpan closingWait)
+	{
+		try
+		{
+			if (closingWait > TimeSpan.Zero && EventWaitHandle.TryOpenExisting(ClosingName(id), out var closing))
+			{
+				using (closing)
+				{
+					closing.WaitOne(closingWait);
+				}
+			}
+		}
+		catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
+		{
+			// a mark this window may not open: the slots as before
+		}
+
+		return ClaimWindow(id);
 	}
 
 	/// <summary>

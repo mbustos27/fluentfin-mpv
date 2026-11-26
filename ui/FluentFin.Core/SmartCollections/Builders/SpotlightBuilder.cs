@@ -793,11 +793,15 @@ public sealed class SpotlightBuilder(IReadOnlyDictionary<string, string>? picks 
 /// </summary>
 public interface ISpotlightPicks
 {
-	/// <summary>The picks kept, by ISO week ("2026-W48" → its id).</summary>
-	Task<IReadOnlyDictionary<string, string>> SpotlightPicksAsync();
+	/// <summary>
+	/// The picks kept, by ISO week ("2026-W48" → its id). 1.8.1 (BH-180-q1): <paramref name="of"/>, an index's
+	/// <see cref="IndexSnapshot.Key"/>: the picks of that server and user only (none when another sign-in's are kept now);
+	/// null: the signed-in one's.
+	/// </summary>
+	Task<IReadOnlyDictionary<string, string>> SpotlightPicksAsync(string? of = null);
 
-	/// <summary>Keeps the week's pick.</summary>
-	Task SaveSpotlightPick(string week, string id);
+	/// <summary>Keeps the week's pick; 1.8.1 (BH-180-q1): for <paramref name="of"/> only (nothing when another sign-in's are kept now).</summary>
+	Task SaveSpotlightPick(string week, string id, string? of = null);
 }
 
 /// <summary>The Spotlight's gates, in order (<see cref="SpotlightCounts"/>).</summary>

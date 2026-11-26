@@ -177,6 +177,12 @@ public static class NixieTitles
 	/// <summary>"Next in Mission: Impossible": a franchise the user has started (stream a).</summary>
 	public static string NextIn(string franchise) => $"Next in {franchise.Trim()}";
 
+	/// <summary>
+	/// 1.8.1 (BH-180-q3): "Next after The Frontier and the Mirror": a franchise the user has started whose name isn't known
+	/// (no TMDb name, and its films' names share no words), named by its first film.
+	/// </summary>
+	public static string NextAfter(string firstFilm) => $"Next after {firstFilm.Trim()}";
+
 	/// <summary>"More like Heat": titles like one the user finished (stream a; the report's "Because you watched", said of the film).</summary>
 	public static string MoreLike(string title) => $"More like {title.Trim()}";
 
@@ -223,6 +229,13 @@ public static class ReasonFacts
 
 	/// <summary>"You finished Arrival".</summary>
 	public static string Finished(string name) => $"You finished {name.Trim()}";
+
+	/// <summary>
+	/// 1.8.1 (the owner's library, fix 3): "You watched 36 of 39 episodes of What We Do in the Shadows": a show the anchors count
+	/// finished (90 % of its episodes) with episodes left, which "You finished" misstated.
+	/// </summary>
+	public static string WatchedEpisodes(string name, int played, int of) =>
+		$"You watched {played.ToString("N0", CultureInfo.CurrentCulture)} of {of.ToString("N0", CultureInfo.CurrentCulture)} episodes of {name.Trim()}";
 
 	/// <summary>"You watched Arrival twice".</summary>
 	public static string Rewatched(string name) => $"You watched {name.Trim()} twice";
@@ -289,6 +302,15 @@ public static class NixieTileWords
 	/// reason that comes later moves nothing (rule 7). 124 at 100 %.
 	/// </summary>
 	public static double WordsHeight(double textScale) => Math.Ceiling((2 * 20 + (2 + TileCountLines) * 16) * Math.Max(1, textScale)) + 4;
+
+	/// <summary>
+	/// 1.8.1 (BH-180-q2): the height of a server's box set's or playlist's words (<paramref name="nixie"/> false): a title of
+	/// two lines and its own line ("6 films · 3 left", two lines at most), no count lines (that line is collapsed): 74 at
+	/// 100 %. They had a Nixie tile's 124, about 85 px empty under their two lines, and their rows were taller. A row holds
+	/// one kind of tile (the server's sets, its playlists, or Nixie's), as See all's grid does, so each is still one height.
+	/// </summary>
+	public static double WordsHeight(double textScale, bool nixie) =>
+		nixie ? WordsHeight(textScale) : Math.Ceiling((2 * 20 + 2 * 16) * Math.Max(1, textScale)) + 2;
 
 	/// <summary>The tile's badge <paramref name="index"/> ("" when it has none there).</summary>
 	public static string Badge(SmartCollection? nixie, int index) => nixie is not null && index >= 0 && index < nixie.Badges.Count ? nixie.Badges[index].Text : "";

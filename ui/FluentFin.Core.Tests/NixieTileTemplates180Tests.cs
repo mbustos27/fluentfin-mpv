@@ -88,6 +88,22 @@ public sealed class NixieTileTemplates180Tests : IDisposable
 		Assert.True(NixieTileWords.WordsHeight(textScale) >= lines + 4, $"{textScale}: {lines} px of lines");
 	}
 
+	// 1.8.1 (BH-180-q2): a server's box set or playlist had a Nixie tile's words height (124 px at 100 %) for its two lines:
+	// about 85 px empty under them, and its rows taller. Its own now: a title of two lines and its line of two, no count
+	[Theory]
+	[InlineData(1.0, 74)]
+	[InlineData(1.25, 92)]
+	[InlineData(1.5, 110)]
+	[InlineData(0.5, 74)]
+	public void A_server_tile_has_words_of_its_own_height_never_the_Nixie_ones(double textScale, double height)
+	{
+		Assert.Equal(height, NixieTileWords.WordsHeight(textScale, nixie: false));
+		Assert.Equal(NixieTileWords.WordsHeight(textScale), NixieTileWords.WordsHeight(textScale, nixie: true));
+		var lines = (2 * 20 + 2 * 16) * Math.Max(1, textScale); // its title and its line ("1,204 films · 1,150 left" wraps at 150 %)
+		Assert.True(NixieTileWords.WordsHeight(textScale, nixie: false) >= lines + 2, $"{textScale}: {lines} px of lines");
+		Assert.True(NixieTileWords.WordsHeight(textScale) - NixieTileWords.WordsHeight(textScale, nixie: false) >= 48 * Math.Max(1, textScale)); // three count lines less
+	}
+
 	[Fact]
 	public void A_saved_filter_tile_says_its_library_and_what_it_keeps_never_0_titles()
 	{
@@ -155,7 +171,8 @@ public sealed class NixieTileTemplates180Tests : IDisposable
 		// in order: the title, the facts, the count; the words one height on every tile (no jump, one grid cell size)
 		Assert.True(template.IndexOf("Text=\"{x:Bind Title}\"", StringComparison.Ordinal) < template.IndexOf("x:Name=\"TileFacts\"", StringComparison.Ordinal));
 		Assert.True(template.IndexOf("x:Name=\"TileFacts\"", StringComparison.Ordinal) < template.IndexOf("x:Name=\"TileCount\"", StringComparison.Ordinal));
-		Assert.Contains("Height=\"{x:Bind local:NixieTileShown.WordsHeight}\"", template); // grown with Windows' text size
+		Assert.Contains("Height=\"{x:Bind local:NixieTileShown.WordsHeightOf(IsNixie)}\"", template); // grown with Windows' text size; 1.8.1: a server's tile its own
+		Assert.Contains("Visibility=\"{x:Bind local:NixieTileShown.CountShown(Nixie), Mode=OneWay}\"", count); // 1.8.1: no count lines on a server's tile
 		// two badges at most, each shown only when there is one, over the art (before the words)
 		Assert.Contains("Visibility=\"{x:Bind local:NixieTileShown.Badge(Nixie, 0), Mode=OneWay}\"", template);
 		Assert.Contains("Visibility=\"{x:Bind local:NixieTileShown.Badge(Nixie, 1), Mode=OneWay}\"", template);

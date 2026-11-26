@@ -29,10 +29,19 @@ public enum AnchorWhy
 public sealed record Anchor(IndexEntry Title, AnchorWhy Why, DateTimeOffset? When, int Plays)
 {
 	/// <summary>
-	/// The reason's fact (stream t's <see cref="ReasonFacts"/>): "You finished Arrival", "A favourite: Arrival". Review (Major):
-	/// never "You watched Heat twice": the play count counts starts (<see cref="AnchorWhy.Rewatched"/>).
+	/// 1.8.1 (the owner's library, fix 3): a show's episodes played and its episodes in all (any copy's, as one title), when it is
+	/// finished by the 90 % rule with episodes left; null for a film, a show played to its end, or one not known.
 	/// </summary>
-	public string Said => Why.HasFlag(AnchorWhy.Finished) ? ReasonFacts.Finished(Title.Name) : ReasonFacts.Favourite(Title.Name);
+	public (int Played, int Of)? Episodes { get; init; }
+
+	/// <summary>
+	/// The reason's fact (stream t's <see cref="ReasonFacts"/>): "You finished Arrival", "A favourite: Arrival". Review (Major):
+	/// never "You watched Heat twice": the play count counts starts (<see cref="AnchorWhy.Rewatched"/>). 1.8.1 (fix 3): a show
+	/// with episodes left says how far: "You watched 36 of 39 episodes of What We Do in the Shadows", not "You finished".
+	/// </summary>
+	public string Said => !Why.HasFlag(AnchorWhy.Finished) ? ReasonFacts.Favourite(Title.Name)
+		: Episodes is { } episodes && episodes.Played < episodes.Of ? ReasonFacts.WatchedEpisodes(Title.Name, episodes.Played, episodes.Of)
+		: ReasonFacts.Finished(Title.Name);
 }
 
 /// <summary>Nixie 1.8 (P1-2): the anchors of an index.</summary>
@@ -84,7 +93,10 @@ public static class AnchorFinder
 
 			if (why != AnchorWhy.None)
 			{
-				anchors.Add(new Anchor(title, why, when, Math.Max(played.Count, title.Played ? 1 : 0)));
+				// 1.8.1 (fix 3): a show finished by the 90 % rule with episodes left says how far, not "You finished"
+				var left = why.HasFlag(AnchorWhy.Finished) && !title.Played && title.Kind == IndexKind.Series && title.Unplayed is { } unplayed && unplayed > 0
+					&& EpisodesOf(title, titles, plays) is { Played: > 0 } seen ? (seen.Played, seen.Played + unplayed) : ((int, int)?)null;
+				anchors.Add(new Anchor(title, why, when, Math.Max(played.Count, title.Played ? 1 : 0)) { Episodes = left });
 			}
 		}
 
@@ -109,6 +121,21 @@ public static class AnchorFinder
 
 		return title.Kind == IndexKind.Series && EpisodesOf(title, titles, plays) is { Played: > 0 } e && title.Unplayed is { } left && left >= 0
 			&& e.Played >= FinishedShare * (e.Played + left);
+	}
+
+	/// <summary>
+	/// 1.8.1 (the owner's library, fix 2): whether the user started the title: played, a film begun (a play count or a last
+	/// play: the server counts a start), a show with any episode played (any copy's). "More like" leaves these out: It's Always
+	/// Sunny, 168 episodes in and the user's current binge, was in two of them.
+	/// </summary>
+	public static bool Started(IndexEntry title, CanonicalTitles titles, IReadOnlyDictionary<Guid, SeriesPlays> plays, IAnchorSource source)
+	{
+		if (title.Played || source.PlaysOf(title) is { Count: > 0 } or { Last: not null })
+		{
+			return true;
+		}
+
+		return title.Kind == IndexKind.Series && EpisodesOf(title, titles, plays) is { Played: > 0 };
 	}
 
 	// a show in two libraries is one, its episodes the most of either copy's (UnfinishedSeriesBuilder's rule)

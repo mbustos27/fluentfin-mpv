@@ -267,7 +267,7 @@ public sealed class TmdbExportsTests
 	[Fact]
 	public void The_built_collections_follow_the_lists_passed_in()
 	{
-		var index = IndexSnapshot.Empty with { Entries = [Film("A", "10", 1977), Film("B", "10", 1980)] };
+		var index = IndexSnapshot.Empty with { Entries = [Film("A", "10", 1977), Film("B", "10", 1980), Film("C", "10", 1983)] }; // 1.8.1 (fix 7): three films
 		var outside = OutsideListsSnapshot.Empty with { FranchiseNames = new Dictionary<string, string> { ["10"] = "Star Wars Collection" } };
 
 		Assert.Equal("Star Wars", SmartCollectionCatalog.BuildAll(index, Noon, outside: outside).Single(x => x.Kind == SmartCollectionKind.Franchise).Title);

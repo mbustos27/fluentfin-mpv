@@ -248,13 +248,19 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 			return;
 		}
 
+		// 1.8.1 (BH-175-q2, the review): written only while this refresh is the newest (an older one answering last overwrote it)
 		if (Nixie is { } nixie)
 		{
-			await State.RefreshBehindAsync(async () =>
+			await State.RefreshBehindAsync(async newest =>
 			{
 				if (await nixie.LoadItems(JellyfinClient) is not { } items)
 				{
 					return LoadMessages.CouldNotLoad("this collection");
+				}
+
+				if (!newest())
+				{
+					return LoadOutcome.Loaded; // (not shown: a newer refresh shows its own)
 				}
 
 				_serverOrder = [.. items];
@@ -264,7 +270,7 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 		}
 		else if (Collection is { Id: { } id } shown)
 		{
-			await State.RefreshBehindAsync(() => RefreshBehind(id, shown));
+			await State.RefreshBehindAsync(newest => RefreshBehind(id, shown, newest));
 		}
 	}
 
@@ -273,7 +279,7 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 	/// same places keep their cards (a watch state or a favourite changed shows on its card: <see cref="KeptCards"/>), so the
 	/// focus and the scroll stay; the header, the summary, the progress and Play follow; Hide watched hides a film marked meanwhile.
 	/// </summary>
-	private async Task<LoadOutcome> RefreshBehind(Guid id, BaseItemDto shown)
+	private async Task<LoadOutcome> RefreshBehind(Guid id, BaseItemDto shown, Func<bool> newest)
 	{
 		var fresh = JellyfinClient.GetItem(id);
 		var items = await ItemsOf(shown);
@@ -281,6 +287,11 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 		if (known is null || items?.Items is not { } list)
 		{
 			return LoadMessages.CouldNotLoad($"this {Kind.ToLowerInvariant()}");
+		}
+
+		if (!newest())
+		{
+			return LoadOutcome.Loaded; // 1.8.1 (BH-175-q2): a newer refresh shows its own
 		}
 
 		Collection = known;

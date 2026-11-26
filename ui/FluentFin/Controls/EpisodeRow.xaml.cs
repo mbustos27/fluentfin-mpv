@@ -321,18 +321,22 @@ internal static class RowClick
 /// "4 of 8" from its place; Invoke plays it, as Enter does. The "…" is under it (the Play disc is decorative). A row on its own (the episode
 /// page's "Up next") is a button: a list item with no list around it would say "1 of 1" or nothing at all.
 /// </summary>
-internal sealed partial class EpisodeRowAutomationPeer(EpisodeRow owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider
+internal sealed partial class EpisodeRowAutomationPeer(EpisodeRow element) : FrameworkElementAutomationPeer(element), IInvokeProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private EpisodeRow Element => Owner as EpisodeRow ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	internal static AutomationControlType ControlTypeFor(bool inList) => inList ? AutomationControlType.ListItem : AutomationControlType.Button;
 
-	protected override AutomationControlType GetAutomationControlTypeCore() => ControlTypeFor(EpisodeList.Of(owner) is not null);
+	protected override AutomationControlType GetAutomationControlTypeCore() => ControlTypeFor(EpisodeList.Of(Element) is not null);
 
 	protected override string GetClassNameCore() => nameof(EpisodeRow);
 
 	protected override string GetNameCore()
 	{
-		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? UpNextMark.Spoken(ItemLabels.EpisodeRowName(owner.Dto), owner.IsUpNext) : name;
+		var name = AutomationProperties.GetName(Element);
+		return string.IsNullOrEmpty(name) ? UpNextMark.Spoken(ItemLabels.EpisodeRowName(Element.Dto), Element.IsUpNext) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;
@@ -342,5 +346,5 @@ internal sealed partial class EpisodeRowAutomationPeer(EpisodeRow owner) : Frame
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.Invoke ? this : base.GetPatternCore(patternInterface);
 
-	public void Invoke() => owner.Play();
+	public void Invoke() => Element.Play();
 }

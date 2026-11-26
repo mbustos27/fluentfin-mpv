@@ -80,7 +80,7 @@
             Id       = 'lifecycle'
             Class    = 8
             Owner    = 'g4'
-            What     = 'minimise and restore keep the page and the keyboard; with the server gone a page says what Nixie couldn''t do in rule 11''s words, with Try again, without hammering the address, and Try again shows it once the server is back; restarts (two in a row, and one started while the last copy is closing) open Home signed in, exit cleanly and stay one device on the server'
+            What     = 'minimise and restore keep the page and the keyboard; with the server gone a page says what Nixie couldn''t do in rule 11''s words, with Try again, without hammering the address, and Try again shows it once the server is back; restarts (two in a row, and one started while the last copy is closing) open Home signed in, exit cleanly and stay one device on the server; 1.8.1 (BH-175-m4): closed during a film and opened again at once with a remembered password, the closing copy''s Stopped (arriving after the new sign-in) is taken and the film''s page offers Resume where it was left; the review of it: opened again while that Stopped is still on its way, the new copy waits for the closing copy''s device slot and stays one device on the server, the Stopped taken and Resume offered'
             Kind     = 'then'
             Then     = 'tools\gate\checks\8-lifecycle.ps1'
             Before   = 'tools\gate\checks\8-lifecycle-before.ps1'

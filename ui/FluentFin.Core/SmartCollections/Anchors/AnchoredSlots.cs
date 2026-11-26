@@ -120,13 +120,17 @@ internal sealed class AnchorData(BuildContext context, IAnchorSource source, Anc
 
 	/// <summary>
 	/// 1.8 (stream l): the titles like <paramref name="anchor"/> that "More like" may show (not watched, not of its own franchise),
-	/// most alike first; made once an index read (they are of its titles alone).
+	/// most alike first; made once an index read (they are of its titles alone). 1.8.1 (the owner's library, fix 2): not started
+	/// either (<see cref="AnchorFinder.Started"/>: a show with any episode played, a film begun), not only not finished.
 	/// </summary>
 	public IReadOnlyList<(IndexEntry Title, double Similarity)> LikeOf(IndexEntry anchor)
 	{
 		var franchise = anchor.TmdbCollection;
-		return kept.Like(anchor.Id, () => Similarity.Like(anchor, x => !Finished(x) && (string.IsNullOrEmpty(franchise) || !string.Equals(x.TmdbCollection, franchise, StringComparison.Ordinal))));
+		return kept.Like(anchor.Id, () => Similarity.Like(anchor, x => !Started(x) && (string.IsNullOrEmpty(franchise) || !string.Equals(x.TmdbCollection, franchise, StringComparison.Ordinal))));
 	}
+
+	/// <summary>1.8.1 (fix 2): whether the user started the title (<see cref="AnchorFinder.Started"/>).</summary>
+	public bool Started(IndexEntry title) => AnchorFinder.Started(title, context.Titles, context.Index.SeriesPlays, source);
 
 	public QualityScore Quality => _quality ??= context.Quality;
 

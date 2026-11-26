@@ -160,6 +160,35 @@ public sealed class RefusedPlayPlaceTests : IDisposable
 		Assert.Empty(_placed);
 	}
 
+	/// <summary>
+	/// 1.8.1 (BH-175-q3): Back to a page kept from before a mark tells that page the changes it missed (NavigationService.Replay
+	/// publishes the same answers again): the mark, made before the play, dropped the place the play's refused stop still
+	/// owed, and Sign in again sent nothing (the resume point lost). Told again, an answer drops nothing; a mark made after
+	/// the play (a new answer) still does.
+	/// </summary>
+	[Fact]
+	public async Task AMarkFromBeforeThePlay_ToldAgainByBack_DropsNothing_ANewMarkStillDoes()
+	{
+		var item = Guid.NewGuid();
+		var unwatched = new UserItemDataDto { Played = false, PlaybackPositionTicks = 0 }; // Mark unwatched, on a page left after
+		ItemUserData.Publish(item, unwatched);
+		Play(item, "ps-1", 20 * Minute, refused: true); // then played, the sign-in ending mid-play: its stop refused
+		SignInState.MarkEnded();
+		ItemUserData.Publish(item, unwatched); // Back to a page kept from before the mark: the mark told again
+
+		await SignInAgain();
+
+		var placed = Assert.Single(_placed); // the film's place still sent: Resume at 20:00
+		Assert.Equal((item, false, 20 * Minute), (placed.Id, placed.Played, placed.Position));
+
+		// a mark after the play (the server's new answer) is the user's: the place it would undo is dropped
+		Play(item, "ps-2", 25 * Minute, refused: true);
+		SignInState.MarkEnded();
+		ItemUserData.Publish(item, new UserItemDataDto { Played = true, PlaybackPositionTicks = 0 });
+		await SignInAgain();
+		Assert.Single(_placed);
+	}
+
 	[Fact]
 	public async Task NothingIsSent_ForAReportThatFailedOtherwise_APlaySince_OrAnotherUser()
 	{

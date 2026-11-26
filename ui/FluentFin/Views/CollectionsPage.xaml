@@ -26,8 +26,9 @@
               1.7.1 (review M1): what it holds, its spoken name and its art change in place as a first read's pages come.
               1.8 (P1-4, stream t): a Nixie tile says its reason line (the facts, two lines at most, then the count on a line
               of its own, never cut off) and wears up to two award badges over its art; Narrator hears them in that order.
-              The words take one height on every tile (NixieTileShown.WordsHeight: a title of two lines, facts of two and
-              three count lines, grown with Windows' text size), so every tile of a row and of See all's grid is one size,
+              The words take one height on every Nixie tile (NixieTileShown.WordsHeight: a title of two lines, facts of two and
+              three count lines, grown with Windows' text size; 1.8.1: a server's set or playlist its own, a title and its
+              line, BH-180-q2), so every tile of a row and of See all's grid is one size,
               nothing is clipped at 125 or 150 % text, and a reason that comes later moves nothing (rule 7). A badge too long
               for one line ("3 BAFTA Best Film winners") wraps to a second over the art; the tile keeps its size  -->
         <DataTemplate x:Key="CollectionTileTemplate" x:DataType="vm:CollectionTile">
@@ -120,9 +121,11 @@
                             </Border>
                         </StackPanel>
                     </Grid>
+                    <!--  1.8.1 (BH-180-q2): a server's set or playlist has words of its own height (its title and its line), not a
+                          Nixie tile's with room for three count lines (about 85 px empty); a row holds one kind of tile  -->
                     <StackPanel
                         Grid.Row="1"
-                        Height="{x:Bind local:NixieTileShown.WordsHeight}"
+                        Height="{x:Bind local:NixieTileShown.WordsHeightOf(IsNixie)}"
                         Padding="4,0,4,0"
                         Spacing="2">
                         <TextBlock
@@ -149,7 +152,8 @@
                             Style="{StaticResource CaptionTextBlockStyle}"
                             Text="{x:Bind sc:NixieTileWords.TileCount(Nixie), Mode=OneWay}"
                             TextTrimming="CharacterEllipsis"
-                            TextWrapping="NoWrap" />
+                            TextWrapping="NoWrap"
+                            Visibility="{x:Bind local:NixieTileShown.CountShown(Nixie), Mode=OneWay}" />
                     </StackPanel>
                 </Grid>
             </Button>

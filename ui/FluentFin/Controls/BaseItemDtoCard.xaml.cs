@@ -43,6 +43,20 @@ public sealed partial class BaseItemDtoCard : UserControl, ICaptionPrefixed
 	[GeneratedDependencyProperty(DefaultValue = "")]
 	public partial string CaptionPrefix { get; set; }
 
+	/// <summary>
+	/// Nixie 1.8.1 (BH-175-M2): what the Watched toggle shows now (its IsChecked), for its name and tooltip. The XAML named the
+	/// toggles through the toggle itself ("MarkWatchedButton.IsChecked"), and x:Bind's generated tracker then holds the toggle
+	/// strongly while it listens to the card's item (Model, Model.UserData). Back keeps a page's view model, and its items,
+	/// so every card that showed a kept item stayed alive with its whole tree: 6 to 15 MB for each film page or Collection page
+	/// come back to. The card's own properties are tracked through the card, which the tracker doesn't hold.
+	/// </summary>
+	[GeneratedDependencyProperty]
+	public partial bool? WatchedShown { get; set; }
+
+	/// <summary>Nixie 1.8.1 (BH-175-M2): what the Favourite toggle shows now, for its name, tooltip and heart (see <see cref="WatchedShown"/>).</summary>
+	[GeneratedDependencyProperty]
+	public partial bool? FavoriteShown { get; set; }
+
 	/// <summary>The caption's lead: "1 · " for "1", nothing for none.</summary>
 	public static string PrefixWords(string? prefix) => string.IsNullOrEmpty(prefix) ? "" : $"{prefix} · ";
 
@@ -60,6 +74,11 @@ public sealed partial class BaseItemDtoCard : UserControl, ICaptionPrefixed
 	{
 		InitializeComponent();
 		UndoToast.Listen(); // 1.2.0: the Undo after a whole series or season is marked
+		// Nixie 1.8.1 (BH-175-M2): the toggles' names follow what they show through the card's own properties
+		WatchedShown = MarkWatchedButton.IsChecked;
+		FavoriteShown = AddToFavoriteButton.IsChecked;
+		MarkWatchedButton.RegisterPropertyChangedCallback(ToggleButton.IsCheckedProperty, (_, _) => WatchedShown = MarkWatchedButton.IsChecked);
+		AddToFavoriteButton.RegisterPropertyChangedCallback(ToggleButton.IsCheckedProperty, (_, _) => FavoriteShown = AddToFavoriteButton.IsChecked);
 		// 1.2.0: the card shows its item's watched and favourite state as the server has it, whichever surface changed it
 		Loaded += (_, _) =>
 		{
@@ -507,6 +526,14 @@ internal sealed class CardActions
 /// </summary>
 internal sealed partial class BaseItemDtoCardAutomationPeer(BaseItemDtoCard owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider
 {
+	/// <summary>
+	/// Nixie 1.8.1 (BH-175-M2): the card through the peer's own Owner, never a field of this class. Windows' UI Automation keeps
+	/// a peer it was given (Narrator, any assistive tool, the harness) after its card has left; a peer that held its card in a
+	/// field (the constructor's parameter, kept for these methods) held the card and its whole tree with it: 24 cards, 12 MB,
+	/// for each Collection page come back to while a UI Automation client was looking.
+	/// </summary>
+	private BaseItemDtoCard? Card => Owner as BaseItemDtoCard;
+
 	// Seaglass scrolling: a card is an item of its row's list ("3 of 12"); it still opens its page (Invoke)
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
 
@@ -514,19 +541,29 @@ internal sealed partial class BaseItemDtoCardAutomationPeer(BaseItemDtoCard owne
 
 	protected override string GetNameCore()
 	{
-		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? BaseItemDtoCard.NameWithPrefix(owner.CaptionPrefix, ItemLabels.CardName(owner.Model)) : name;
+		if (Card is not { } card)
+		{
+			return "";
+		}
+
+		var name = AutomationProperties.GetName(card);
+		return string.IsNullOrEmpty(name) ? BaseItemDtoCard.NameWithPrefix(card.CaptionPrefix, ItemLabels.CardName(card.Model)) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;
 
 	protected override bool IsContentElementCore() => true;
 
+	// Nixie 1.8.1 (the mem review): "3 of 24": the card's own place (a row sets it), else the one its entry holds (CardPlace)
+	protected override int GetPositionInSetCore() => CardPlace.Position(base.GetPositionInSetCore(), Card);
+
+	protected override int GetSizeOfSetCore() => CardPlace.Size(base.GetSizeOfSetCore(), Card);
+
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.Invoke ? this : base.GetPatternCore(patternInterface);
 
 	protected override IList<AutomationPeer> GetChildrenCore() =>
-		[.. owner.VisibleActions().Select(FrameworkElementAutomationPeer.CreatePeerForElement).Where(x => x is not null)];
+		Card is { } card ? [.. card.VisibleActions().Select(FrameworkElementAutomationPeer.CreatePeerForElement).Where(x => x is not null)] : [];
 
-	public void Invoke() => owner.Open();
+	public void Invoke() => Card?.Open();
 }

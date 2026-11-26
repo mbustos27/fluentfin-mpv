@@ -132,8 +132,9 @@ if ($t8Fake) { Check "tiles ($t8Tag): a tile wears award badges (Wikidata's list
 else { Say "tiles ($t8Tag): the badge check skipped: the app's outside sources don't go to the fake server" }
 
 # one franchise tile, scrolled into view: its title, facts and count drawn inside it
-$t8Franchise = Wait-Until { Find-Ui -Name ', made by Nixie, franchise, ' -Contains -Type 'Button' -OffscreenToo } -Seconds 25 -PollMs 250
-if ($t8Franchise) { $t8Franchise = T8-Reveal { Find-Ui -Name ', made by Nixie, franchise, ' -Contains -Type 'Button' -OffscreenToo } }
+# (1.8.1: found, then lost by the reveal once in Cinematic, the page redrawing its rows as the week's Spotlight came: the
+# reveal is tried again while the 25 s last, as the finding is)
+$t8Franchise = Wait-Until { T8-Reveal { Find-Ui -Name ', made by Nixie, franchise, ' -Contains -Type 'Button' -OffscreenToo } } -Seconds 25 -PollMs 250
 # (r4: not found within 10 s in two themes, and its four checks were skipped without a word: now a failure of its own)
 Check "tiles ($t8Tag): a franchise tile is there to check" ([bool]$t8Franchise) 
 if ($t8Franchise) {
@@ -156,6 +157,23 @@ if ($t8Franchise) {
 $t8Server = Find-Ui -Name ', collection, ' -Contains -Type 'Button' -OffscreenToo
 if ($t8Server) {
     Check "tiles ($t8Tag): a server's box set keeps its count" ($t8Server.Current.Name -match '\d+ films?') $t8Server.Current.Name
+}
+# 1.8.1 (BH-180-q2): a server's box set's tile ends under its own words: it had a Nixie tile's words height (room for three
+# count lines), about 85 px empty under its two lines, and its row was taller. Its words drawn inside it, at most three lines'
+# room under the last one, and every tile of its row one size
+$t8Server = T8-Reveal { Find-Ui -Name ', collection, ' -Contains -Type 'Button' -OffscreenToo }
+Check "tiles ($t8Tag): a server's box set is there to check" ([bool]$t8Server) '(FAKESERVER_COLLECTIONS)'
+if ($t8Server) {
+    $t8SRect = $t8Server.Current.BoundingRectangle
+    $t8SWords = @(T8-Texts $t8Server | Where-Object { try { $_.Current.Name -and (T8-Drawn $_ $t8SRect) } catch { $false } })
+    $t8Last = ($t8SWords | ForEach-Object { $_.Current.BoundingRectangle.Bottom } | Measure-Object -Maximum).Maximum
+    $t8Line = ($t8SWords | ForEach-Object { $_.Current.BoundingRectangle.Height } | Measure-Object -Minimum).Minimum
+    $t8Empty = if ($t8SWords.Count) { $t8SRect.Bottom - $t8Last } else { -1 }
+    Check "tiles ($t8Tag): a server's box set's tile ends under its own words (no room left for a Nixie tile's count lines)" (($t8SWords.Count -ge 2) -and ($t8Empty -ge 0) -and ($t8Empty -le 3 * $t8Line)) "$([int]$t8Empty) px under its last line (a line $([int]$t8Line) px): $(($t8SWords | ForEach-Object { $_.Current.Name }) -join ' | ')"
+    # one height (a tile at the row's edge is cut by the row's view: its width says nothing)
+    $t8SNow = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, $t8ButtonCond) | Where-Object { try { $_.Current.Name -like '*, collection, *' -and -not $_.Current.IsOffscreen -and [Math]::Abs($_.Current.BoundingRectangle.Top - $t8SRect.Top) -lt 2 } catch { $false } })
+    $t8SSizes = @($t8SNow | ForEach-Object { [int]$_.Current.BoundingRectangle.Height } | Sort-Object -Unique)
+    Check "tiles ($t8Tag): every tile of the server's row is one height" (($t8SNow.Count -ge 1) -and ($t8SSizes.Count -eq 1)) "$($t8SNow.Count) tiles: $($t8SSizes -join ', ') px high"
 }
 # at each window size: the franchise tile's words still drawn inside it (a size change moves nothing out of it)
 T8-Shots 'collections' {

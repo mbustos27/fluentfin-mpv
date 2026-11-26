@@ -132,7 +132,8 @@ public static class WindowShortcuts
 		try
 		{
 			var theater = Controls.TrailerTheater.Current;
-			switch (Gate(shortcut, CurrentContext(), HasOpenPopup(root.XamlRoot), theater?.IsOpen == true))
+			var (popupOpen, searchListOnly) = OpenPopups(root.XamlRoot);
+			switch (Gate(shortcut, CurrentContext(), popupOpen, theater?.IsOpen == true, searchListOnly))
 			{
 				case ShortcutGate.Ignore:
 					return false;
@@ -204,10 +205,16 @@ public static class WindowShortcuts
 	/// (<see cref="AppShortcuts.For"/>); a key over a trailer is decided first (<see cref="Trailers.KeyOverTheater"/>), so this
 	/// rule is the mouse's (Mouse 4 closes it, Mouse 5 does nothing).
 	/// </summary>
-	internal static ShortcutGate Gate(AppShortcut shortcut, ShortcutContext context, bool popupOpen, bool trailerOpen) =>
-		trailerOpen && !popupOpen ? (shortcut == AppShortcut.Back ? ShortcutGate.CloseTrailer : ShortcutGate.HoldBack)
-		: !AppShortcuts.AllowedIn(shortcut, context) || popupOpen ? ShortcutGate.Ignore
-		: ShortcutGate.Run;
+	/// <param name="searchListOnly">1.8.1: the only popup open is the search box's own list of suggestions. It holds no Back or
+	/// Forward (the list goes with the page it was over), as a browser's address bar's doesn't; it held them, and Back did
+	/// nothing with the list open (1.7.5's Left: about 1 samesearch cell in 17). Menus, flyouts and dialogs still hold them.</param>
+	internal static ShortcutGate Gate(AppShortcut shortcut, ShortcutContext context, bool popupOpen, bool trailerOpen, bool searchListOnly = false)
+	{
+		popupOpen &= !(searchListOnly && shortcut is AppShortcut.Back or AppShortcut.Forward);
+		return trailerOpen && !popupOpen ? (shortcut == AppShortcut.Back ? ShortcutGate.CloseTrailer : ShortcutGate.HoldBack)
+			: !AppShortcuts.AllowedIn(shortcut, context) || popupOpen ? ShortcutGate.Ignore
+			: ShortcutGate.Run;
+	}
 
 	private static ShortcutContext CurrentContext()
 	{
@@ -232,6 +239,33 @@ public static class WindowShortcuts
 	/// <summary>A menu, flyout or dialog is open: the keys and buttons are theirs. Tooltips do not count.</summary>
 	private static bool HasOpenPopup(XamlRoot? xamlRoot) =>
 		xamlRoot is not null && VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot).Any(p => HoldsTheKeys(p.IsOpen, p.Child, p.Tag));
+
+	/// <summary>1.8.1: whether a popup holding the keys is open, and whether every such popup is a search box's list of suggestions.</summary>
+	private static (bool Open, bool SearchListOnly) OpenPopups(XamlRoot? xamlRoot)
+	{
+		if (!HasOpenPopup(xamlRoot))
+		{
+			return (false, false);
+		}
+
+		return (true, VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot!).Where(p => HoldsTheKeys(p.IsOpen, p.Child, p.Tag)).All(p => IsSuggestionList(p.Name, InSearchBox(p))));
+	}
+
+	/// <summary>1.8.1: an AutoSuggestBox's list of suggestions: its template's popup ("SuggestionsPopup"), inside the box.</summary>
+	internal static bool IsSuggestionList(string? popupName, bool inSearchBox) => popupName == "SuggestionsPopup" && inSearchBox;
+
+	private static bool InSearchBox(DependencyObject popup)
+	{
+		for (var node = VisualTreeHelper.GetParent(popup); node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is AutoSuggestBox)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
 
 	/// <summary>
 	/// Nixie 1.7.5 (the basics gate, g3): whether an open popup holds the window's keys and mouse buttons: a menu, flyout or

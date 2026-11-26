@@ -287,6 +287,12 @@ public sealed partial class ShellPage : Page
 			return;
 		}
 
+		// 1.8.1 (the review): Back or Forward drops the search in the box, its list open over the page it shows
+		if (e.NavigationMode is Microsoft.UI.Xaml.Navigation.NavigationMode.Back or Microsoft.UI.Xaml.Navigation.NavigationMode.Forward)
+		{
+			_titleBar.SteppedBackOrForward();
+		}
+
 		_titleBar.OnPageShown(e.SourcePageType, e.Parameter);
 
 		// Nixie 1.3.0: the one-time "Choose a look" step, once the first page after the sign-in is up

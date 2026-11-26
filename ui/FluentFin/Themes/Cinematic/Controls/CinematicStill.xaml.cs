@@ -475,11 +475,15 @@ public enum StillKind
 /// 45% watched"; an episode as the shared episode row, "S1E3 Sawdust"), that its Invoke opens (or plays, for an episode),
 /// with its Play button under it while it shows.
 /// </summary>
-internal sealed partial class CinematicStillAutomationPeer(CinematicStill owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider
+internal sealed partial class CinematicStillAutomationPeer(CinematicStill element) : FrameworkElementAutomationPeer(element), IInvokeProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private CinematicStill Element => Owner as CinematicStill ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	// a still in a shelf or a grid is an item of its list ("3 of 12"); one on its own (an episode's Next up) is a button,
 	// as the shared episode row (EpisodeRowAutomationPeer.ControlTypeFor)
-	protected override AutomationControlType GetAutomationControlTypeCore() => ControlTypeFor(owner.InList);
+	protected override AutomationControlType GetAutomationControlTypeCore() => ControlTypeFor(Element.InList);
 
 	internal static AutomationControlType ControlTypeFor(bool inList) => inList ? AutomationControlType.ListItem : AutomationControlType.Button;
 
@@ -489,13 +493,13 @@ internal sealed partial class CinematicStillAutomationPeer(CinematicStill owner)
 
 	protected override string GetNameCore()
 	{
-		var name = AutomationProperties.GetName(owner);
+		var name = AutomationProperties.GetName(Element);
 		if (!string.IsNullOrEmpty(name))
 		{
 			return name;
 		}
 
-		return owner.Kind == StillKind.Episode ? FluentFin.Controls.UpNextMark.Spoken(ItemLabels.EpisodeRowName(owner.Model?.Dto), owner.IsUpNext) : ItemLabels.CardName(owner.Model);
+		return Element.Kind == StillKind.Episode ? FluentFin.Controls.UpNextMark.Spoken(ItemLabels.EpisodeRowName(Element.Model?.Dto), Element.IsUpNext) : ItemLabels.CardName(Element.Model);
 	}
 
 	protected override bool IsControlElementCore() => true;
@@ -507,7 +511,7 @@ internal sealed partial class CinematicStillAutomationPeer(CinematicStill owner)
 
 	// as the shared card: the Play button under it while it shows
 	protected override IList<AutomationPeer> GetChildrenCore() =>
-		owner.VisiblePlay is { } play && FrameworkElementAutomationPeer.CreatePeerForElement(play) is { } peer ? [peer] : [];
+		Element.VisiblePlay is { } play && FrameworkElementAutomationPeer.CreatePeerForElement(play) is { } peer ? [peer] : [];
 
-	public void Invoke() => owner.Invoke();
+	public void Invoke() => Element.Invoke();
 }

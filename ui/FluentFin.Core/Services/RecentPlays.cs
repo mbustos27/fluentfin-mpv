@@ -396,7 +396,11 @@ public sealed class RecentPlays : IDisposable
 	}
 
 	// 1.7.5 (the review of BH-151-m8): a Mark watched or unwatched (or the server's newer answer) of an item whose place is owed:
-	// the place would undo it (a watched mark or a resume point back), so it is dropped
+	// the place would undo it (a watched mark or a resume point back), so it is dropped.
+	// 1.8.1 (BH-175-q3): unless it is a change told again, the same answer saying the same: Back to a page kept from before a
+	// mark tells the page what it missed (NavigationService.Replay publishes those answers again), and a mark made before the
+	// play then dropped the place a refused stop still owed, before Sign in again could send it. An answer is acted on once,
+	// when it is first heard: one heard before the place was owed is older than the play
 	private void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
 	{
 		if (e.Failed)
@@ -404,10 +408,25 @@ public sealed class RecentPlays : IDisposable
 			return;
 		}
 
+		var said = Heard.Of(e.UserData);
 		lock (_lock)
 		{
+			if (_heard.TryGetValue(e.UserData, out var before) && before == said)
+			{
+				return; // told again: acted on when first heard
+			}
+
+			_heard.AddOrUpdate(e.UserData, said);
 			DropOwed(e.ItemId);
 		}
+	}
+
+	/// <summary>1.8.1 (BH-175-q3): the user data answers heard so far, with what each said when heard (one changed since is new).</summary>
+	private readonly System.Runtime.CompilerServices.ConditionalWeakTable<UserItemDataDto, Heard> _heard = new();
+
+	private sealed record Heard(bool? Played, long? PositionTicks, DateTimeOffset? LastPlayed, bool? Favorite)
+	{
+		public static Heard Of(UserItemDataDto data) => new(data.Played, data.PlaybackPositionTicks, data.LastPlayedDate, data.IsFavorite);
 	}
 
 	// 1.7.5 (BH-151-m8): the server refused the playing item's progress or Stopped report (auth_failed, docs/BRIDGE.md §5: once

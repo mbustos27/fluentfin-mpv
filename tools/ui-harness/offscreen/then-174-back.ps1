@@ -12,11 +12,14 @@
 # row: how long until the card left from is on screen again, whether a loading state showed meanwhile (a Shimmer placeholder, a
 # progress ring, "Loading..."), the page's scroll and the keyboard against what they were, and the requests the app sent for it
 # after Back. A row passes when the card is back within BK_LIMIT_MS, no loading state showed, and the scroll and focus are kept.
+# (1.8.1: each row's detail also gives the app's own times, "the app: ...", from its [perf] back lines, for triage only: a
+# row passes or fails by the check's own reading.)
 #   forward   (with collection) Forward from the collection Back showed, to the film it was left for: its page at once, nothing asked
 #   change    a film of a collection marked watched on its own page: the collection's card for it says "watched" after Back
 #   refresh   R on a page Back showed asks the server again (the page's items asked for)
 #   samelibrary  (1.7.5) Movies, the Shows tab, Back: Movies' cards; Forward: Shows' (two pages of one kind, kept whole)
 #   samesearch   (1.7.5) a search, a second one from its results, Back: the first title and results; Forward: the second's
+#   searchlist   (1.8.1) a search typed over a library until its list of suggestions shows, the Back key: Home, no list left
 #   signout   sign out from a page with pages behind it: the app's log says the kept pages were let go, and none is shown
 #             after signing in again (Back from the first page opened is off)
 # Rows go to <Out>\back174\back174.json (theme, page, ms, loading, scroll, focus, requests, ok, detail), each a Check; shots
@@ -34,9 +37,9 @@ if ($env:GATE_SIZES -and $env:GATE_SIZES -ne 'none') {
     . (Join-Path $PSScriptRoot '..\..\gate\gate-common.ps1')
     $bkSizes = @(Get-GateSizes)
 }
-$bkOnce = @('change', 'refresh', 'signout')
+$bkOnce = @('change', 'refresh', 'signout', 'searchlist')
 $bkSize = $null; $bkSizeSaid = ''
-$bkPages = @($(if ($env:BK_PAGES) { $env:BK_PAGES } else { 'collection,playlist,nixie,library,season,series,item,search,person,collections,home,samelibrary,samesearch,change,refresh,signout' }) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$bkPages = @($(if ($env:BK_PAGES) { $env:BK_PAGES } else { 'collection,playlist,nixie,library,season,series,item,search,person,collections,home,samelibrary,samesearch,searchlist,change,refresh,signout' }) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $bkDelay = if ($env:BK_DELAY_MS) { [int]$env:BK_DELAY_MS } else { 2500 }
 $bkLimit = if ($env:BK_LIMIT_MS) { [int]$env:BK_LIMIT_MS } else { 1200 }
 $bkDir = Join-Path $Out 'back174'
@@ -203,12 +206,38 @@ function Bk-Asked([double]$Since) {
     [pscustomobject]@{ Count = $r.Count; Paths = @($r | ForEach-Object { ($_.path -replace '[0-9a-fA-F]{32}|[0-9a-fA-F-]{36}', '<id>') } | Select-Object -Unique -First 4) }
 }
 
+# Nixie 1.8.1: what the app's log said of a Back (its own times, rule 10), for the row's detail: under load the check's reading
+# of the window lags the app (1.8.0's release gate: Drive-in's Collections cell at 1.3 to 1.5 s, not proven load or code). A
+# mark is the log file and its length before Back; what was written after it is read (shared: the app is writing it)
+function Bk-LogMark {
+    $f = Get-ChildItem (Join-Path $DataDir 'Logs') -Filter 'log*.txt' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $f) { return $null }
+    # (its length from an open handle: the folder's listing gives a file the app holds open the size it had a while ago, and
+    # the mark took in the case's earlier lines)
+    try { $s = [IO.File]::Open($f.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite); try { $at = $s.Length } finally { $s.Dispose() } } catch { $at = $f.Length }
+    [pscustomobject]@{ File = $f.FullName; At = $at }
+}
+function Bk-AppSaid($Mark) {
+    if (-not $Mark) { return $null }
+    try {
+        $s = [IO.File]::Open($Mark.File, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+        try { [void]$s.Seek($Mark.At, [IO.SeekOrigin]::Begin); $text = (New-Object IO.StreamReader($s)).ReadToEnd() } finally { $s.Dispose() }
+    } catch { return $null }
+    $shown = [regex]::Match($text, '\[perf\] back: (\w+) shown as it was in (\d+) ms')
+    # (the place line of the page Back showed: a Forward after it, from the same case, writes another page's)
+    $place = if ($shown.Success) { [regex]::Match($text, "\[perf\] back: $($shown.Groups[1].Value)'s (.+?) put back in (\d+) ms") } else { [regex]::Match($text, "\[perf\] back: \w+'s (.+?) put back in (\d+) ms") }
+    if (-not $shown.Success -and -not $place.Success) { return $null }
+    [pscustomobject]@{ ShownMs = $(if ($shown.Success) { [int]$shown.Groups[2].Value }); PlaceMs = $(if ($place.Success) { [int]$place.Groups[2].Value })
+        Said = (@($(if ($shown.Success) { "shown as it was in $($shown.Groups[2].Value) ms" }), $(if ($place.Success) { "its $($place.Groups[1].Value) put back in $($place.Groups[2].Value) ms" })) | Where-Object { $_ }) -join ', ' }
+}
+
 # Back, measured: on the page opened from $Left's page (it has settled), every answer held $bkDelay ms, Back; then how long until
 # $Left is on screen, whether a loading state showed, the scroll ($V0 before) and the focus
 function Bk-Measure([string]$Page, $Left, [double]$V0, [scriptblock]$Extra, [double]$Px0 = -1) {
     if ($script:bkLeave) { $V0 = $script:bkLeave[0]; $Px0 = $script:bkLeave[1]; $script:bkLeave = $null }
     Start-Sleep -Milliseconds 1800
     Bk-Latency $bkDelay
+    $logMark = Bk-LogMark # 1.8.1
     $t0 = Get-Epoch
     Key 0xA6
     $loading = 0; $hit = $null; $ms = $null; $midShot = $false
@@ -244,13 +273,18 @@ function Bk-Measure([string]$Page, $Left, [double]$V0, [scriptblock]$Extra, [dou
     # kept: within 3 % or 48 px (a nudge that brings the card's ring into view; a page's pictures can move the percent)
     $scrollKept = if ($V0 -lt 0 -and $v -lt 0) { $true } elseif ($V0 -lt 0 -or $v -lt 0) { $false } else { [Math]::Abs($v - $V0) -lt 3 -or ($Px0 -ge 0 -and $px -ge 0 -and [Math]::Abs($px - $Px0) -le 48) }
     $focusKept = [bool]($focus -and $focus.Name -eq $Left.Name)
+    # 1.8.1: the app's own times beside the check's, for triage only. They never pass a cell: the app's number runs from Back's
+    # handler to the card taking the keyboard, without the wait for the key nor a freeze before the window draws (the review)
+    $app = Bk-AppSaid $logMark
     $fast = [bool]($ms -ne $null -and $ms -le $bkLimit)
     $row = @{ ms = $ms; left = $Left.Name; loading = [bool]$loading; scroll_before = [Math]::Round($V0, 1); scroll_after = [Math]::Round($v, 1); scroll_kept = $scrollKept
         focus_kept = $focusKept; requests = $asked.Count; asked = ($asked.Paths -join ' ')
+        app_shown_ms = $(if ($app) { $app.ShownMs }); app_place_ms = $(if ($app) { $app.PlaceMs })
         ok = ($fast -and -not $loading -and $scrollKept -and $focusKept)
-        detail = ("{0}; loading state {1}; scroll {2:0.0} -> {3:0.0} % ({8} -> {9} px); focus: left {4}, back on {5}; {6} requests after Back{7}" -f
+        detail = ("{0}; loading state {1}; scroll {2:0.0} -> {3:0.0} % ({8} -> {9} px); focus: left {4}, back on {5}; {6} requests after Back{7}; the app: {10}" -f
             $(if ($ms -ne $null) { "back in $ms ms (limit $bkLimit)" } else { 'not back within 15 s' }), $(if ($loading) { 'SHOWN' } else { 'none' }), $V0, $v,
-            (Bk-Describe $Left), (Bk-Describe $focus), $asked.Count, $(if ($asked.Count) { " ($($asked.Paths -join ' '))" } else { '' }), $Px0, $px) }
+            (Bk-Describe $Left), (Bk-Describe $focus), $asked.Count, $(if ($asked.Count) { " ($($asked.Paths -join ' '))" } else { '' }), $Px0, $px,
+            $(if ($app) { $app.Said } else { 'no [perf] back line' })) }
     if ($Extra) { & $Extra $row $hit }
     Bk-Record $Page $row
 }
@@ -622,6 +656,41 @@ public static class BkWin {
         detail = ("'{0}' ({1}; title {6}), then '{2}' from its results ({3}), Back (the keyboard on {7}): {4}; Forward: {5}" -f $first, $s1, $second, $s2,
             $(if ($back) { "Results for '$first' with its results" } else { "NOT the first search (title $backTitle; $backSeen)" }),
             $(if ($forward) { "Results for '$second' with its results" } else { "NOT the second search ($forwardSeen)" }), $t1Said, $keyAt) }
+}
+
+# ---- Nixie 1.8.1 (1.7.5's Left): Back with the search box's list of suggestions open ------------------------------------------
+# A library opened from Home, a search typed in the box (not submitted) until its list of suggestions shows, then the Back key:
+# Home again, with no list left open over it. The list held the window's keys as a menu does, and Back did nothing (about 1
+# samesearch cell in 17, where a late answer opened the list over the results).
+Bk-Case 'searchlist' {
+    Open-Nav 'Home'
+    Start-Sleep -Milliseconds 1500
+    Open-Library $fixture.movie.library
+    if (-not (Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 30 -PollMs 200)) { throw "the library '$($fixture.movie.library)' did not open" }
+    Start-Sleep -Milliseconds 1200
+    SrType 'sunny' -Slash
+    $listed = Wait-Until { if ((SrRows).Count -gt 0) { $true } } -Seconds 10 -PollMs 150
+    # (the page's sign: the top bar's lit entry, Movies then Home, in every theme and size; the showcase film is on both pages,
+    # and Editorial's Home at 1280 x 720 has no Continue watching or Up next heading)
+    function Bk-Lit { $p = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id); if (-not $p) { return '' }; (@($p.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $sp = $null; $_.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$sp) -and $sp.Current.IsSelected } | ForEach-Object { $_.Current.Name }) -join ',') }
+    # (1.8.1: a read of the top bar came back empty once with the list open, 1.8.0's Drive-in at 1280 x 720: it is read again
+    # a few times, and with none, Home's own sign, its Continue watching or Up next heading, decides)
+    $litBefore = "$(Bk-Retry { Bk-Lit } 6 250)"
+    $onLibrary = if ($litBefore) { $litBefore -like "*$($fixture.movie.library)*" -and $litBefore -notlike '*Home*' } else { -not (SrHome) }
+    $before = "$(Bk-Describe (Bk-Focus)); $(@(SrRows).Count) suggestion(s) listed; the top bar lit '$litBefore'"
+    $t0 = Get-Epoch
+    Key 0xA6
+    $bkHome = [bool](Wait-Until { $l = @((Bk-Lit) -split ',' | Where-Object { $_ }); if (($l -contains 'Home' -and $l -notcontains $fixture.movie.library) -or ($l.Count -eq 0 -and (SrHome))) { $true } } -Seconds 6 -PollMs 100)
+    $ms = if ($bkHome) { [int](((Get-Epoch) - $t0) * 1000) } else { $null }
+    Start-Sleep -Milliseconds 800
+    $left = @(SrRows).Count
+    $text = SrText
+    Shot (Safe-Name "back174-$bkTag-searchlist")
+    Bk-Record 'searchlist' @{ ms = $ms; ok = [bool]($listed -and $onLibrary -and $bkHome -and $left -eq 0 -and -not $text)
+        detail = ("'sunny' typed in the box over {0} ({1}), the Back key: {2}; then {3} suggestion(s) still listed, the box {4}" -f $fixture.movie.library, $before,
+            $(if (-not $listed) { 'NO list had shown (the case did not run as meant)' } elseif (-not $onLibrary) { 'the library was NOT shown before Back (the case did not run as meant)' } elseif ($bkHome) { "Home in $ms ms" } else { "NOT Home (Back did nothing; the top bar lit '$(Bk-Lit)')" }), $left,
+            $(if ($text) { "says '$text'" } else { 'empty' })) }
+    if ($left -gt 0) { Key 0x1B }
 }
 
 # ---- sign-out lets the kept pages go ---------------------------------------------------------------------------------------------

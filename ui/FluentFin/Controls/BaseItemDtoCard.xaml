@@ -158,24 +158,25 @@
                         </Button>
                         <ToggleButton
                             x:Name="MarkWatchedButton"
-                            AutomationProperties.Name="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}"
+                            AutomationProperties.Name="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, WatchedShown), Mode=OneWay, FallbackValue='Mark as watched'}"
                             Click="MarkWatchedButton_Clicked"
                             IsChecked="{x:Bind Model.UserData.Played, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
                             IsTabStop="False"
                             Style="{StaticResource NixieCardIconToggleButtonStyle}"
-                            ToolTipService.ToolTip="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}">
+                            ToolTipService.ToolTip="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, WatchedShown), Mode=OneWay, FallbackValue='Mark as watched'}">
                             <FontIcon FontSize="{StaticResource NixieCardGlyphSize}" Glyph="&#xE73E;" />
                         </ToggleButton>
                         <ToggleButton
                             x:Name="AddToFavoriteButton"
-                            AutomationProperties.Name="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}"
+                            AutomationProperties.Name="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, FavoriteShown), Mode=OneWay, FallbackValue='Add to favorites'}"
                             Click="AddToFavoriteButton_Clicked"
                             IsChecked="{x:Bind Model.UserData.IsFavorite, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
                             IsTabStop="False"
                             Style="{StaticResource NixieCardIconToggleButtonStyle}"
-                            ToolTipService.ToolTip="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}">
+                            ToolTipService.ToolTip="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, FavoriteShown), Mode=OneWay, FallbackValue='Add to favorites'}">
                             <!--  1.2.0 (Nixie button review, I5): an outline heart when off, filled when on  -->
-                            <FontIcon FontSize="{StaticResource NixieCardGlyphSize}" Glyph="{x:Bind c:ItemRowConverters.FavoriteGlyph(AddToFavoriteButton.IsChecked), Mode=OneWay}" />
+                            <!--  Nixie 1.8.1 (BH-175-M2): the toggles' state through the card's WatchedShown and FavoriteShown, never the toggle itself in x:Bind (its tracker would hold the toggle, and the card, while a kept item lives)  -->
+                            <FontIcon FontSize="{StaticResource NixieCardGlyphSize}" Glyph="{x:Bind c:ItemRowConverters.FavoriteGlyph(FavoriteShown), Mode=OneWay}" />
                         </ToggleButton>
                         <Button
                             x:Name="MoreButton"

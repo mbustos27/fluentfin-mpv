@@ -398,6 +398,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	/// </summary>
 	public async Task Returned(object parameter, bool stale)
 	{
+		var returnedAt = _time.GetTimestamp(); // 1.8.1
 		_ui = SynchronizationContext.Current;
 		index.Changed -= OnIndexChanged;
 		index.Changed += OnIndexChanged;
@@ -458,8 +459,10 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		// 1.8 (P1-1): This week's lineup is of a day (its daily picks turn, its themes each ISO week): shown again on another day,
 		// the rows are made again
 		changed |= _lineupDate is { } made && SmartCollectionCatalog.Now(_time).Date != made;
+		var what = "nothing changed";
 		if (changed)
 		{
+			what = "the rows made again";
 			try
 			{
 				await ShowAsync(index.Current ?? _latest);
@@ -471,8 +474,13 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		}
 		else if (index.Current is { } current && !ReferenceEquals(current, _latest))
 		{
+			what = "a newer index shown";
 			OnIndexChanged(this, current);
 		}
+
+		// 1.8.1 (rule 10): what Back's check behind did, and how long it took (durations and words only)
+		_log.LogInformation("Collections: Back's check behind in {Ms} ms: {What}{Stale}", (long)_time.GetElapsedTime(returnedAt).TotalMilliseconds, what,
+			stale ? " (the server's sets asked again)" : "");
 	}
 
 	// Nixie 1.7.5 (review Major 2): the kinds turned off when the page was left (OnNavigatedFrom), against the ones now

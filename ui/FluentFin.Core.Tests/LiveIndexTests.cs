@@ -14,9 +14,10 @@ using Moq;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// A fact that runs only when asked for (<c>NIXIE_LIVE_INDEX=1</c>), against a throwaway Jellyfin on this PC
-/// (<c>NIXIE_LIVE_INDEX_SERVER</c>, loopback only) whose generated test account is in <c>NIXIE_LIVE_INDEX_CREDENTIALS</c>
-/// (a credentials file, read here and never printed). Never a QA server for load, never anyone's own server.
+/// A fact that runs only when asked for (<c>NIXIE_LIVE_INDEX=1</c>), against a Jellyfin on this PC (<c>NIXIE_LIVE_INDEX_SERVER</c>,
+/// loopback only) whose generated test account is in <c>NIXIE_LIVE_INDEX_CREDENTIALS</c> (a credentials file, read here and
+/// never printed): the throwaway at scale, or (1.8.1, BH-175-q4) one of our QA servers (10.11 at 127.0.0.1:8196, 12 at
+/// :8296; docs\QA-SERVERS.md: its test user, read-only, never reset, seeded or stopped by this). Never anyone's own server.
 /// </summary>
 public sealed class LiveIndexFactAttribute : FactAttribute
 {
@@ -49,6 +50,8 @@ public sealed class LiveIndexTests
 		var folder = Path.Combine(Path.GetTempPath(), "nixie-live-index-" + Guid.NewGuid().ToString("N"));
 		var summary = new JsonObject { ["server"] = "loopback" };
 		using var http = new HttpClient { BaseAddress = uri, Timeout = TimeSpan.FromMinutes(5) };
+		// 1.8.1 (BH-175-q4): which Jellyfin answered (MinDateLastSaved was checked on 12.4 only)
+		summary["version"] = (string?)JsonNode.Parse(await http.GetStringAsync("/System/Info/Public"))?["Version"];
 		var auth = await SignIn(http);
 		var messages = new Subject<IOutboundWebSocketMessage>();
 		var homeCache = new HomeCache(Path.Combine(folder, "HomeCache"), messages, new CoreListLogger<HomeCache>(), TimeProvider.System);
@@ -159,6 +162,14 @@ public sealed class LiveIndexTests
 			var lately = await client.GetLibraryIndexPageSavedSince(biggest, saved.ReadAt - IndexRead.SavedSinceMargin, 0, 1, true, CancellationToken.None);
 			Assert.Equal(saved.Entries.Count(x => x.InLibrary(biggest.Id!.Value)), all?.TotalRecordCount);
 			Assert.Equal(0, none?.TotalRecordCount);
+			// 1.8.1 (BH-175-m3; the review): each indexed library's own count, which a change's read compares with the saved index
+			var counts = new List<int?>();
+			foreach (var view in views)
+			{
+				counts.Add(await client.GetLibraryTitleCount(view, CancellationToken.None));
+			}
+
+			Assert.Equal(views.Select(v => (int?)saved.Entries.Count(x => x.InLibrary(v.Id!.Value))), counts);
 			var addedLog = new CoreListLogger<LibraryIndex>();
 			var count = IndexRead.CountOf(saved.Check);
 			watch.Restart();
@@ -170,6 +181,8 @@ public sealed class LiveIndexTests
 				["savedSince1970"] = all?.TotalRecordCount,
 				["savedSinceTomorrow"] = none?.TotalRecordCount,
 				["savedSinceTheReadLessADay"] = lately?.TotalRecordCount,
+				["libraryCounts"] = new JsonArray([.. counts.Select(x => (JsonNode?)x)]), // 1.8.1 (BH-175-m3)
+				["checkCount"] = IndexRead.CountOf(saved.Check),
 				["titles"] = merged?.Entries.Count,
 				["why"] = why,
 				["everyTitleMs"] = titlesIn,

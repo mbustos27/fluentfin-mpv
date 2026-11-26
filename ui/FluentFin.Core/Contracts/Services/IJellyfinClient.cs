@@ -118,6 +118,12 @@ namespace FluentFin.Core.Contracts.Services
 		Task<BaseItemDtoQueryResult?> GetLibraryIndexPageSavedSince(BaseItemDto library, DateTimeOffset since, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
 
 		/// <summary>
+		/// Nixie 1.8.1 (BH-175-m3; the review): how many films (or shows) a library the index reads has now, in one request of one
+		/// title with no fields, images or user data; null when the server didn't answer.
+		/// </summary>
+		Task<int?> GetLibraryTitleCount(BaseItemDto library, CancellationToken cancellationToken);
+
+		/// <summary>
 		/// Nixie 1.8 (P1-2): these titles' people (lean: the id and People), for the people pass's top-up of the titles new
 		/// since the index before; null when the server didn't answer.
 		/// </summary>

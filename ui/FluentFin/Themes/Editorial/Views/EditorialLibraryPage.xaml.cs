@@ -3,6 +3,7 @@ using FluentFin.Core.ViewModels;
 using FluentFin.Services;
 using FluentFin.Themes.Editorial.Controls;
 using Jellyfin.Sdk.Generated.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -838,8 +839,129 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 		_lastIndex = index;
 		var focused = poster.Focus(state);
-		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => KeepClearOfBar(poster));
+		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+		{
+			// 1.8.1: while Back's place lands, the clearance waits for it (read from where the grid was, it moved the page away)
+			if (PlaceHoldNow() == PlaceHold.Hold)
+			{
+				_clearOnLanding = poster;
+				SayHeld("the bar's clearance");
+				return;
+			}
+
+			KeepClearOfBar(poster);
+		});
 		return focused;
+	}
+
+	// ---- 1.8.1 (1.7.5's release gate, Editorial's library at max): Back's place held while its scroll lands -----------------
+	// Back put the grid back at 1,253 px, then it moved to 302 px: the poster left from was given the keyboard while the scroll
+	// was still on its way, and its bring-into-view (the focus's, and the bar's clearance) was worked out from where the grid
+	// was, below the view: once the place had landed, the page moved to bring the poster up from the view's foot. Until the
+	// place lands (or HoldMs passes, or the user moves) the grid's bring-into-view is let go and the clearance waits for it;
+	// the poster is in view at its place, as it was left.
+
+	// the offset Back's place is landing on (null: none landing), until when it is held, and the arrival it is held for
+	private double? _placeLanding;
+	private long _placeHeldUntil;
+	private long _placeHeldArrived;
+	private FrameworkElement? _clearOnLanding;
+	private bool _placeWatched;
+	private long _placeAskedAt;
+	private string? _placeHeld; // what the hold first held this Back (null: nothing yet)
+
+	private void HoldPlace(double target)
+	{
+		if (!_placeWatched)
+		{
+			_placeWatched = true;
+			GridScroller.ViewChanged += (_, e) =>
+			{
+				if (!e.IsIntermediate)
+				{
+					_ = PlaceHoldNow(); // landed (the waiting nudge runs), or over (it goes), or still on its way
+				}
+			};
+			GridList.BringIntoViewRequested += (_, args) =>
+			{
+				if (PlaceHoldNow() == PlaceHold.Hold)
+				{
+					args.Handled = true;
+					SayHeld("a bring-into-view");
+				}
+			};
+		}
+
+		_placeHeld = null;
+		_placeLanding = target;
+		_placeAskedAt = Environment.TickCount64;
+		_placeHeldUntil = _placeAskedAt + FluentFin.Views.CollectionPage.HoldMs;
+		_placeHeldArrived = ArrivalFocus.ArrivedAt;
+		_ = PlaceHoldNow(); // (already there: nothing to hold)
+	}
+
+	/// <summary>1.8.1: what Back's place hold is at a moment.</summary>
+	public enum PlaceHold
+	{
+		/// <summary>No place is landing.</summary>
+		None,
+
+		/// <summary>Still on its way: the grid's bring-into-view is let go and the bar's clearance waits.</summary>
+		Hold,
+
+		/// <summary>The scroll is where the place asked: the clearance that waited runs, from there.</summary>
+		Landed,
+
+		/// <summary>Over without landing (<see cref="FluentFin.Views.CollectionPage.HoldMs"/> passed, or the user moved): what waited goes.</summary>
+		Ended,
+	}
+
+	/// <summary>
+	/// 1.8.1 (the review): the hold's step. It ends when the user moves (theirs is theirs) or its time is up, landed or not: a
+	/// place still noted after that, and its waiting nudge, went with it (a later scroll to that offset nudged the grid).
+	/// </summary>
+	public static PlaceHold HoldStep(bool landing, bool atTarget, bool userMoved, long now, long until) =>
+		!landing ? PlaceHold.None
+		: userMoved || now > until ? PlaceHold.Ended
+		: atTarget ? PlaceHold.Landed
+		: PlaceHold.Hold;
+
+	// the hold's step now, and what follows from it: a landing runs the waiting clearance, an end drops it
+	private PlaceHold PlaceHoldNow()
+	{
+		var step = HoldStep(_placeLanding is not null, _placeLanding is { } landing && Math.Abs(GridScroller.VerticalOffset - landing) < 1,
+			ArrivalFocus.UserActedAt > _placeHeldArrived + ArrivalFocus.GraceMs, Environment.TickCount64, _placeHeldUntil);
+		if (step is PlaceHold.Landed or PlaceHold.Ended)
+		{
+			_placeLanding = null;
+			var poster = _clearOnLanding;
+			_clearOnLanding = null;
+			if (_placeHeld is { } what)
+			{
+				App.GetService<ILogger<EditorialLibraryPage>>().LogInformation("[perf] back: EditorialLibraryPage's place hold {End} after {Ms} ms (it held {What})",
+					step == PlaceHold.Landed ? "landed" : "ended without landing", Environment.TickCount64 - _placeAskedAt, what);
+			}
+
+			if (step == PlaceHold.Landed && poster is not null)
+			{
+				KeepClearOfBar(poster); // from where the place put the grid: a poster under the bar or past the view's foot is nudged
+			}
+		}
+
+		return step;
+	}
+
+	// rule 10: once a Back, when the hold first holds something (a duration only)
+	private void SayHeld(string what)
+	{
+		if (_placeHeld is not null)
+		{
+			return;
+		}
+
+		_placeHeld = what;
+		App.GetService<ILogger<EditorialLibraryPage>>().LogInformation("[perf] back: EditorialLibraryPage held {What} while its place landed, {Ms} ms after the place was asked",
+			what, Environment.TickCount64 - _placeAskedAt);
 	}
 
 	/// <summary>A focused poster is never left under the section bar (nor below the view): the grid scrolls by what is hidden.</summary>
@@ -1111,8 +1233,10 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 				ViewModel.ReturnOffset = null;
 				GridScroller.UpdateLayout();
 				NavigationService.PlaceStep(this, $"scroll asked ({(int)Math.Min(offset, GridScroller.ScrollableHeight)} of {(int)offset} px)"); // 1.7.5
-				GridScroller.ChangeView(null, Math.Min(offset, GridScroller.ScrollableHeight), null, disableAnimation: true);
+				var target = Math.Min(offset, GridScroller.ScrollableHeight);
+				GridScroller.ChangeView(null, target, null, disableAnimation: true);
 				GridScroller.UpdateLayout();
+				HoldPlace(target); // 1.8.1
 			}
 			else if (jumped && index >= 0 && Find(index) is { } at && Lines.GetOrCreateElement(at.Line) is FrameworkElement row)
 			{

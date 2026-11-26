@@ -305,12 +305,19 @@ internal static class Best
 
 /// <summary>
 /// Unfinished series: shows with episodes played and episodes left, the last one played over 30 days ago (the shows you
-/// drifted away from: Next Up has the rest); the most recently left first.
+/// drifted away from: Next Up has the rest); the most recently left first. 1.8.1 (fix 5): <see cref="FewestEpisodes"/> or more
+/// played, and not finished by the anchors' rule.
 /// </summary>
 public sealed class UnfinishedSeriesBuilder : ISmartCollectionBuilder
 {
 	public static readonly TimeSpan Away = TimeSpan.FromDays(30);
 	public const int Fewest = 1;
+
+	/// <summary>
+	/// 1.8.1 (the owner's library, fix 5): the episodes a show needs played to be one the user drifted away from, not one they
+	/// sampled: 9 of the owner's 35 had one or two (Taskmaster, South Park, 1899, Bridgerton …).
+	/// </summary>
+	public const int FewestEpisodes = 3;
 
 	public SmartCollectionKind Kind => SmartCollectionKind.UnfinishedSeries;
 
@@ -320,10 +327,12 @@ public sealed class UnfinishedSeriesBuilder : ISmartCollectionBuilder
 		var titles = context.Titles;
 		// 1.7.3 (P0-2b): a show in two libraries is one, its plays the latest of either copy's
 		SeriesPlays? PlaysOf(IndexEntry show) => titles.CopyIds(show.Id).Select(id => plays.TryGetValue(id, out var p) ? p : null).OfType<SeriesPlays>().MaxBy(p => p.LastPlayed);
+		// 1.8.1 (fix 5): three episodes or more, and not finished by the anchors' rule (90 % of its episodes): Community at 102
+		// of 110 was both "You finished Community" and this row's first tile
 		var shows = titles.Entries
-			.Where(x => x.Kind == IndexKind.Series && x.Unplayed > 0)
+			.Where(x => x.Kind == IndexKind.Series && x.Unplayed > 0 && !Anchors.AnchorFinder.Finished(x, titles, plays))
 			.Select(x => (Show: x, Plays: PlaysOf(x)))
-			.Where(x => x.Plays is { Played: > 0 } p && context.Now - p.LastPlayed > Away)
+			.Where(x => x.Plays is { Played: >= FewestEpisodes } p && context.Now - p.LastPlayed > Away)
 			.OrderByDescending(x => x.Plays!.LastPlayed)
 			.Select(x => x.Show)
 			.ToList();
@@ -371,12 +380,28 @@ public sealed class CountryBuilder : ISmartCollectionBuilder
 
 /// <summary>
 /// The seasonal row (Kometa's date windows): Halloween in October (titles with the "halloween" keyword first, then horror
-/// films not watched), Christmas in December (the Christmas keywords). Nothing out of season.
+/// films not watched), Christmas from <see cref="ChristmasOpens"/> to the end of December (the Christmas keywords). Nothing
+/// out of season. 1.8.1 (the owner's library, fix 4): each part best first by the quality score, unwatched first
+/// (<see cref="Best"/>; the raw rating put a new release with a few votes first), and Halloween's tagged titles watched are out
+/// as its horror films are.
 /// </summary>
 public sealed class SeasonalBuilder : ISmartCollectionBuilder
 {
 	public const int Fewest = 3;
 	public const int Most = 40;
+
+	/// <summary>
+	/// 1.8.1 (the owner's choice, 25 November 2026: "Fixed 20 November"): the day the Christmas row opens, each year, on the PC's
+	/// own date; it shows until 31 December. The one place this date is set.
+	/// </summary>
+	public static DateOnly ChristmasOpens(int year) => new(year, 11, 20);
+
+	/// <summary>1.8.1: whether <paramref name="now"/> (the local date) is in the Christmas row's window: from <see cref="ChristmasOpens"/> to 31 December.</summary>
+	public static bool IsChristmas(DateTimeOffset now) => DateOnly.FromDateTime(now.Date) >= ChristmasOpens(now.Year);
+
+	/// <summary>1.8.1: the day it opens as Settings says it ("20 November", "November 20"), in the PC's own words.</summary>
+	public static string ChristmasOpensText =>
+		ChristmasOpens(2000).ToString(System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.MonthDayPattern, System.Globalization.CultureInfo.CurrentCulture);
 
 	public SmartCollectionKind Kind => SmartCollectionKind.Seasonal;
 
@@ -390,8 +415,9 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 		{
 			case 10:
 				{
-					var tagged = entries.Where(x => x.Tags.Contains("halloween", StringComparer.OrdinalIgnoreCase));
-					var horror = entries.Where(x => x.Kind == IndexKind.Movie && !x.Played && x.Genres.Contains("Horror", StringComparer.OrdinalIgnoreCase)).OrderByDescending(x => x.Rating);
+					// 1.8.1 (fix 4): the tagged ones not watched, as the horror films (a watched one led the row), each best first
+					var tagged = Best.Of(entries.Where(x => !x.Played && x.Tags.Contains("halloween", StringComparer.OrdinalIgnoreCase)), context.Quality);
+					var horror = Best.Of(entries.Where(x => x.Kind == IndexKind.Movie && !x.Played && x.Genres.Contains("Horror", StringComparer.OrdinalIgnoreCase)), context.Quality);
 					var all = tagged.Concat(horror).DistinctBy(x => x.Id).ToList();
 					candidates = all.Count;
 					if (all.Count >= Fewest)
@@ -406,10 +432,11 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 					break;
 				}
 
-			case 12:
+			case 11 or 12 when IsChristmas(context.Now): // 1.8.1 (fix 4): from 20 November
 				{
-					var all = entries.Where(x => x.Tags.Any(t => t.StartsWith("christmas", StringComparison.OrdinalIgnoreCase) || t.Equals("santa claus", StringComparison.OrdinalIgnoreCase)))
-						.OrderByDescending(x => x.Rating).ToList();
+					var christmas = entries.Where(x => x.Tags.Any(t => t.StartsWith("christmas", StringComparison.OrdinalIgnoreCase) || t.Equals("santa claus", StringComparison.OrdinalIgnoreCase))).ToList();
+					// 1.8.1 (fix 4): best first by the quality score, the unwatched before the watched
+					List<IndexEntry> all = [.. Best.Of(christmas.Where(x => !x.Played), context.Quality), .. Best.Of(christmas.Where(x => x.Played), context.Quality)];
 					candidates = all.Count;
 					if (all.Count >= Fewest)
 					{
@@ -417,7 +444,7 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 						shown = titles.Count;
 						made.Add(Make.Of(context, "seasonal:christmas", Kind, "Christmas",
 							ReasonLine.Of("Christmas films and shows", ReasonCount.Of(titles)) with { Until = new DateOnly(context.Now.Year, 12, 31) }, hasOwnOrder: false, titles,
-							why: "Christmas films and shows, for December"));
+							why: "Christmas films and shows, for the holidays"));
 					}
 
 					break;

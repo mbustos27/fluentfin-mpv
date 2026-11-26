@@ -33,6 +33,14 @@ public static class Hold
 	}
 
 	/// <summary>
+	/// 1.8.1 (the owner's library, fix 1): how recent an anchor is, for ranking the personal picks across their slots: 0 played
+	/// on one of the last <see cref="Days"/> calendar days (as <see cref="Order"/>'s fresh ones), 1 with an older date, 2 with
+	/// none (an index without play dates: the owner's 42 films).
+	/// </summary>
+	public static int Recency(DateTimeOffset? when, DateTimeOffset now) =>
+		when is not { } at ? 2 : at <= now && DaysBetween(at, now) < Days ? 0 : 1;
+
+	/// <summary>
 	/// Calendar days from <paramref name="when"/> to <paramref name="now"/>, both on <paramref name="now"/>'s clock: a title
 	/// finished on Saturday evening is fresh on Saturday, Sunday and Monday, all day. Review (Minor): 72 hours from the finish
 	/// changed the slot between 09:00 and 22:00 of one day.

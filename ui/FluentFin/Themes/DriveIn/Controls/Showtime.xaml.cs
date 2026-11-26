@@ -213,17 +213,21 @@ public sealed partial class Showtime : UserControl
 }
 
 /// <summary>A showtime is a list item "S1 E3 Sawdust, 22% watched" ("3 of 8" from its place); Invoke plays it, as Enter does.</summary>
-internal sealed partial class ShowtimeAutomationPeer(Showtime owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider
+internal sealed partial class ShowtimeAutomationPeer(Showtime element) : FrameworkElementAutomationPeer(element), IInvokeProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private Showtime Element => Owner as Showtime ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() =>
-		ShowtimesList.Of(owner) is null ? AutomationControlType.Button : AutomationControlType.ListItem;
+		ShowtimesList.Of(Element) is null ? AutomationControlType.Button : AutomationControlType.ListItem;
 
 	protected override string GetClassNameCore() => nameof(Showtime);
 
 	protected override string GetNameCore()
 	{
-		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? FluentFin.Controls.UpNextMark.Spoken(ItemLabels.EpisodeRowName(owner.Dto), owner.IsUpNext) : name;
+		var name = AutomationProperties.GetName(Element);
+		return string.IsNullOrEmpty(name) ? FluentFin.Controls.UpNextMark.Spoken(ItemLabels.EpisodeRowName(Element.Dto), Element.IsUpNext) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;
@@ -233,5 +237,5 @@ internal sealed partial class ShowtimeAutomationPeer(Showtime owner) : Framework
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.Invoke ? this : base.GetPatternCore(patternInterface);
 
-	public void Invoke() => owner.Play();
+	public void Invoke() => Element.Play();
 }

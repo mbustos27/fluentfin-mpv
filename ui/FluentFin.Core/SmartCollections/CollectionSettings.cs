@@ -122,8 +122,8 @@ public sealed class CollectionsSettingsViewModel
 			// 1.7.3 (P0-4, rule 11): "Acclaimed, not seen yet" (was "Highly rated, not watched": "rated 7.5 or more on your server").
 			// Fix round (BH-173-q1): nothing counts raters; what backs a rating is a critics' rating, tags, copies and outside lists
 			Row(NixieHomeRow.HighlyRated, SmartCollectionKinds.Plural(SmartCollectionKind.HighlyRated), HighlyRatedText),
-			Row(NixieHomeRow.UnfinishedSeries, "Unfinished series", "Shows you started and haven't watched for a month."),
-			Row(NixieHomeRow.Seasonal, "In season", "Halloween in October, Christmas in December."),
+			Row(NixieHomeRow.UnfinishedSeries, "Unfinished series", "Shows you watched three or more episodes of, then none for a month."), // 1.8.1 (fix 5)
+			Row(NixieHomeRow.Seasonal, "In season", $"Halloween in October, Christmas from {Builders.SeasonalBuilder.ChristmasOpensText} to the end of December."), // 1.8.1 (fix 4)
 			// 1.8 (P1-1): Home's rows come from the week's lineup (CollectionLineup). Review (Minor 4): under a name of their own
 			// ("Picks"): 1.7's "A collection a day" turned off hid a row a day, not every personal, theme and canon row
 			Row(NixieHomeRow.Picks, PicksName, PicksText),

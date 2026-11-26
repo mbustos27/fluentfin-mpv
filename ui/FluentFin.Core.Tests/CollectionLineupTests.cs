@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using FluentFin.Core.Outside;
 using FluentFin.Core.SmartCollections;
+using FluentFin.Core.SmartCollections.Anchors;
 using FluentFin.Core.SmartCollections.Builders;
 using FluentFin.Core.ViewModels;
 using Moq;
@@ -138,6 +139,34 @@ public sealed class CollectionLineupTests(ITestOutputHelper output)
 		Assert.Equal(["morelike:fresh", "morelike:older"], liked.Picks.Select(x => x.Collection.Id)); // two at most; none lost to coherence
 		Assert.All(new[] { SmartCollectionKind.NextIn, SmartCollectionKind.MoreLike, SmartCollectionKind.MoreFrom }, k => Assert.True(CollectionLineup.IsPersonal(CollectionLineup.SlotOf(Of("x", k, fresh))!.Value)));
 		Assert.Equal(LineupSlot.Spotlight, CollectionLineup.SlotOf(Of("spotlight:x", SmartCollectionKind.Spotlight, fresh)));
+	}
+
+	// 1.8.1 (the owner's library, fix 1): the personal picks by their anchor's recency across their slots, a fresh anchor (the last
+	// three days) first, then a dated one, then one with no date, the slot's prior only breaking ties within a group. On the
+	// owner's library "Next in Ant-Man" (films there have no play date) led Home over "More like What We Do in the Shadows",
+	// finished two days before
+	[Fact]
+	public void ThePersonalPicks_ComeByTheirAnchorsRecency_FreshThenDatedThenUndated()
+	{
+		var next = Films("Next", 3, played: 1);
+		var fresh = Films("Fresh", 10);
+		var dated = Films("Dated", 10);
+		var undated = Films("Undated", 10);
+		var spot = Films("Spot", 6);
+
+		var lineup = Assemble([.. next, .. fresh, .. dated, .. undated, .. spot],
+		[
+			new LineupCandidate(Of("next:franchise:1", SmartCollectionKind.NextIn, next), LineupSlot.NextIn),
+			new LineupCandidate(Of("like:undated", SmartCollectionKind.MoreLike, undated), LineupSlot.MoreLike),
+			new LineupCandidate(Of("like:fresh", SmartCollectionKind.MoreLike, fresh) with { AnchoredAt = Tuesday.AddDays(-2) }, LineupSlot.MoreLike),
+			new LineupCandidate(Of("more:dated", SmartCollectionKind.MoreFrom, dated) with { AnchoredAt = Tuesday.AddDays(-12) }, LineupSlot.MoreFrom),
+			new LineupCandidate(Of("spotlight:x", SmartCollectionKind.Spotlight, spot), LineupSlot.Spotlight),
+		]);
+
+		Assert.Equal(["like:fresh", "more:dated", "next:franchise:1", "like:undated"], lineup.Picks.Where(x => CollectionLineup.IsPersonal(x.Slot)).Select(x => x.Collection.Id));
+		Assert.Equal(["like:fresh", "more:dated", "next:franchise:1", "like:undated", "spotlight:x"], lineup.Picks.Select(x => x.Collection.Id)); // the personal still lead
+		Assert.Equal("like:fresh", lineup.ForHome(CollectionLineup.HomeDefault)[0].Id); // Home's first row
+		Assert.Equal((0, 1, 2), (Hold.Recency(Tuesday.AddDays(-2), Tuesday), Hold.Recency(Tuesday.AddDays(-3), Tuesday), Hold.Recency(null, Tuesday)));
 	}
 
 	[Fact]
@@ -994,7 +1023,7 @@ public sealed class HomeLineupTests : IDisposable
 		_client.Setup(x => x.GetPlaylists(Moq.It.IsAny<CancellationToken>())).ReturnsAsync(new Jellyfin.Sdk.Generated.Models.BaseItemDtoQueryResult { Items = [] });
 		foreach (var (name, tmdb) in new[] { ("Alpha Run", "9101"), ("Middle Way", "9102"), ("Zulu Dawn", "9103") })
 		{
-			foreach (var part in new[] { "", " 2" })
+			foreach (var part in new[] { "", " 2", " 3" }) // 1.8.1 (fix 7): three films, a franchise Nixie publishes
 			{
 				var film = Film(name + part, 2001, 6.5, 100, null, ["Action"]);
 				film.ProviderIds = new Jellyfin.Sdk.Generated.Models.BaseItemDto_ProviderIds { AdditionalData = new Dictionary<string, object> { ["TmdbCollection"] = tmdb } };

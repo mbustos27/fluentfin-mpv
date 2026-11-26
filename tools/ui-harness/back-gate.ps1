@@ -28,7 +28,7 @@ param(
     [string]$Python,
     [string]$Cache,
     [string[]]$Themes = @('Classic', 'DriveIn', 'Cinematic', 'Editorial'),
-    [string]$Pages = 'collection,forward,playlist,nixie,library,season,series,item,search,person,collections,home,samelibrary,samesearch,change,refresh,signout',
+    [string]$Pages = 'collection,forward,playlist,nixie,library,season,series,item,search,person,collections,home,samelibrary,samesearch,searchlist,change,refresh,signout',
     [int]$DelayMs = 2500,
     [int]$LimitMs = 1200,
     [string]$Table,
@@ -91,6 +91,9 @@ function Cell($Row) {
     if (-not $Row) { return '-' }
     $words = New-Object System.Collections.Generic.List[string]
     if ($Row.PSObject.Properties['ms'] -and $Row.ms -ne $null) { $words.Add("$($Row.ms) ms") }
+    # 1.8.1: the app's own time to its place (its [perf] back line), when it said one: a cell over the limit whose app time is
+    # well under it is the check's reading under load
+    if ($Row.PSObject.Properties['app_place_ms'] -and $Row.app_place_ms -ne $null) { $words.Add("app $($Row.app_place_ms) ms") }
     if ($Row.PSObject.Properties['watched_ms'] -and $Row.watched_ms -ne $null) { $words.Add("watched $($Row.watched_ms) ms") }
     if ($Row.PSObject.Properties['loading'] -and $Row.loading) { $words.Add('loading') }
     if ($Row.PSObject.Properties['scroll_kept'] -and -not $Row.scroll_kept) { $words.Add('scroll') }
@@ -104,7 +107,7 @@ $lines.Add("# Nixie 1.7.4: Back to a page just left$(if ($Label) { " ($Label)" }
 $lines.Add('')
 $lines.Add("Run $(Get-Date -Format 'yyyy-MM-dd HH:mm') off-screen against the fake server, every answer held $DelayMs ms after Back (tools\ui-harness\back-gate.ps1;")
 $lines.Add("offscreen\then-174-back.ps1 says how each is checked). A cell: the time from Back to the card left from on screen again (limit $LimitMs ms),")
-$lines.Add('then what fell short: loading (a loading state showed), scroll, focus (not on the card left from); the requests sent after Back.')
+$lines.Add('then the app''s own time to its place (app N ms, its [perf] back line), what fell short: loading (a loading state showed), scroll, focus (not on the card left from); the requests sent after Back.')
 $lines.Add('')
 $lines.Add('| Page | ' + (@($results.Keys) -join ' | ') + ' |')
 $lines.Add('|---|' + ((@($results.Keys) | ForEach-Object { '---' }) -join '|') + '|')

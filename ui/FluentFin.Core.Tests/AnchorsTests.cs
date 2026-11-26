@@ -234,7 +234,8 @@ public sealed class AnchorsTests(ITestOutputHelper output)
 
 		Assert.Equal(["Mushishi", "The Wire"], anchors.Select(x => x.Title.Name)); // the dated first, then the undated
 		Assert.Equal(Now.AddDays(-4), anchors[0].When);
-		Assert.Equal("You finished Mushishi", anchors[0].Said);
+		Assert.Equal("You watched 9 of 10 episodes of Mushishi", anchors[0].Said); // 1.8.1 (fix 3): an episode left, said
+		Assert.Equal("You finished The Wire", anchors[1].Said);
 	}
 
 	[Fact]
@@ -397,6 +398,167 @@ public sealed class AnchorsTests(ITestOutputHelper output)
 		Assert.Equal("More like The Drama", like.Title);
 		Assert.Equal("Shares heists, drama and the 1990s · 9 films", like.ReasonText);
 		Assert.Equal(heists.Select(x => x.Id).Order(), like.ItemIds.Order());
+	}
+
+	// 1.8.1 (the owner's library, fix 10b): shows with no keywords on the server are alike by genre, network and decade, and the
+	// network led every reason ("Shares FX, horror and the 2010s"): a network is never named first, and never alone
+	[Fact]
+	public void MoreLike_OfAShow_NeverNamesItsNetworkFirst()
+	{
+		var anchor = Series("Night Shift", 2019, ["Horror", "Comedy"], played: true) with { Studios = ["FX"] };
+		var alike = Enumerable.Range(1, 9).Select(i => Series($"FX Horror {i}", 2010 + i, ["Horror"]) with { Studios = ["FX"] }).ToList();
+		var others = Enumerable.Range(1, 120).Select(i => Series($"Other {i}", 1990 + (i % 20), ["Drama"]) with { Studios = [$"Network {i % 7}"] }).ToList(); // FX and horror rare
+
+		var like = Assert.Single(Slots(Index([anchor, .. alike, .. others]), new Facts()), x => x.Kind == SmartCollectionKind.MoreLike);
+
+		Assert.StartsWith("Shares horror", like.ReasonText, StringComparison.Ordinal);
+		Assert.Contains("FX", like.ReasonText, StringComparison.Ordinal); // after the others
+		Assert.DoesNotContain("Shares FX", like.ReasonText, StringComparison.Ordinal);
+		var similarity = TitleSimilarity.Of([anchor, .. alike, .. others], new Facts());
+		Assert.NotEqual(TitleSimilarity.FeatureKind.Studio, similarity.Shared(anchor, alike, 3)[0].Kind);
+		// a network the only thing two shows share: not named at all
+		var bare = anchor with { Genres = [], Year = null };
+		var twin = alike[0] with { Genres = [], Year = null };
+		Assert.Empty(TitleSimilarity.Of([bare, twin, .. others], new Facts()).Shared(bare, [twin], 3));
+	}
+
+	// 1.8.1 (the owner's library, fix 3): a show the 90 % rule counts finished, with episodes left, says how far ("You finished
+	// What We Do in the Shadows" at 36 of 39 was untrue); one played to its end, and a film, still say "You finished"
+	[Fact]
+	public void AShowWithEpisodesLeft_SaysHowFar_NotYouFinished()
+	{
+		var shadows = Series("What We Do in the Shadows", 2019, unplayed: 3);
+		var done = Series("Chernobyl", 2019, unplayed: 0, played: true);
+		var film = Film("Arrival", 2016, played: true);
+		var plays = new Dictionary<Guid, SeriesPlays> { [shadows.Id] = new(36, Now.AddDays(-2)), [done.Id] = new(5, Now.AddDays(-20)) };
+
+		var anchors = AnchorFinder.Of(BuildContext.For(Index([shadows, done, film], plays), Now), new Facts());
+
+		Assert.Equal("You watched 36 of 39 episodes of What We Do in the Shadows", anchors.Single(x => x.Title.Id == shadows.Id).Said);
+		Assert.Equal("You finished Chernobyl", anchors.Single(x => x.Title.Id == done.Id).Said);
+		Assert.Equal("You finished Arrival", anchors.Single(x => x.Title.Id == film.Id).Said);
+		Assert.Equal("You watched 1,204 of 1,300 episodes of Long Show", ReasonFacts.WatchedEpisodes("Long Show", 1204, 1300));
+	}
+
+	// 1.8.1 (the owner's library, fix 2): More like leaves out what the user started, not only what they finished: a show with
+	// any episode played (It's Always Sunny, 168 episodes in, was in two of them) and a film begun
+	[Fact]
+	public void MoreLike_LeavesOutWhatTheUserStarted_AShowWithAnEpisodePlayed_AFilmBegun()
+	{
+		var library = new Library();
+		library.Bebop = library.Bebop with { Played = true };
+		var trigun = library.Anime[0];
+		var plays = library.Plays;
+		plays[trigun.Id] = new SeriesPlays(1, Now.AddDays(-30)); // one episode of Trigun
+		var shows = Assert.Single(Slots(Index(library.All, plays), new Facts()), x => x.Kind == SmartCollectionKind.MoreLike && x.Title == "More like Cowboy Bebop");
+		Assert.DoesNotContain(trigun.Id, shows.ItemIds);
+		Assert.Equal("Shares space, anime and Megumi Hayashibara · 11 shows", shows.ReasonText); // of 12
+
+		var anchor = Film("The Drama", 1995, ["Drama"], ["heist"], director: "Someone Else", played: true);
+		var common = Common();
+		var heists = common.Take(10).Select(x => x with { Tags = ["heist"] }).ToList();
+		var begun = new Facts(new() { [heists[0].Id] = new TitlePlays(1, Now.AddDays(-2)) }); // a heist film started two days ago
+		var films = Assert.Single(Slots(Index([anchor, .. heists, .. common.Skip(10)]), begun), x => x.Kind == SmartCollectionKind.MoreLike);
+		Assert.DoesNotContain(heists[0].Id, films.ItemIds);
+		Assert.Equal(9, films.ItemIds.Count);
+	}
+
+	// 1.8.1 (BH-180-q3): a country is never named as a trait the titles share ("Shares heists, Germany and drama"): it counts
+	// toward how alike they are, and the reason names the next feature instead
+	[Fact]
+	public void MoreLike_NamesNoCountryAsASharedTrait()
+	{
+		var anchor = Film("The Drama", 1995, ["Drama"], ["heist"], director: "Someone Else", played: true, countries: ["Germany"]);
+		var common = Common();
+		var german = common.Take(9).Select(x => x with { Tags = ["heist"], Countries = ["Germany"] }).ToList();
+
+		var like = Assert.Single(Slots(Index([anchor, .. german, .. common.Skip(9)]), new Facts()), x => x.Kind == SmartCollectionKind.MoreLike);
+
+		Assert.Equal("Shares heists, drama and the 1990s · 9 films", like.ReasonText);
+		Assert.DoesNotContain("Germany", like.TileAutomationName, StringComparison.Ordinal);
+		Assert.Equal(german.Select(x => x.Id).Order(), like.ItemIds.Order()); // still the German heists: alike as before
+	}
+
+	// 1.8.1 (BH-180-q3): a franchise with no TMDb name whose films' names share no words was "Next in The Frontier and the
+	// Mirror films": named by its first film now; one whose names share words keeps them
+	[Fact]
+	public void NextIn_WithNoFranchiseName_IsNamedByItsFirstFilm()
+	{
+		var first = Film("The Frontier and the Mirror", 1990, franchise: "4242", played: true, premiere: "1990-03-01");
+		var second = Film("Glass Harbour", 1994, franchise: "4242", premiere: "1994-03-01");
+		var next = Assert.Single(Slots(Index([first, second]), new Facts()), x => x.Kind == SmartCollectionKind.NextIn);
+		Assert.Equal("Next after The Frontier and the Mirror", next.Title);
+		Assert.Null(NixieTitles.Check(next.Title));
+		Assert.Equal("Next: Glass Harbour (1994) · 1 of 2 films watched", next.ReasonText);
+
+		var saga = new[] { Film("Dragon Saga: Dawn", 2001, franchise: "777", played: true), Film("Dragon Saga: Dusk", 2003, franchise: "777") };
+		Assert.Equal("Next in Dragon Saga", Assert.Single(Slots(Index(saga), new Facts()), x => x.Kind == SmartCollectionKind.NextIn).Title);
+		Assert.Equal("The Frontier and the Mirror films", FranchiseNames.Name([first, second])); // the Franchise row's own name, as before
+	}
+
+	// 1.8.1 (BH-181-m1): "Next after Return to Avalon" offered Return to Avalon. A franchise the user began past its first film
+	// (only the newest played, one begun) is named by the film they watched in it, never by the film it offers
+	[Fact]
+	public void NextIn_BegunPastItsFirstFilm_NeverNamesTheFilmItOffers()
+	{
+		var avalon = Film("Return to Avalon", 1995, franchise: "9103", premiere: "1995-04-01");
+		var harbour = Film("Glass Harbour", 2000, franchise: "9103", premiere: "2000-04-01");
+		var begun = Film("Under a Copper Sky", 2011, franchise: "9103", premiere: "2011-04-01");
+		var orchard = Film("The Restless Orchard", 2015, franchise: "9103", played: true, premiere: "2015-04-01");
+		var facts = new Facts(new() { [begun.Id] = new TitlePlays(1, Now.AddDays(-1)), [orchard.Id] = new TitlePlays(1, Now.AddDays(-5)) });
+
+		var next = Assert.Single(Slots(Index([orchard, begun, harbour, avalon]), facts), x => x.Kind == SmartCollectionKind.NextIn);
+
+		Assert.Equal("Next: Return to Avalon (1995) · 1 of 4 films watched", next.ReasonText);
+		Assert.DoesNotContain("Return to Avalon", next.Title, StringComparison.OrdinalIgnoreCase);
+		Assert.DoesNotContain("Return to Avalon", next.TileAutomationName.Split(',')[0], StringComparison.OrdinalIgnoreCase); // what Narrator says first
+		Assert.Equal("Next after The Restless Orchard", next.Title);
+		Assert.Null(NixieTitles.Check(next.Title));
+
+		// two films watched, the first not: named by the one watched last, by its play date, in every three-day block (the anchors'
+		// order turns with the block)
+		var harbourPlayed = harbour with { Played = true };
+		var lastWeek = new Facts(new() { [harbour.Id] = new TitlePlays(1, Now.AddDays(-10)), [orchard.Id] = new TitlePlays(1, Now.AddDays(-40)) });
+		foreach (var day in new[] { 0, 3, 6 })
+		{
+			var named = Assert.Single(Slots(Index([orchard, begun, harbourPlayed, avalon]), lastWeek, Now.AddDays(day)), x => x.Kind == SmartCollectionKind.NextIn);
+			Assert.Equal("Next after Glass Harbour", named.Title);
+			Assert.Equal("Next: Return to Avalon (1995) · 2 of 4 films watched", named.ReasonText);
+		}
+	}
+
+	// 1.8.1 (the owner's library, fix 1): among franchises whose films have no play date (the owner's 42 film anchors), the one
+	// the user is furthest into first: X-Men at 5 of 7 before Ant-Man at 1 of 3 ("Ant-Man and the Wasp: Quantumania" only sorted
+	// first by name); a franchise of a film with a date comes before both, and each carries its anchor's date
+	[Fact]
+	public void NextIn_AmongUndatedFranchises_TheFurthestIntoFirst_AfterADatedOne()
+	{
+		string[] xmen = ["X-Men", "X2", "X-Men: The Last Stand", "X-Men Origins: Wolverine", "X-Men: First Class", "X-Men: Days of Future Past", "X-Men: Apocalypse"];
+		var mutants = xmen.Select((x, i) => Film(x, 2000 + (i * 2), franchise: "748", played: i < 5, premiere: $"{2000 + (i * 2)}-05-01")).ToList();
+		var ant = new[] { Film("Ant-Man", 2015, franchise: "422834"), Film("Ant-Man and the Wasp", 2018, franchise: "422834"), Film("Ant-Man and the Wasp: Quantumania", 2023, franchise: "422834", played: true) };
+		var dated = new[] { Film("Dune", 2021, franchise: "726871", played: true), Film("Dune: Part Two", 2024, franchise: "726871") };
+		var facts = new Facts(new() { [dated[0].Id] = new TitlePlays(1, Now.AddDays(-20)) });
+
+		var next = Slots(Index([.. ant, .. mutants, .. dated]), facts).Where(x => x.Kind == SmartCollectionKind.NextIn).ToList();
+
+		Assert.Equal(["Next in Dune", "Next in X-Men", "Next in Ant-Man"], next.Select(x => x.Title));
+		Assert.Equal([Now.AddDays(-20), null, null], next.Select(x => x.AnchoredAt));
+	}
+
+	// 1.8.1 (the owner's library, fix 11): "X2" shares no word with the other six X-Men films, so 1.8.1's fallback said "Next after
+	// X-Men" (read as "after the 2000 film", while the next is the fourth); five of the seven start "X-Men": "Next in X-Men"
+	[Fact]
+	public void NextIn_IsNamedByTheWordsMostOfItsFilmsStartWith()
+	{
+		string[] names = ["X-Men", "X2", "X-Men: The Last Stand", "X-Men Origins: Wolverine", "X-Men: First Class", "X-Men: Days of Future Past", "X-Men: Apocalypse"];
+		var films = names.Select((x, i) => Film(x, 2000 + (i * 2), franchise: "748", played: i < 5, premiere: $"{2000 + (i * 2)}-05-01")).ToList();
+
+		var next = Assert.Single(Slots(Index(films), new Facts()), x => x.Kind == SmartCollectionKind.NextIn);
+
+		Assert.Equal("Next in X-Men", next.Title);
+		Assert.Equal("X-Men", FranchiseNames.Majority(films));
+		Assert.Null(FranchiseNames.Common(films)); // no word all seven share
+		Assert.Null(FranchiseNames.Majority([Film("Alien", 1979), Film("Aliens", 1986), Film("Prometheus", 2012)])); // none more than half
 	}
 
 	[Fact]

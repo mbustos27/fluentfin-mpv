@@ -23,6 +23,15 @@ public static class NixieTileShown
 	/// </summary>
 	public static double WordsHeight => NixieTileWords.WordsHeight(TextScale());
 
+	/// <summary>
+	/// 1.8.1 (BH-180-q2): the words' height of a Nixie tile (<see cref="WordsHeight"/>) or of a server's box set or playlist
+	/// (<paramref name="nixie"/> false: its title and its line, no count lines), at Windows' text size now.
+	/// </summary>
+	public static double WordsHeightOf(bool nixie) => NixieTileWords.WordsHeight(TextScale(), nixie);
+
+	/// <summary>1.8.1 (BH-180-q2): a Nixie tile's count lines are shown; a server's tile has none (they took a line of their own).</summary>
+	public static Visibility CountShown(SmartCollection? nixie) => nixie is null ? Visibility.Collapsed : Visibility.Visible;
+
 	private static double TextScale()
 	{
 		try

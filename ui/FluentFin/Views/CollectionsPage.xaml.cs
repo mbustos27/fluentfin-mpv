@@ -26,6 +26,10 @@ public sealed partial class CollectionsPage : Page
 	public CollectionsPage()
 	{
 		InitializeComponent();
+		// 1.8.1 (the 1.8.0 release gate's Drive-in Collections cell, 1.3 to 1.5 s under load): kept whole for Back, as Home, the
+		// libraries and the search results are (NavigationService.KeptWhole): made anew, its first layout took 0.65 to 1.75 s
+		// under load before the tile could take the keyboard ("page loaded 1754, try 2 1778"), and 0.1 s on a quiet PC
+		NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Enabled;
 
 		// 1.7.3 (BH-171-m4): the reading line, from the view model while the page is in the window (a theme switch hands the view
 		// model to the next page)
@@ -51,6 +55,8 @@ public sealed partial class CollectionsPage : Page
 			&& LeftAt.TryGetValue(PlaceKey(e.Parameter), out var left) ? left : null;
 		ViewModel.State.PropertyChanged -= OnStateChanged;
 		ViewModel.State.PropertyChanged += OnStateChanged;
+		_shownAsItWas = ViewModel.State.IsLoaded; // 1.8.1
+		_focused = false; // 1.8.1: the page kept whole comes again on Back: its arrival focus (the tile left from) is this visit's
 		if (ViewModel.State.IsLoaded)
 		{
 			OnStateChanged(ViewModel.State, new System.ComponentModel.PropertyChangedEventArgs(nameof(Core.ViewModels.LoadState.Status)));
@@ -99,6 +105,11 @@ public sealed partial class CollectionsPage : Page
 			return false;
 		}
 
+		if (!IsLoaded)
+		{
+			return false; // 1.8.1: a try at the normal priority can come before the page's first layout: again once it is in the window
+		}
+
 		PageScroller.ScrollTo(0, place.Offset, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled));
 		if (place.Tile?.TryGetTarget(out var tile) != true)
 		{
@@ -141,6 +152,7 @@ public sealed partial class CollectionsPage : Page
 		if (e.PropertyName == nameof(Core.ViewModels.LoadState.Status) && ViewModel.State.IsLoaded && !_focused)
 		{
 			_focused = true;
+			_placeTry = 0; // 1.8.1
 			_arrivalStarted = Environment.TickCount64; // Nixie 1.7.5
 			TakeArrivalFocus(ArrivalTries);
 		}
@@ -154,6 +166,9 @@ public sealed partial class CollectionsPage : Page
 
 	// Nixie 1.7.5: when the arrival focus was first tried (Environment.TickCount64), for the line that says why it stopped trying
 	private long _arrivalStarted;
+
+	// 1.8.1: the arrival focus's tries this visit (Back's place line says which one took the tile)
+	private int _placeTry;
 
 	/// <summary>What the arrival focus does after a try that found no tile to take the keyboard (<see cref="NextArrivalTry"/>).</summary>
 	public enum ArrivalRetry
@@ -195,10 +210,18 @@ public sealed partial class CollectionsPage : Page
 	private void TakeArrivalFocus(int tries) =>
 		UiDispatch.Enqueue(DispatcherQueue, "the Collections page's arrival focus", () =>
 		{
+			// 1.8.1 (rule 10): Back's place line names each try (the gate's Drive-in cell took 1.3 to 1.5 s under load)
+			_placeTry++;
+			if (_returnTo is not null && _placeTry <= 3)
+			{
+				NavigationService.PlaceStep(this, $"try {_placeTry}{(IsLoaded ? "" : " (not in the window)")}");
+			}
+
 			// Nixie 1.7.4: Back: the tile left from, where the page was (else, and on arrival, the section's first tile)
 			if (ArrivalFocus.TryTake(this, _returnTo is null ? "the section's first tile" : "the tile Back returns to", () => FocusReturned() || (_returnTo is null && FocusSection())))
 			{
 				EndArrivalTries();
+				NavigationService.PlacePutBack(this, $"tile and place (try {_placeTry})"); // 1.8.1 (rule 10): once per Back
 				return;
 			}
 
@@ -251,7 +274,19 @@ public sealed partial class CollectionsPage : Page
 				});
 				timer.Start();
 			}
-		}, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+		}, ArrivalPriority(_returnTo is not null, _shownAsItWas));
+
+	/// <summary>
+	/// 1.8.1 (the 1.8.0 release gate's Drive-in Collections cell, 1.3 to 1.5 s under load): the tries' priority. Back's tile on a
+	/// page shown as it was (its view model kept, loaded: its rows are there) at the normal priority, as a library's and the
+	/// search results' place since 1.7.5: on the low one the first try waited for the window's other work, 700 ms after the page
+	/// was in the window under load ("page loaded 134, try 1 843"). An arrival's tries stay low: its tiles come later.
+	/// </summary>
+	public static Microsoft.UI.Dispatching.DispatcherQueuePriority ArrivalPriority(bool returning, bool shownAsItWas) =>
+		returning && shownAsItWas ? Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal : Microsoft.UI.Dispatching.DispatcherQueuePriority.Low;
+
+	// 1.8.1: the view model came loaded (Back or Forward to a kept page), noted on arrival
+	private bool _shownAsItWas;
 
 	// any try scheduled before is no longer to run (its Loaded handler and its timer go); returns the number of the next one
 	private int EndArrivalTries()

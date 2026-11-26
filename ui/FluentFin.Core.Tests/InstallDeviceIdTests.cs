@@ -112,6 +112,69 @@ public sealed class InstallDeviceIdCurrentTests : IDisposable
 		Assert.Equal(kept, (string?)ids[key]);
 		Assert.Equal(worked, (string?)ids["other"]); // every other entry kept
 	}
+
+	private string StoredId() => InstallDeviceId.Stored(_root, InstallDeviceId.PcId(), AppContext.BaseDirectory, $@"{Environment.UserDomainName}\{Environment.UserName}");
+
+	/// <summary>
+	/// 1.8.1 (the review of BH-175-m4): a window started while the copy's last window keeps the first slot only to send a film's
+	/// last reports (another process: its slot and its closing mark) waits for that slot and is the copy's own device, not its
+	/// second one for its whole run.
+	/// </summary>
+	[Fact]
+	public async Task TheCurrentId_WhileTheLastWindowSendsItsLastReports_WaitsForItsSlot()
+	{
+		var id = StoredId();
+		var held = new Mutex(false, $@"Local\Nixie-device-{id}-0");
+		using var mark = new EventWaitHandle(false, EventResetMode.ManualReset, $@"Local\Nixie-device-{id}-closing");
+		var reported = Task.Run(async () =>
+		{
+			await Task.Delay(600); // its reports sent
+			held.Dispose();
+			mark.Set();
+		});
+
+		InstallDeviceId.UseDataFolder(_root);
+		var watch = System.Diagnostics.Stopwatch.StartNew();
+		var current = InstallDeviceId.Current;
+
+		Assert.Equal(id, current); // the first slot: the copy's own device
+		Assert.True(watch.Elapsed >= TimeSpan.FromMilliseconds(400), $"took it after {watch.ElapsedMilliseconds} ms");
+		await reported;
+	}
+
+	/// <summary>
+	/// 1.8.1 (the review of BH-175-m4): the wait is bounded (a closing window whose reports hang: the second slot after
+	/// <see cref="InstallDeviceId.ClosingWait"/>, as before), and a window simply running marks nothing: a second window opened
+	/// beside it is the second device at once. The mark goes with the slot.
+	/// </summary>
+	[Fact]
+	public void AClosingWindowsSlot_IsWaitedFor_AtMostTheBound_AndARunningWindowsNotAtAll()
+	{
+		InstallDeviceId.UseDataFolder(_root);
+		var current = InstallDeviceId.Current; // this window: the first slot
+		var id = StoredId();
+		Assert.Equal(id, current);
+
+		var watch = System.Diagnostics.Stopwatch.StartNew();
+		var (beside, besideClaim) = InstallDeviceId.ClaimWindow(id, TimeSpan.FromSeconds(10));
+		besideClaim.Dispose();
+		Assert.Equal(1, beside); // running, not closing: the second device
+		Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"waited {watch.ElapsedMilliseconds} ms beside a running window");
+
+		InstallDeviceId.Closing(); // its reports hang
+		watch.Restart();
+		var (late, lateClaim) = InstallDeviceId.ClaimWindow(id, TimeSpan.FromMilliseconds(500));
+		lateClaim.Dispose();
+		Assert.Equal(1, late);
+		Assert.InRange(watch.Elapsed.TotalMilliseconds, 400, 5000);
+
+		InstallDeviceId.ReleaseWindow(); // its reports' bound over: the slot and the mark go
+		watch.Restart();
+		var (next, nextClaim) = InstallDeviceId.ClaimWindow(id, TimeSpan.FromSeconds(10));
+		nextClaim.Dispose();
+		Assert.Equal(0, next);
+		Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"waited {watch.ElapsedMilliseconds} ms for a released slot");
+	}
 }
 
 /// <summary>

@@ -535,12 +535,29 @@ public partial class HomeViewModel
 					await SaveShownFor(session);
 				}
 			}
+			else if (NixieRowsOfNoKnownDay(_nixieDate ?? s_nixieDay, NixieRows.Count, NixieFill.IsCompleted))
+			{
+				// 1.8.1 (BH-180-q4): rows of a day this app doesn't know: a saved page's, shown again under five minutes after it was
+				// saved, before any fill of this app made rows (the start's fill still on its way: a first read). Across midnight they
+				// were yesterday's until the next visit; made now as on a load, from the index in memory or behind it
+				SmartCollectionCatalog.Log?.LogInformation("Home: its Made by Nixie rows are a saved page's, of no day this app made rows on: made again");
+				await UpdateNixieRows();
+			}
 		}
 		catch (Exception)
 		{
 			// as UpdateNixieRows: Home stays as it is
 		}
 	}
+
+	/// <summary>
+	/// 1.8.1 (BH-180-q4): Home shows Made by Nixie rows whose day nothing in this app knows: no fill of this view model made them
+	/// (<paramref name="shownDay"/> null: neither this page's nor any this app made) and none of its own is on its way.
+	/// </summary>
+	internal static bool NixieRowsOfNoKnownDay(DateTime? shownDay, int rows, bool fillDone) => shownDay is null && rows > 0 && fillDone;
+
+	/// <summary>Tests: a new process (no Home of this app has made its rows yet).</summary>
+	internal static void ForgetNixieDayForTests() => s_nixieDay = null;
 
 	// the index's own records of these titles, in their order (one pass over the index, not one a title)
 	private static List<BaseItemDto> Saved(IndexSnapshot snapshot, List<Guid> ids)

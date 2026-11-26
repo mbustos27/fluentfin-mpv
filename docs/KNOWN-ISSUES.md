@@ -68,6 +68,32 @@ Still queued:
 - From the 1.6.1 streams:
   - Two windows of one copy (each its own device id): unit tests only (the window slots). No harness run opens a second
     window; since 1.7.5 the gate's lifecycle check restarts with the old copy still in its close (one device id).
+- From 1.8.1's back stream (`wip/181-back`), left open:
+  - Drive-in's Home kept whole is slow to come back under load: its own layout. In the branch's gate run (three gate
+    jobs at once, beside other runs) Back to it at 1280 x 720 put its place back in 1,565 ms ("home's Loaded 1372, ...
+    rows tall enough 1560"); the same Home visit before it made its Made by Nixie rows in 1,682 ms, against 189 ms
+    elsewhere in that run. 1.8.0's code does the same: Drive-in, home, 1280 x 720 and max in turn, two runs side by side
+    at 4:44 PM: 1.8.0 placed it in 205 to 667 ms ("home's Loaded" 95 to 540), the branch in 270 to 743 ms (93 to 637).
+    In the back check's whole sequence, alone on this PC (one gate job, 5:35 and 5:49 PM), the branch put it back in
+    1,242 ms ("home's Loaded 1094") and 1.8.0's code in 1,142 ms ("home's Loaded 991"): each time the Home visit just
+    before made its lineup in 1.4 and 1.9 s ("made in 1410 / 1860 ms from the index in memory", against about 150 ms at
+    the run's start), so the app is slow there late in a long run (not traced: most likely the heap after many pages,
+    BH-175-M2's ground, the mem stream's). Side by side, the Collections cell then the Home cell: without the kept
+    Collections page 194, 284 and 773 ms, with it 206, 462 and 681 ms. Not the branch's, but the cell sits at the 1.2 s
+    limit in Drive-in at 1280 x 720: it failed the branch's three full runs (1,269 to 1,565 ms) and passed 1.8.0's one
+    (1,178 ms).
+  - Editorial's library at max (1.7.5's release gate: Back put the grid at 1,253 px, then it moved to 302 px): never
+    reproduced here (1.8.0's code: 10 of 10 at max on a 1920 monitor, 8 of 8 at 2560 x 1392). The branch holds the
+    grid's bring-into-view and the bar's clearance until Back's scroll lands, by the collection page's rule, and logs
+    "[perf] back: EditorialLibraryPage held ... while its place landed" when it does; in the gate's six Editorial Backs
+    it never engaged. So nothing shows the fix works yet: the next gate run's Editorial library at max, with that line,
+    decides.
+  - Drive-in's series page at 1280 x 720: Back's scroll lands 70 px low (434 to 504 px) as the episode row left from is
+    brought into view; the back check fails it on its 48 px tolerance. 1.8.0's code the same (2 of 3 cells).
+  - The back check's misses under load: the app's own times are in each row now ("the app: ..."). The branch's gate run
+    on `87b11835` had the series and film pages without a place line of their own (only "shown as it was", the view
+    model's part: Classic's film page at 1,340 ms and Drive-in's series at 1,321 ms by the check had no app time to
+    compare); `43351cee` gives the item pages one.
 
 ## Hand checks, recorded
 From 1.5, one line per check and release: pass, fail, or not run. They need a real desktop and real hands (off-screen

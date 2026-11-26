@@ -156,13 +156,22 @@ public sealed partial class LoadState : ObservableObject
 	/// <see cref="RunAsync"/>; Retry still runs the page's own load.
 	/// </summary>
 	/// <returns>Whether the load ended Loaded or Empty and is the newest (what it changed is shown).</returns>
-	public async Task<bool> RefreshBehindAsync(Func<Task<LoadOutcome>> load)
+	public Task<bool> RefreshBehindAsync(Func<Task<LoadOutcome>> load) => RefreshBehindAsync(_ => load());
+
+	/// <summary>
+	/// 1.8.1 (BH-175-q2): <see cref="RefreshBehindAsync(Func{Task{LoadOutcome}})"/> for a load that writes what came into the page
+	/// before it ends: it is given <c>newest</c>, true while no newer run (a later Back's refresh, a Retry, R's page) has begun,
+	/// and writes only while it is. An older refresh whose answers came last overwrote a newer one's (Back, Forward and Back
+	/// while the server was slow): only its own <see cref="Set"/> was checked.
+	/// </summary>
+	public async Task<bool> RefreshBehindAsync(Func<Func<bool>, Task<LoadOutcome>> load)
 	{
 		var run = ++_run;
+		bool Newest() => run == _run;
 		LoadOutcome outcome;
 		try
 		{
-			outcome = await load();
+			outcome = await load(Newest);
 		}
 		catch (Exception ex) when (ex is not OperationCanceledException || LoadMessages.IsTimeout(ex))
 		{

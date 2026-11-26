@@ -336,9 +336,15 @@ public class NavigationService : INavigationService
 	/// out again at Back's place took 0.6 to 1.5 s before its card came back: Drive-in's and Editorial's). The frame keeps one
 	/// instance of each page type; Back or Forward gets it only when it is the page of the entry reached (its kept view model,
 	/// <see cref="PrepareKeptWhole"/>), else every kept page is made anew as before.
+	/// <para>
+	/// 1.8.1: the Collections page too (a collection opened from it, Back): made anew, its first layout took 0.65 to 1.75 s under
+	/// load before Back's tile took the keyboard (the 1.8.0 release gate's Drive-in cell, 1.3 to 1.5 s). See all is the same page
+	/// type, so Collections, See all, Back makes it anew as before (<see cref="UsesKeptWhole"/>).
+	/// </para>
 	/// </remarks>
 	public static bool KeptWhole(Type sharedPage) =>
-		sharedPage == typeof(Views.HomePage) || sharedPage == typeof(Views.LibraryPage) || sharedPage == typeof(Views.SearchResultsPage);
+		sharedPage == typeof(Views.HomePage) || sharedPage == typeof(Views.LibraryPage) || sharedPage == typeof(Views.SearchResultsPage)
+		|| sharedPage == typeof(Views.CollectionsPage);
 
 	private bool KeptWholePage(Type pageType)
 	{
@@ -887,22 +893,51 @@ public class NavigationService : INavigationService
 	/// Nixie 1.7.5: the pages alive, by type, after a full collection ("SeriesPage 2, EpisodePage 1"): a page left and not kept
 	/// (only Home is kept whole) is collected unless something still holds it (then-175-leak.ps1 reads the log line).
 	/// </summary>
-	public static string LivePages(IEnumerable<WeakReference<Page>> pages) =>
+	public static string LivePages<T>(IEnumerable<WeakReference<T>> pages)
+		where T : class =>
 		string.Join(", ", pages.Select(x => x.TryGetTarget(out var page) ? page.GetType().Name : null).OfType<string>()
 			.GroupBy(x => x).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => $"{g.Key} {g.Count()}"));
 
-	private void CountLivePages(Page? shown)
+	/// <summary>
+	/// 1.8.1 (BH-175-q1): <paramref name="shown"/> noted once, however often it is shown: a page kept whole (Home, a library, the
+	/// search results) is the same instance every visit, and was counted once per visit ("LibraryPage 37" after 74 moves).
+	/// </summary>
+	/// <returns>Whether it was new to the list.</returns>
+	internal static bool NoteSeen<T>(List<WeakReference<T>> seen, T shown)
+		where T : class
+	{
+		foreach (var reference in seen)
+		{
+			if (reference.TryGetTarget(out var page) && ReferenceEquals(page, shown))
+			{
+				return false;
+			}
+		}
+
+		seen.Add(new WeakReference<T>(shown));
+		return true;
+	}
+
+	private void CountLivePages(Page? shown) => _logger?.LogInformation("[leak] live pages: {Pages}", CountLive(SeenPages, shown));
+
+	/// <summary>
+	/// Nixie 1.7.5; 1.8.1 (BH-175-q1): what the leak line says after a navigation that shows <paramref name="shown"/>: it is noted
+	/// (once, however often it is shown: <see cref="NoteSeen"/>), a full collection runs, and the pages still alive are counted
+	/// by type (<see cref="LivePages"/>).
+	/// </summary>
+	internal static string CountLive<T>(List<WeakReference<T>> seen, T? shown)
+		where T : class
 	{
 		if (shown is not null)
 		{
-			SeenPages.Add(new WeakReference<Page>(shown));
+			NoteSeen(seen, shown);
 		}
 
 		GC.Collect();
 		GC.WaitForPendingFinalizers();
 		GC.Collect();
-		SeenPages.RemoveAll(x => !x.TryGetTarget(out _));
-		_logger?.LogInformation("[leak] live pages: {Pages}", LivePages(SeenPages));
+		seen.RemoveAll(x => !x.TryGetTarget(out _));
+		return LivePages(seen);
 	}
 
 	private async void OnNavigated(object sender, NavigationEventArgs e)

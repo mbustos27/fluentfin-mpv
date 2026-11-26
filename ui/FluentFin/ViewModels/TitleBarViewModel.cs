@@ -141,6 +141,13 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 		{
 			if (parameter is string query)
 			{
+				// 1.8.1: another search's results drop the search in the box too, its list and an answer on its way (Back or Forward
+				// to the same query's results: SteppedBackOrForward, the review)
+				if (!string.Equals(query, SearchText, StringComparison.Ordinal))
+				{
+					SearchReset?.Invoke(this, EventArgs.Empty);
+				}
+
 				SearchText = query;
 			}
 		}
@@ -156,6 +163,12 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	/// bar outlives the session: user B must not see user A's suggestions). The search box drops its list and any answer due.
 	/// </summary>
 	public event EventHandler? SearchReset;
+
+	/// <summary>
+	/// 1.8.1 (the review): Back or Forward is showing a page (before <see cref="OnPageShown"/>): the search in the box is dropped,
+	/// its list and an answer on its way, whatever the page; Back to the same query's results left the list open over them.
+	/// </summary>
+	public void SteppedBackOrForward() => SearchReset?.Invoke(this, EventArgs.Empty);
 
 	partial void OnUserChanged(UserDto? value)
 	{

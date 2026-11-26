@@ -279,16 +279,20 @@ public sealed partial class EditorialStill : UserControl, FluentFin.Controls.IUp
 }
 
 /// <summary>Narrator reads a still as the shared episode row ("S1 E3 Sawdust, 15% watched", "3 of 8"); Invoke plays it.</summary>
-internal sealed partial class EditorialStillAutomationPeer(EditorialStill owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider
+internal sealed partial class EditorialStillAutomationPeer(EditorialStill element) : FrameworkElementAutomationPeer(element), IInvokeProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private EditorialStill Element => Owner as EditorialStill ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
 
 	protected override string GetClassNameCore() => nameof(EditorialStill);
 
 	protected override string GetNameCore()
 	{
-		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? FluentFin.Controls.UpNextMark.Spoken(ItemLabels.EpisodeRowName(owner.Episode), owner.IsUpNext) : name;
+		var name = AutomationProperties.GetName(Element);
+		return string.IsNullOrEmpty(name) ? FluentFin.Controls.UpNextMark.Spoken(ItemLabels.EpisodeRowName(Element.Episode), Element.IsUpNext) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;
@@ -300,5 +304,5 @@ internal sealed partial class EditorialStillAutomationPeer(EditorialStill owner)
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.Invoke ? this : base.GetPatternCore(patternInterface);
 
-	public void Invoke() => owner.Play();
+	public void Invoke() => Element.Play();
 }

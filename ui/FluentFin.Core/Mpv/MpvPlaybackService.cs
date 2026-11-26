@@ -113,6 +113,21 @@ public sealed class MpvPlaybackService
 		}
 	}
 
+	/// <summary>
+	/// 1.8.1 (the review of BH-175-m4): a Stopped report FluentFin is sending for a backend that died (docs/BRIDGE.md §6) is
+	/// still on its way (what <see cref="WaitForReportsAsync"/> waits for).
+	/// </summary>
+	public bool ReportsPending
+	{
+		get
+		{
+			lock (_reportsLock)
+			{
+				return _reports.Any(x => !x.IsCompleted);
+			}
+		}
+	}
+
 	private void Track(Task report)
 	{
 		lock (_reportsLock)

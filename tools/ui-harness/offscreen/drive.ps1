@@ -110,6 +110,54 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Ms([double]$From, [double]$To) { if ($From -and $To) { [int][Math]::Round(($To - $From) * 1000) } else { $null } }
 function Safe-Name([string]$Name) { ($Name -replace '[^A-Za-z0-9._-]+', '-').Trim('-').ToLowerInvariant() }
 
+# --- the app log's failures (Nixie 1.8.1, BH-181-M1) --------------------------------------------------------------------
+# A line of these in FluentFin's log, stamped after the run began, fails the run at its end (one check each). The first
+# start's settings race passed 18 of the collections check's 28 while Made by Nixie, the Collections page and the Movies and
+# Shows tabs were gone (and 35 of 35 run again): the app's log had both lines.
+$AppLogFailures = [ordered]@{
+    "[crash-trail] XAML's unhandled exception" = "end of run: no exception reached XAML's last handler (the app log)"
+    'Library index: the read failed'           = "end of run: no library index read failed (the app log)"
+}
+# A gate check (its Id, GATE_ID) that makes one of those lines on purpose names it here, by check: its own lines then pass,
+# said in drive.log. None does (1.8.1: every server fault the gate makes is answered without either line). Example:
+#   'signin-methods' = @('Library index: the read failed')
+$AppLogExpected = @{}
+
+# the lines of $Says found in the logs (log*.txt) under $Logs stamped at or after $Since (epoch s): each as
+# @{ Says; When; Line }, Line with the exception's first line under it (Serilog writes it on the next line)
+function Get-AppLogFailures([string]$Logs, [double]$Since, [string[]]$Says) {
+    $found = @()
+    foreach ($f in @(Get-ChildItem $Logs -Filter 'log*.txt' -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        $lines = @(Get-Content -LiteralPath $f.FullName -Encoding utf8)
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -notmatch '^(\S+ \S+ [+-]\d\d:\d\d) \[\w+\] (.*)$') { continue }
+            $stamp = $Matches[1]; $text = $Matches[2]
+            $what = @($Says | Where-Object { $text.Contains($_) } | Select-Object -First 1)
+            if (-not $what) { continue }
+            $when = [DateTimeOffset]::MinValue
+            if (-not [DateTimeOffset]::TryParse($stamp, [ref]$when) -or $when.ToUnixTimeMilliseconds() / 1000.0 -lt $Since) { continue }
+            $line = $text
+            if ($i + 1 -lt $lines.Count -and $lines[$i + 1] -notmatch '^\d{4}-\d\d-\d\d ') { $line += ': ' + $lines[$i + 1].Trim() }
+            $found += [pscustomobject]@{ Says = $what[0]; When = $when; Line = $line.Substring(0, [Math]::Min(300, $line.Length)) }
+        }
+    }
+    $found
+}
+
+# one check per line of $AppLogFailures: FAIL with how many and the first; a line the gate check $GateId expects passes, said
+function Test-AppLogFailures([string]$Logs, [double]$Since, [string]$GateId) {
+    $found = @(Get-AppLogFailures $Logs $Since @($AppLogFailures.Keys))
+    foreach ($says in $AppLogFailures.Keys) {
+        $these = @($found | Where-Object { $_.Says -eq $says })
+        $expected = $GateId -and $AppLogExpected.ContainsKey($GateId) -and @($AppLogExpected[$GateId]) -contains $says
+        if ($expected -and $these.Count) {
+            Say ("the app log: {0} line(s) of '{1}', expected by the gate check {2}; first: {3}" -f $these.Count, $says, $GateId, $these[0].Line)
+        }
+        Check $AppLogFailures[$says] ($expected -or $these.Count -eq 0) $(if ($these.Count) {
+                "{0}{1} line(s), first at {2:h:mm:ss.fff tt}: {3}" -f $(if ($expected) { "expected by $GateId`: " } else { '' }), $these.Count, $these[0].When, $these[0].Line })
+    }
+}
+
 # --- the monitors (Nixie 1.4.x, sg-parallel: bug hunt m10's cause) -----------------------------------------------------
 # Windows 11 minimizes the windows on a monitor that drops off the bus (a DisplayPort monitor powering off or going to
 # standby), on the harness's private desktops too: every m10 "160 x 28" run was the primary monitor's Kernel-PnP 1010
@@ -946,6 +994,9 @@ finally {
         }
     }
     if ($appErrors) { Say ("FluentFin logged {0} error(s) during the run, first: {1}" -f $appErrors.Count, $appErrors[0]) }
+    # Nixie 1.8.1 (BH-181-M1): an exception that reached XAML's last handler, or a failed index read, fails the run
+    try { Test-AppLogFailures (Join-Path $DataDir 'Logs') $runStarted $env:GATE_ID }
+    catch { Check 'end of run: the app log could be read' $false $_.Exception.Message }
     # 1.5 qacheck (BH-140X-m4): nothing of Nixie's (the app, its backend, mpv) sent the token in a form Jellyfin 12 refuses
     try {
         $legacyAuth = @(Get-Requests 0 | Where-Object { $_.PSObject.Properties['auth_form'] -and "$($_.auth_form)" -like 'legacy:*' })

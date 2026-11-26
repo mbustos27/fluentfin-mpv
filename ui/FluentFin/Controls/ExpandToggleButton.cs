@@ -35,16 +35,20 @@ public sealed partial class ExpandToggleButton : HyperlinkButton
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new ExpandTogglePeer(this);
 
-	private sealed partial class ExpandTogglePeer(ExpandToggleButton owner) : HyperlinkButtonAutomationPeer(owner), IExpandCollapseProvider
+	private sealed partial class ExpandTogglePeer(ExpandToggleButton element) : HyperlinkButtonAutomationPeer(element), IExpandCollapseProvider
 	{
-		public ExpandCollapseState ExpandCollapseState => StateOf(owner.IsExpanded);
+		// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+		// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+		private ExpandToggleButton Element => Owner as ExpandToggleButton ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
+		public ExpandCollapseState ExpandCollapseState => StateOf(Element.IsExpanded);
 
 		protected override object GetPatternCore(PatternInterface patternInterface) =>
 			patternInterface == PatternInterface.ExpandCollapse ? this : base.GetPatternCore(patternInterface);
 
 		public void Expand()
 		{
-			if (!owner.IsExpanded)
+			if (!Element.IsExpanded)
 			{
 				Invoke();
 			}
@@ -52,7 +56,7 @@ public sealed partial class ExpandToggleButton : HyperlinkButton
 
 		public void Collapse()
 		{
-			if (owner.IsExpanded)
+			if (Element.IsExpanded)
 			{
 				Invoke();
 			}

@@ -317,16 +317,20 @@ public sealed partial class NixieReadout : StackPanel
 }
 
 /// <summary>A readout is one text for Narrator ("44 minutes left"); its tubes are not read one by one.</summary>
-internal sealed partial class NixieReadoutAutomationPeer(NixieReadout owner) : FrameworkElementAutomationPeer(owner)
+internal sealed partial class NixieReadoutAutomationPeer(NixieReadout element) : FrameworkElementAutomationPeer(element)
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private NixieReadout Element => Owner as NixieReadout ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Text;
 
 	protected override string GetClassNameCore() => nameof(NixieReadout);
 
 	protected override string GetNameCore()
 	{
-		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? owner.SpokenText : name;
+		var name = AutomationProperties.GetName(Element);
+		return string.IsNullOrEmpty(name) ? Element.SpokenText : name;
 	}
 
 	protected override IList<AutomationPeer>? GetChildrenCore() => null;

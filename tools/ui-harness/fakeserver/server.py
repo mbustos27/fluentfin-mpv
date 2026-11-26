@@ -45,6 +45,8 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   GET /__harness/summary, POST /__harness/latency, POST /__harness/streams, POST /__harness/shutdown,
   GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve,
   POST /__harness/libraries {"rename": {"old": "new"}, "add": ["name"]} (the views change; clients hear LibraryChanged),
+  POST /__harness/titles {"add": [{"name", "library", "collection"}], "remove": ["name"]} (Nixie 1.8.1: films added, saved
+  now, in a library made if it isn't there, "collection": null a mixed one; titles removed by name; LibraryChanged),
   POST /__harness/search {"mode": "stock" | "loose"} (1.5: search as 12.4's built-in provider, or any word as a plugin),
   POST /__harness/art {"art": "white"|"black"|""} (Nixie 1.4.0: every image one flat colour from now on, as FAKESERVER_ART
   sets it at start; the image tags change with it, so a client that reads an item again asks for the new picture).
@@ -1289,6 +1291,24 @@ class Server:
                             pass
                     return self._json(200, {"views": [outer.lib.items[v]["Name"] for v in outer.lib.views],
                                             "told": len(sockets)})
+                if low == "/__harness/titles" and method == "POST":
+                    # Nixie 1.8.1 (BH-175-q4): films added and titles removed on the server, as a scan does: {"add": [{"name",
+                    # "library", "collection"}], "remove": ["name"]}; the added are saved now (MinDateLastSaved finds them),
+                    # and every connected client hears LibraryChanged
+                    body = self._body()
+                    with outer.lock:
+                        added = outer.lib.add_titles([t for t in body.get("add") or [] if isinstance(t, dict)])
+                        removed = outer.lib.remove_titles(body.get("remove") or [])
+                        sockets = list(outer.sockets)
+                    message = {"MessageType": "LibraryChanged", "MessageId": uuid.uuid4().hex,
+                               "Data": {"FoldersAddedTo": [], "FoldersRemovedFrom": [], "ItemsAdded": added,
+                                        "ItemsRemoved": removed, "ItemsUpdated": [], "CollectionFolders": []}}
+                    for ws in sockets:
+                        try:
+                            ws.send_json(message)
+                        except (ConnectionError, OSError):
+                            pass
+                    return self._json(200, {"added": added, "removed": removed, "told": len(sockets)})
                 return self._json(404, None)
 
             def _quick_dto(self, entry):

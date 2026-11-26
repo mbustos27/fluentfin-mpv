@@ -12,7 +12,7 @@ param(
     # the runner wants a Python that exists (the fixture never runs it): FLUENTFIN_MPV_TEST_PYTHON, as the UI suites take it,
     # else this checkout's backend venv
     [string]$Python = $(if ($env:FLUENTFIN_MPV_TEST_PYTHON) { $env:FLUENTFIN_MPV_TEST_PYTHON } else { Join-Path ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))) 'backend\.venv\Scripts\python.exe' }),
-    # another copy of offscreen\drive.ps1 for test 7 (a revert check: main's before the fix)
+    # another copy of offscreen\drive.ps1 for tests 7, 13, 14 and 27 (a revert check: main's before the fix)
     [string]$Drive,
     # (1.7.5 gate fix) other copies of then-174-back.ps1, checks\g3-common.ps1 and checks\4-topbar.ps1 for tests 17-20 (a revert
     # check: 9d423e5e's)
@@ -20,7 +20,9 @@ param(
     [string]$G3Common,
     [string]$Topbar,
     # (1.7.5 gate fix) another copy of checks\6-playback.ps1 for test 25 (a revert check)
-    [string]$PlaybackScript
+    [string]$PlaybackScript,
+    # (1.8.1, the mem review) another copy of offscreen\then-175-leak.ps1 for test 26 (a revert check)
+    [string]$LeakScript
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -307,6 +309,73 @@ $pn = if ($fn) { & { . ([scriptblock]::Create($fn)); @((G4P-PanelName 'AudioTrac
 T 'playback-basics: the tracks cases open, pick and read Cinematic''s panel too' (
     ($pn -join '|') -eq 'Audio: Japanese|Subtitles: Off' -and $pbText -match 'Wait-Until \{ if \(G4P-TracksOpen\) \{ \$true \} \}' -and
     $pbText -match "\`$closed = -not \(G4P-TracksOpen\)" -and $pbText -match ", in use\$'") "$($pn -join '|')"
+
+# 26. (1.8.1, the mem review) the leak check reads the app's "[leak]" lines from every log written since Nixie started: its log
+# rolls over at midnight, and a run that crossed it counted only the new day's navigations (each round "not there and back")
+if (-not $LeakScript) { $LeakScript = Join-Path $repo 'tools\ui-harness\offscreen\then-175-leak.ps1' }
+$lkFns = @('Lk-Logs', 'Lk-LastLine', 'Lk-Navigations') | ForEach-Object { Get-FunctionText $LeakScript $_ }
+$lkData = Join-Path $Out 'leak-logs'
+New-Item -ItemType Directory -Force (Join-Path $lkData 'Logs') | Out-Null
+$lkStarted = (Get-Date).AddMinutes(-10)
+$lkOld = Join-Path $lkData 'Logs\log20261124.txt'; $lkDay1 = Join-Path $lkData 'Logs\log20261125.txt'; $lkDay2 = Join-Path $lkData 'Logs\log20261126.txt'
+[IO.File]::WriteAllText($lkOld, "[leak] live pages: HomePage 9`r`n")   # an earlier run's, before this one started
+[IO.File]::WriteAllText($lkDay1, "x`r`n[leak] live pages: HomePage 1`r`n[leak] live pages: MoviePage 1`r`n")
+[IO.File]::WriteAllText($lkDay2, "[leak] live pages: CollectionPage 1, HomePage 1`r`nafter midnight`r`n")
+(Get-Item $lkOld).LastWriteTime = $lkStarted.AddDays(-1); (Get-Item $lkDay1).LastWriteTime = $lkStarted.AddMinutes(5); (Get-Item $lkDay2).LastWriteTime = $lkStarted.AddMinutes(9)
+$lkGot = if ($lkFns[1] -and $lkFns[2]) {   # (an older script has no Lk-Logs: it read the newest log only)
+    & { $DataDir = $lkData; $script:ui = [pscustomobject]@{ StartTime = $lkStarted }; foreach ($f in @($lkFns | Where-Object { $_ })) { . ([scriptblock]::Create($f)) }; @((Lk-Navigations), (Lk-LastLine)) }
+} else { @() }
+T 'leak check: its "[leak]" lines come from every log since Nixie started (the midnight rollover), none from before' (
+    $lkGot.Count -eq 2 -and $lkGot[0] -eq 3 -and $lkGot[1] -eq 'CollectionPage 1, HomePage 1') "navigations $($lkGot[0]) (want 3), last line '$($lkGot[1])'"
+
+# 27. (1.8.1, BH-181-M1) drive.ps1's end of run: a line in the app's log of an exception that reached XAML's last handler, or of
+# a failed index read, stamped after the run began, fails the run; one before it doesn't; a gate check that expects one by
+# name (AppLogExpected) passes its own line and no other. The first start's settings race passed 18 of collections' 28 checks
+$alAst = [System.Management.Automation.Language.Parser]::ParseFile([IO.Path]::GetFullPath($Drive), [ref]$tokens, [ref]$errors)
+$alText = @(@('AppLogFailures', 'AppLogExpected') | ForEach-Object { $n = $_
+        $alAst.FindAll({ param($x) $x -is [System.Management.Automation.Language.AssignmentStatementAst] -and $x.Left.Extent.Text -eq "`$$n" }, $false) | Select-Object -First 1 } |
+    Where-Object { $_ } | ForEach-Object { $_.Extent.Text }) + @(@('Get-AppLogFailures', 'Test-AppLogFailures') | ForEach-Object { Get-FunctionText $Drive $_ } | Where-Object { $_ })
+$alLogs = Join-Path $Out 'applog\Logs'
+New-Item -ItemType Directory -Force $alLogs | Out-Null
+$alStart = [DateTimeOffset]::new(2026, 11, 25, 18, 31, 0, [TimeSpan]::FromHours(-8))
+$alStamp = { param($s) $alStart.AddSeconds($s).ToString('yyyy-MM-dd HH:mm:ss.fff zzz') }
+[IO.File]::WriteAllText((Join-Path $alLogs 'log20261125.txt'), (@(
+            "$(& $alStamp -30) [ERR] [crash-trail] XAML's unhandled exception: an earlier run's",
+            "$(& $alStamp 5) [INF] [crash-trail] listening for unhandled errors (UnhandledErrorDetected)",
+            "$(& $alStamp 53) [WRN] Library index: the read failed",
+            "System.ArgumentNullException: Value cannot be null. (Parameter 'propertyName')",
+            "   at System.Text.Json.Nodes.JsonObject.WriteTo",
+            "$(& $alStamp 90) [ERR] [crash-trail] XAML's unhandled exception: System.ArgumentNullException (0x80004003): Value cannot be null.") -join "`r`n") + "`r`n")
+$alRun = { param($GateId, $Expected, $Logs)
+    $checks = [ordered]@{}
+    function Say([string]$Text) { }
+    . ([scriptblock]::Create($checkFn.Extent.Text))
+    foreach ($t in $alText) { . ([scriptblock]::Create($t)) }
+    if ($Expected) { $AppLogExpected = $Expected }
+    if (Get-Command Test-AppLogFailures -ErrorAction SilentlyContinue) { Test-AppLogFailures $Logs ($alStart.ToUnixTimeMilliseconds() / 1000.0) $GateId }
+    $checks
+}
+$alAll = & $alRun '' $null $alLogs
+$alXaml = @($alAll.Keys | Where-Object { $_ -like '*XAML*' })
+$alIndex = @($alAll.Keys | Where-Object { $_ -like '*index read*' })
+$alOk = { param($c, $keys) @($keys | ForEach-Object { $c[$_].ok }) }
+T 'drive.ps1: the app log''s "XAML''s unhandled exception" and "the read failed" after the run began each fail the run, with the exception' (
+    $alXaml.Count -eq 1 -and $alIndex.Count -eq 1 -and -not $alAll[$alXaml[0]].ok -and -not $alAll[$alIndex[0]].ok -and
+    $alAll[$alIndex[0]].detail -match "^1 line\(s\), first at 6:31:53\.000 PM: Library index: the read failed: System\.ArgumentNullException" -and
+    $alAll[$alXaml[0]].detail -match '^1 line\(s\)') "$(@($alAll.Keys | ForEach-Object { "$_ = $($alAll[$_].ok) ($($alAll[$_].detail))" }) -join '; ')"
+$alClean = Join-Path $Out 'applog-clean\Logs'
+New-Item -ItemType Directory -Force $alClean | Out-Null
+[IO.File]::WriteAllText((Join-Path $alClean 'log20261125.txt'), "$(& $alStamp -30) [WRN] Library index: the read failed`r`n$(& $alStamp 2) [INF] Library index: 468 titles in 3 libraries`r`n")
+$alNone = & $alRun '' $null $alClean
+$alMissing = & $alRun '' $null (Join-Path $Out 'applog-none\Logs')
+T 'drive.ps1: an earlier run''s lines, and no Logs folder, pass' ($alNone.Count -eq 2 -and (@(& $alOk $alNone @($alNone.Keys)) -notcontains $false) -and
+    $alMissing.Count -eq 2 -and (@(& $alOk $alMissing @($alMissing.Keys)) -notcontains $false)) ''
+$alExp = & $alRun 'fixture-expects' @{ 'fixture-expects' = @('Library index: the read failed') } $alLogs
+$alOther = & $alRun 'another-check' @{ 'fixture-expects' = @('Library index: the read failed') } $alLogs
+T 'drive.ps1: a gate check that expects "the read failed" by name passes its own line, and no other check or line' (
+    $alExp.Count -eq 2 -and $alExp[$alIndex[0]].ok -and $alExp[$alIndex[0]].detail -like 'expected by fixture-expects: 1 line(s)*' -and -not $alExp[$alXaml[0]].ok -and
+    -not $alOther[$alIndex[0]].ok) ''
+T 'drive.ps1: the end of run reads the app log with the gate check''s name (GATE_ID)' ($finText -match "Test-AppLogFailures \(Join-Path \`$DataDir 'Logs'\) \`$runStarted \`$env:GATE_ID") ''
 
 # 1.8 (BH-180-m3): a release's own harness checks are in the gate: every offscreen\then-18x-*.ps1 is a manifest entry's Then
 # (release or nightly). 1.8's were in the repo and in no manifest

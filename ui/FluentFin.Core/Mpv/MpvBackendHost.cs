@@ -603,6 +603,13 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 	}
 
 	/// <inheritdoc/>
+	public bool OwesStopReport => Volatile.Read(ref _session) is { } session && Owes(session);
+
+	// the open session closes only at its `reported`; a state sampled before the stop can still show it after that, so the
+	// backend is done once it has also gone idle (docs/BRIDGE.md §5)
+	private static bool Owes(Session session) => !session.ExitHandled.IsCompleted && (session.OpenPlay is not null || session.LastState is { IsActive: true });
+
+	/// <inheritdoc/>
 	public async Task<bool> WaitForStopReportsAsync(TimeSpan timeout)
 	{
 		var session = Volatile.Read(ref _session);
@@ -613,9 +620,7 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 				return true;
 			}
 
-			// the open session closes only at its `reported`; a state sampled before the stop can still show it after that,
-			// so the backend is done once it has also gone idle (docs/BRIDGE.md §5)
-			bool Owed() => !session.ExitHandled.IsCompleted && (session.OpenPlay is not null || session.LastState is { IsActive: true });
+			bool Owed() => Owes(session);
 			if (!Owed())
 			{
 				return true;

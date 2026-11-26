@@ -5,6 +5,7 @@
 """
 
 import base64
+import datetime
 import json
 import os
 import shutil
@@ -629,6 +630,28 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(["Movies", "Television Shows", "Documentaries", "Anime"], names())
         self.request("/__harness/libraries", "POST", {"rename": {"Television Shows": "Shows"}})
         self.assertEqual(["Movies", "Shows", "Documentaries", "Anime"], names())
+
+    # Nixie 1.8.1 (BH-175-q4): MinDateLastSaved, as the SDK sends it (its "+" encoded), and the harness's titles
+    def test_min_date_last_saved_lists_only_what_was_saved_since_and_a_harness_title_is_saved_now(self):
+        everything = "/Items?includeItemTypes=Movie&includeItemTypes=Series&recursive=true&limit=1&enableTotalRecordCount=true"
+        total = self.get(everything)["TotalRecordCount"]
+        self.assertGreater(total, 300)
+        self.assertEqual(total, self.get(everything + "&minDateLastSaved=1970-01-01T00%3A00%3A00.0000000%2B00%3A00")["TotalRecordCount"])
+        tomorrow = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H%%3A%M%%3A%S.0000000%%2B00%%3A00")
+        self.assertEqual(0, self.get(everything + "&minDateLastSaved=" + tomorrow)["TotalRecordCount"])
+        since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)).strftime("%Y-%m-%dT%H%%3A%M%%3A%S.0000000%%2B00%%3A00")
+        self.assertEqual(0, self.get(everything + "&minDateLastSaved=" + since)["TotalRecordCount"], "the fixture was saved long ago")
+        status, body, _ = self.request("/__harness/titles", "POST", {"add": [{"name": "A Title Added Now", "library": "Movies"}]})
+        self.assertEqual(200, status)
+        try:
+            saved = self.get(everything.replace("limit=1", "limit=10") + "&minDateLastSaved=" + since)
+            self.assertEqual(["A Title Added Now"], [i["Name"] for i in saved["Items"]])
+            self.assertEqual(body["added"], [i["Id"] for i in saved["Items"]])
+            self.assertEqual(total + 1, self.get(everything)["TotalRecordCount"])
+        finally:
+            status, gone, _ = self.request("/__harness/titles", "POST", {"remove": ["A Title Added Now"]})
+        self.assertEqual((200, body["added"]), (status, gone["removed"]))
+        self.assertEqual(total, self.get(everything)["TotalRecordCount"])
 
     def test_user_data_endpoint_and_absent_plugin(self):
         movie = self.get("/__harness/fixture")["movie"]["id"]
@@ -1302,6 +1325,35 @@ class CriticRatingTests(unittest.TestCase):
         self.assertTrue(all(f["critic"] is None for f in plain))
         # the seed's draws are the same: every other name and number stays
         self.assertEqual([(f["Name"], f["community"]) for f in films], [(f["Name"], f["community"]) for f in plain])
+
+
+class SavedSinceTests(unittest.TestCase):
+    """Nixie 1.8.1 (BH-175-q4): /Items' MinDateLastSaved, and the harness's titles (a mixed library the index skips)."""
+
+    def test_a_title_added_to_a_mixed_library_is_saved_now_and_a_removed_one_is_gone(self):
+        lib = library.Library("server", "user", 600)
+        q = {"includeitemtypes": ["Movie,Series"], "recursive": ["true"]}
+        total = lib.query(q)["TotalRecordCount"]
+        now = datetime.datetime.now(datetime.timezone.utc)
+        # the SDK's form, its "+" read as a space by the query's decoding
+        since = (now - datetime.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.0000000 00:00")
+        self.assertEqual(0, lib.query(dict(q, mindatelastsaved=[since]))["TotalRecordCount"])
+        self.assertEqual(total, lib.query(dict(q, mindatelastsaved=["1970-01-01T00:00:00Z"]))["TotalRecordCount"])
+        self.assertEqual(total, lib.query(dict(q, mindatelastsaved=["not a date"]))["TotalRecordCount"])
+        movies = library._id("view", "Movies")
+        removed = lib.items[lib.children[movies][5]]["Name"]
+        added = lib.add_titles([{"name": "Mixed Film", "library": "Home and Away", "collection": None}, {"name": "New Film"}])
+        self.assertEqual(2, len(added))
+        self.assertEqual([], lib.remove_titles([]))
+        self.assertEqual(1, len(lib.remove_titles([removed])))
+        saved = lib.query(dict(q, mindatelastsaved=[since]))
+        self.assertEqual(["Mixed Film", "New Film"], sorted(i["Name"] for i in saved["Items"]))
+        self.assertEqual(["New Film"], [i["Name"] for i in lib.query(dict(q, parentid=[movies], mindatelastsaved=[since]))["Items"]])
+        self.assertEqual(total + 1, lib.query(q)["TotalRecordCount"])   # two added, one removed
+        self.assertNotIn(removed, [i["Name"] for i in lib.query(dict(q, parentid=[movies]))["Items"]])
+        mixed = [v for v in lib.views if lib.items[v]["Name"] == "Home and Away"]
+        self.assertEqual(1, len(mixed))
+        self.assertIsNone(lib.dto(lib.items[mixed[0]])["CollectionType"])   # a mixed library: no CollectionType
 
 
 if __name__ == "__main__":

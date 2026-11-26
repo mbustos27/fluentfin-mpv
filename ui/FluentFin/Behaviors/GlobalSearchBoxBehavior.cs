@@ -39,6 +39,13 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 			{
 				AssociatedObject.DispatcherQueue.TryEnqueue(() =>
 				{
+					// 1.8.1 (1.7.5's Left: Back ignored with the list open after a search, about 1 in 17): an answer to a query asked
+					// before a drop (Enter, a page change) never fills the list after it (SuggestionGate)
+					if (!_gate.Shows(update.IsDropped, update.Query))
+					{
+						return;
+					}
+
 					AssociatedObject.ItemsSource = update.Suggestions;
 					if (update.IsDropped)
 					{
@@ -73,6 +80,7 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 				App.Commands.DisplayDto(open.Item);
 				break;
 			case SearchAction.Retry retry:
+				_gate.Asked(retry.Query); // 1.8.1
 				_searchNow.OnNext(retry.Query);
 				break;
 			case SearchAction.ShowResults results:
@@ -84,9 +92,13 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 		}
 	}
 
+	// 1.8.1: which answers reach the box: those to a query asked since the last drop (each stamped as it is asked)
+	private readonly SuggestionGate _gate = new();
+
 	/// <summary>Seaglass 1.1.4 (review): the list goes, and a search still waiting or running never shows.</summary>
 	private void Drop()
 	{
+		_gate.Dropped(); // 1.8.1
 		_drop.OnNext(System.Reactive.Unit.Default);
 		AssociatedObject.IsSuggestionListOpen = false;
 		AssociatedObject.ItemsSource = null;
@@ -111,6 +123,7 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 			return;
 		}
 
+		_gate.Asked(sender.Text); // 1.8.1: stamped as it is asked, on the box's thread
 		_textChangedSubject.OnNext(sender.Text);
 	}
 

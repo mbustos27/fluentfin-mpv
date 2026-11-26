@@ -85,8 +85,9 @@ public sealed class MoreFromBuilder(Func<BuildContext, IAnchorSource>? source = 
 				List<IndexEntry> titles = [.. Best.Of(unwatched, data.Quality), .. Best.Of(watched, data.Quality)];
 				var reason = ReasonLine.Of(anchor.Said, ReasonCount.More(others.Count, ReasonCount.OnlyOf(others), unwatched.Count));
 				// its order is the collection's own on its page (the best not watched first, the watched last), not A to Z
+				// 1.8.1 (the owner's library, fix 1): its anchor's date, which the lineup ranks the personal picks by
 				made.Add(Make.Of(context, $"{IdPrefix}{(Make.Key(person.Name) is { Length: > 0 } id ? id : key)}", Kind, NixieTitles.MoreFrom(people.NameOf(person.Name)), reason, hasOwnOrder: false, titles)
-					with { InListOrder = true });
+					with { InListOrder = true, AnchoredAt = anchor.When });
 			}
 		}
 

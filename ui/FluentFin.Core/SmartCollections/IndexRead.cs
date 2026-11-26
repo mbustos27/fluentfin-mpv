@@ -148,9 +148,12 @@ internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogg
 	/// A title added is saved when it is added, whatever its DateCreated (a file's own date, years back, on a server that dates
 	/// by the file): the first build read newest first by DateCreated and missed it, so a removal at the same time hid behind
 	/// it (the 1.7.5 review). A library that changed every day meant a read of every title about once a start. Null, with why,
-	/// when that can't be all that changed, and every title is read as before: the check's count didn't move by exactly the
-	/// titles found (a title removed, or one added in a library the index skips), the libraries changed, the index is of an
-	/// older revision, a page failed, or more than <see cref="SavedSincePagesMost"/> pages of a library were saved since.
+	/// when that can't be all that changed, and every title is read as before: a library's count didn't move by exactly the
+	/// titles found in it (a title removed), the libraries changed, the index is of an older revision, a page failed, or more
+	/// than <see cref="SavedSincePagesMost"/> pages of a library were saved since. 1.8.1 (BH-175-m3; the review): each indexed
+	/// library's count is asked (<see cref="IJellyfinClient.GetLibraryTitleCount"/>, one request of one title), and compared with
+	/// what the saved index has of it: one added in a library the index skips no longer hides one removed from an indexed one,
+	/// and a title saved there doesn't make every title read.
 	/// </summary>
 	/// <param name="was">The count of the check the saved index was compared with.</param>
 	/// <param name="now">The count of the check that found the change.</param>
@@ -189,37 +192,51 @@ internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogg
 		// each library's titles saved since, two libraries at a time: one request a library when few were
 		var found = new List<BaseItemDto>?[_libraries.Count];
 		var requests = 0;
+
+		// the pages of one read of the titles saved since: all of them, or null when a page failed or there are more than
+		// SavedSincePagesMost (read whole)
+		async Task<List<BaseItemDto>?> SavedSinceAsync(Func<int, int, bool, CancellationToken, Task<BaseItemDtoQueryResult?>> page, CancellationToken token)
+		{
+			var mine = new List<BaseItemDto>();
+			var (start, limit) = (0, SavedSincePageFirst);
+			int? total = null;
+			for (var n = 0; n < SavedSincePagesMost; n++)
+			{
+				Interlocked.Increment(ref requests);
+				if (await page(start, limit, n == 0, token).ConfigureAwait(false) is not { Items: { } items } answer)
+				{
+					return null;
+				}
+
+				total ??= answer.TotalRecordCount;
+				mine.AddRange(items);
+				start += items.Count;
+				if (items.Count < limit || (total is { } all && start >= all))
+				{
+					return mine;
+				}
+
+				limit = SavedSincePageMost;
+			}
+
+			return null;
+		}
+
+		// 1.8.1 (BH-175-m3; the review): each library's own count now (one request of one title), then its titles saved since; a
+		// library at a time per task, two at a time in all
+		var counted = new int?[_libraries.Count];
 		await Parallel.ForEachAsync(Enumerable.Range(0, _libraries.Count), new ParallelOptions { MaxDegreeOfParallelism = IndexPages.AtOnce, CancellationToken = cancellationToken },
 			async (library, token) =>
 			{
-				var mine = new List<BaseItemDto>();
-				var (start, limit) = (0, SavedSincePageFirst);
-				int? total = null;
-				for (var page = 0; page < SavedSincePagesMost; page++)
+				Interlocked.Increment(ref requests);
+				if ((counted[library] = await client.GetLibraryTitleCount(_libraries[library], token).ConfigureAwait(false)) is not null)
 				{
-					Interlocked.Increment(ref requests);
-					if (await client.GetLibraryIndexPageSavedSince(_libraries[library], since, start, limit, page == 0, token).ConfigureAwait(false) is not { Items: { } items } answer)
-					{
-						return; // a page that failed: read whole (found[library] stays null)
-					}
-
-					total ??= answer.TotalRecordCount;
-					mine.AddRange(items);
-					start += items.Count;
-					if (items.Count < limit || (total is { } all && start >= all))
-					{
-						found[library] = mine;
-						return;
-					}
-
-					limit = SavedSincePageMost;
+					found[library] = await SavedSinceAsync((start, limit, total, t) => client.GetLibraryIndexPageSavedSince(_libraries[library], since, start, limit, total, t), token).ConfigureAwait(false);
 				}
-
-				// more than SavedSincePagesMost pages saved since: read whole
 			}).ConfigureAwait(false);
-		if (found.Any(x => x is null))
+		if (found.Any(x => x is null) || counted.Any(x => x is null))
 		{
-			return (null, "a library's titles saved since couldn't be read, or there are too many");
+			return (null, "a library's count or its titles saved since couldn't be read, or there are too many");
 		}
 
 		// each title once, with every library it came in (as a read's pages: P0-2)
@@ -248,11 +265,29 @@ internal sealed class IndexRead(IJellyfinClient client, TimeProvider time, ILogg
 			at.TryAdd(known.Entries[i].Id, i);
 		}
 
-		// every title added since is among them (whatever its DateCreated), so the count moving by exactly those says none went
+		// every title added since is among them (whatever its DateCreated), so each library's count moving by exactly its own says
+		// none went. 1.8.1 (BH-175-m3; the review): counted library by library, the indexed ones only. The server's check counts
+		// every library's films and shows: one removed from Movies while one was added to a library the index skips (a mixed
+		// one, one hidden from My Media) moved it by 0, and the removed title stayed in Made by Nixie until the day's read; and
+		// a title saved in such a library (added or only changed) has nothing to do with the index
 		var added = items.Count(x => !at.ContainsKey(x.Id!.Value));
-		if (before + added != after)
+		for (var library = 0; library < _libraries.Count; library++)
 		{
-			return (null, $"{added} titles added since the last read, but the server's count moved by {after - before}");
+			var id = _libraries[library].Id!.Value;
+			var had = 0;
+			foreach (var entry in known.Entries)
+			{
+				if (entry.InLibrary(id))
+				{
+					had++;
+				}
+			}
+
+			var addedHere = found[library]!.Where(x => x.Id is not null).Select(x => x.Id!.Value).Distinct().Count(x => !at.ContainsKey(x));
+			if (counted[library] != had + addedHere)
+			{
+				return (null, $"library {library + 1} of {_libraries.Count}: {addedHere} titles added since the last read, but its count moved by {counted[library] - had}");
+			}
 		}
 
 		var entries = known.Entries.ToList();

@@ -91,16 +91,20 @@ public sealed partial class LibraryListRow : UserControl
 	protected override AutomationPeer OnCreateAutomationPeer() => new LibraryListRowAutomationPeer(this);
 }
 
-internal sealed partial class LibraryListRowAutomationPeer(LibraryListRow owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider
+internal sealed partial class LibraryListRowAutomationPeer(LibraryListRow element) : FrameworkElementAutomationPeer(element), IInvokeProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private LibraryListRow Element => Owner as LibraryListRow ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
 
 	protected override string GetClassNameCore() => nameof(LibraryListRow);
 
 	protected override string GetNameCore()
 	{
-		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? ItemLabels.CardName(owner.Model) : name;
+		var name = AutomationProperties.GetName(Element);
+		return string.IsNullOrEmpty(name) ? ItemLabels.CardName(Element.Model) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;
@@ -110,5 +114,5 @@ internal sealed partial class LibraryListRowAutomationPeer(LibraryListRow owner)
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.Invoke ? this : base.GetPatternCore(patternInterface);
 
-	public void Invoke() => owner.Open();
+	public void Invoke() => Element.Open();
 }

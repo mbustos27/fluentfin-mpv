@@ -162,7 +162,8 @@ public sealed class TitleSimilarity
 	/// What <paramref name="anchor"/> shares with <paramref name="titles"/>, the weightiest first, at most
 	/// <paramref name="most"/>: "space", "anime", "Megumi Hayashibara". A feature weighs its rarity times how many of them share
 	/// it, times its namespace's <see cref="HookWeight"/>: a keyword or a person is a hook, a genre less, a country or a
-	/// decade only context (labels naming a genre or a release date are the ones viewers like least).
+	/// decade only context (labels naming a genre or a release date are the ones viewers like least). 1.8.1 (BH-180-q3): never
+	/// a country: "Shares Germany, …" read as a trait the titles share (it still counts toward how alike they are).
 	/// </summary>
 	public IReadOnlyList<(FeatureKind Kind, string Label)> Shared(IndexEntry anchor, IEnumerable<IndexEntry> titles, int most)
 	{
@@ -181,17 +182,27 @@ public sealed class TitleSimilarity
 
 			foreach (var id in _of[a])
 			{
-				if (Array.BinarySearch(_of[t], id) >= 0)
+				if (_features[id].Kind != FeatureKind.Country && Array.BinarySearch(_of[t], id) >= 0)
 				{
 					weight[id] = weight.GetValueOrDefault(id) + (idf[id] * HookWeight(_features[id].Kind));
 				}
 			}
 		}
 
-		return [.. weight.Where(x => x.Value > 0)
+		var ranked = weight.Where(x => x.Value > 0)
 			.OrderByDescending(x => x.Value).ThenBy(x => _features[x.Key].Label, StringComparer.OrdinalIgnoreCase)
 			.Select(x => _features[x.Key])
-			.Take(most)];
+			.ToList();
+		// 1.8.1 (the owner's library, fix 10b): a show's studio is its network, and a server with no show keywords led every show's
+		// reason with it ("Shares FX, horror and the 2010s"): a network is named after the other features, never first, and not
+		// alone (as a country is never named)
+		if (anchor.Kind == IndexKind.Series)
+		{
+			var other = ranked.Where(x => x.Kind != FeatureKind.Studio).ToList();
+			ranked = other.Count == 0 ? [] : [.. other, .. ranked.Where(x => x.Kind == FeatureKind.Studio)];
+		}
+
+		return [.. ranked.Take(most)];
 	}
 
 	/// <summary>How much a shared feature of a namespace counts toward naming it in a reason line.</summary>

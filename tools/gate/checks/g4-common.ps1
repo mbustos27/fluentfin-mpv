@@ -186,8 +186,10 @@ function G4-Devices { @(Invoke-Server '/__harness/devices' | ForEach-Object { $_
 
 # closed and started again on the same data folder; the old copy's exit code, the page the new one opens on. -Quick: the new
 # copy starts while the old one is still closing: the old one is held (suspended, through the handle this run started it
-# with) 0.4 s into its close, as a slow close on a busy PC holds it, until the new one is on Home and $WhileClosing has run
-function G4-Restart([string]$Label, [switch]$Quick, [scriptblock]$WhileClosing) {
+# with) 0.4 s into its close, as a slow close on a busy PC holds it, until the new one is on Home and $WhileClosing has run.
+# 1.8.1 (the review of BH-175-m4): -Overlap: the new copy starts while the old one is still closing, which goes on as it would
+# (not held): $BeforeStart runs once the close is under way, $OnceStarted as soon as the new copy's window is there
+function G4-Restart([string]$Label, [switch]$Quick, [scriptblock]$WhileClosing, [switch]$Overlap, [scriptblock]$BeforeStart, [scriptblock]$OnceStarted) {
     $old = $script:ui
     $tree = @(Get-Descendants $old.Id)
     $at = Get-Epoch
@@ -204,6 +206,9 @@ function G4-Restart([string]$Label, [switch]$Quick, [scriptblock]$WhileClosing) 
         while ($watch.ElapsedMilliseconds -lt 3000 -and -not $old.HasExited -and [G4Win]::IsWindowVisible($oldHwnd)) { Start-Sleep -Milliseconds 1; $old.Refresh() }
         if (-not $old.HasExited) { $held = (Suspend-Tracked $old.Id) -eq 0 }
     }
+    elseif ($Overlap) {
+        if ($BeforeStart) { & $BeforeStart }
+    }
     else {
         $watch = [Diagnostics.Stopwatch]::StartNew()
         while ($watch.Elapsed.TotalSeconds -lt $CloseSeconds -and -not $old.HasExited) { Start-Sleep -Milliseconds 25; $old.Refresh() }
@@ -212,8 +217,14 @@ function G4-Restart([string]$Label, [switch]$Quick, [scriptblock]$WhileClosing) 
     $script:hwnd = [IntPtr]::Zero
     Start-App "g4_$($Label -replace '[^A-Za-z0-9]+', '_')_window_ms"
     $startedWhileClosing = -not $old.HasExited
+    if ($Overlap -and $OnceStarted) { & $OnceStarted }
     $page = G4-WaitPage
     if ($page -eq 'home') { $script:navPane = G4-Shell; $script:page = 'home' }
+    if ($Overlap) {
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        while ($watch.Elapsed.TotalSeconds -lt $CloseSeconds -and -not $old.HasExited) { Start-Sleep -Milliseconds 25; $old.Refresh() }
+        $script:g4ExitSeen = Get-Date
+    }
     if ($Quick) {
         try { if ($WhileClosing -and $page -eq 'home') { & $WhileClosing } }
         finally {

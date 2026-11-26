@@ -96,7 +96,7 @@ public partial class SearchResultsViewModel(IJellyfinClient jellyfinClient) : Ob
 		SearchPageMemory.Forgotten += OnForgotten;
 		if (stale && _ranked.Query.Length > 0)
 		{
-			await Results.RefreshBehindAsync(SearchAgain);
+			await Results.RefreshBehindAsync(newest => SearchAgain(newest));
 		}
 	}
 
@@ -104,13 +104,19 @@ public partial class SearchResultsViewModel(IJellyfinClient jellyfinClient) : Ob
 	/// Nixie 1.7.5: the search again, behind the results Back showed. The same titles in the same places keep their cards (the
 	/// keyboard and the scroll stay where Back put them; each card takes the server's watch state); anything else (a title
 	/// added, gone or moved) shows the new results, with the chip and the opened groups as they were. A search that fails
-	/// leaves the results as they are (RefreshBehindAsync).
+	/// leaves the results as they are (RefreshBehindAsync). 1.8.1 (BH-175-q2): only while it is the newest refresh (an older one
+	/// whose answer came last showed its results over a newer one's).
 	/// </summary>
-	private async Task<LoadOutcome> SearchAgain()
+	private async Task<LoadOutcome> SearchAgain(Func<bool> newest)
 	{
 		if (await SearchRunner.Run(JellyfinClient, Query) is not { } ranked)
 		{
 			return LoadOutcome.Failed($"Couldn't search {LoadMessages.ServerName()}", LoadMessages.CheckServer());
+		}
+
+		if (!newest())
+		{
+			return LoadOutcome.Loaded; // (not shown: a newer refresh shows its own)
 		}
 
 		if (SameResults(_ranked, ranked))

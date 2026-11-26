@@ -438,44 +438,53 @@ internal readonly record struct PosterLook(bool Ring, bool Open, bool Lift, bool
 /// Narrator reads an Editorial poster as the shared card is read (ItemLabels.CardName: "Glass Canyon, 2022, favorite"), an item
 /// of its row's list ("2 of 12"); Invoke opens it (its details in place), and it says whether those are open.
 /// </summary>
-internal sealed partial class EditorialPosterAutomationPeer(EditorialPoster owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider, IExpandCollapseProvider
+internal sealed partial class EditorialPosterAutomationPeer(EditorialPoster element) : FrameworkElementAutomationPeer(element), IInvokeProvider, IExpandCollapseProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private EditorialPoster Element => Owner as EditorialPoster ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
 
 	protected override string GetClassNameCore() => nameof(EditorialPoster);
 
 	protected override string GetNameCore()
 	{
-		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? FluentFin.Controls.BaseItemDtoCard.NameWithPrefix(owner.CaptionPrefix, ItemLabels.CardName(owner.Item)) : name;
+		var name = AutomationProperties.GetName(Element);
+		return string.IsNullOrEmpty(name) ? FluentFin.Controls.BaseItemDtoCard.NameWithPrefix(Element.CaptionPrefix, ItemLabels.CardName(Element.Item)) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;
 
 	protected override bool IsContentElementCore() => true;
 
+	// Nixie 1.8.1 (the mem review): "3 of 24": the poster's own place, else the one its entry holds (the Collection page's CardPlace)
+	protected override int GetPositionInSetCore() => FluentFin.Controls.CardPlace.Position(base.GetPositionInSetCore(), Owner);
+
+	protected override int GetSizeOfSetCore() => FluentFin.Controls.CardPlace.Size(base.GetSizeOfSetCore(), Owner);
+
 	protected override IList<AutomationPeer> GetChildrenCore() => [];
 
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface is PatternInterface.Invoke or PatternInterface.ExpandCollapse ? this : base.GetPatternCore(patternInterface);
 
-	public void Invoke() => owner.Open();
+	public void Invoke() => Element.Open();
 
-	public ExpandCollapseState ExpandCollapseState => owner.IsOpen ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed;
+	public ExpandCollapseState ExpandCollapseState => Element.IsOpen ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed;
 
 	public void Expand()
 	{
-		if (!owner.IsOpen)
+		if (!Element.IsOpen)
 		{
-			owner.Open();
+			Element.Open();
 		}
 	}
 
 	public void Collapse()
 	{
-		if (owner.IsOpen)
+		if (Element.IsOpen)
 		{
-			owner.Open();
+			Element.Open();
 		}
 	}
 }

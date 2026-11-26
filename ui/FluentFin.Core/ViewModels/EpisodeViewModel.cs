@@ -100,7 +100,8 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 		}
 
 		var shown = Dto;
-		await State.RefreshBehindAsync(async () =>
+		// 1.8.1 (BH-175-q2, the review): written only while this refresh is the newest (an older one answering last overwrote it)
+		await State.RefreshBehindAsync(async newest =>
 		{
 			var fresh = await jellyfinClient.GetItem(id);
 			if (fresh is null)
@@ -108,7 +109,7 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 				return LoadMessages.CouldNotLoad("this episode");
 			}
 
-			if (KeptCards.RefreshItem(shown, fresh))
+			if (newest() && KeptCards.RefreshItem(shown, fresh))
 			{
 				OnPropertyChanged(nameof(PlayLabel));
 				OnPropertyChanged(nameof(HasResumePoint));

@@ -40,7 +40,7 @@ and the player's controls; settings; lifecycle).
     tools\gate\run-gate.ps1                the runner
     tools\gate\run-job.ps1                 one job in its own hidden PowerShell (the runner's; checks don't call it)
     tools\gate\gate-common.ps1             helpers a check may dot-source
-    tools\gate\manifest\<owner>.psd1       each owner's checks (g1.psd1, g2.psd1, g3.psd1, g4.psd1, back.psd1, c180.psd1): one file
+    tools\gate\manifest\<owner>.psd1       each owner's checks (g1.psd1, g2.psd1, g3.psd1, g4.psd1, back.psd1, c180.psd1, m181.psd1): one file
                                            per owner, so no two streams write the same file; the runner reads them all
     tools\gate\checks\<class>-<name>.ps1   a check's own script, e.g. 1-signin-methods.ps1
 

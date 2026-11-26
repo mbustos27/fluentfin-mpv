@@ -98,7 +98,9 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 		}
 
 		var shown = Dto;
-		await State.RefreshBehindAsync(async () =>
+		// 1.8.1 (BH-175-q2): each write only while this refresh is the newest (an older one whose answers came last overwrote a
+		// newer one's: Back, Forward and Back while the server was slow)
+		await State.RefreshBehindAsync(async newest =>
 		{
 			var similar = JellyfinClient.GetSimilarItems(shown);
 			var fresh = await JellyfinClient.GetItem(id);
@@ -107,13 +109,13 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 				return LoadMessages.CouldNotLoad("this movie");
 			}
 
-			if (KeptCards.RefreshItem(shown, fresh))
+			if (newest() && KeptCards.RefreshItem(shown, fresh))
 			{
 				OnPropertyChanged(nameof(PlayLabel));
 				OnPropertyChanged(nameof(HasResumePoint));
 			}
 
-			if (await similar is { Items: { } items } && !(Similar is { } cards && KeptCards.Refresh([.. cards], items)))
+			if (await similar is { Items: { } items } && newest() && !(Similar is { } cards && KeptCards.Refresh([.. cards], items)))
 			{
 				Similar = [.. items.Select(BaseItemViewModel.FromDto)];
 			}

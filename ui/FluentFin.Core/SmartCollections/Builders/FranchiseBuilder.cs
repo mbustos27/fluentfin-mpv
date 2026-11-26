@@ -1,11 +1,23 @@
 namespace FluentFin.Core.SmartCollections.Builders;
 
-/// <summary>Franchises the admin didn't box: films grouped by their TMDb collection id, two or more owned, in release order.</summary>
+/// <summary>
+/// Franchises the admin didn't box: films grouped by their TMDb collection id, two or more owned, in release order. 1.8.1 (the
+/// owner's library, fix 7; the owner's yes: "three or more films"): published (<see cref="BuildContext.Publishing"/>) only with
+/// <see cref="Published"/> or more films, or one the user started (a film of it played or begun): the owner's 1,227 franchises,
+/// most of them pairs, were "too many". A pair is still made when asked for by its id (a pin never goes: the Collections
+/// page's pins are found so), and Next in groups the films itself.
+/// </summary>
 public sealed class FranchiseBuilder : ISmartCollectionBuilder
 {
 	public const int Least = 2;
 
+	/// <summary>1.8.1 (fix 7): the films a franchise nobody started needs to be published.</summary>
+	public const int Published = 3;
+
 	public SmartCollectionKind Kind => SmartCollectionKind.Franchise;
+
+	/// <summary>1.8.1 (fix 7): a film of it played, or begun (a play count or a last play: the server counts a start).</summary>
+	public static bool Started(IEnumerable<IndexEntry> films) => films.Any(x => x.Played || x.PlayCount > 0 || x.LastPlayed is not null);
 
 	public IEnumerable<SmartCollection> Build(BuildContext context)
 	{
@@ -16,6 +28,7 @@ public sealed class FranchiseBuilder : ISmartCollectionBuilder
 			.ToList();
 		var floor = groups.Where(g => g.Count() >= Least).ToList();
 		var made = floor.Where(g => !context.BoxedFranchises.Contains(g.Key))
+			.Where(g => !context.Publishing || g.Count() >= Published || Started(g)) // 1.8.1 (fix 7)
 			.Select(g =>
 			{
 				var films = Make.ByRelease(g);

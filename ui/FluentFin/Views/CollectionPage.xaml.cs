@@ -615,14 +615,12 @@ public sealed partial class CollectionPage : Page
 	internal static bool CanFocusCard(int index, int entries, int inGrid, bool drawn) =>
 		drawn && index >= 0 && index < entries && index < inGrid;
 
-	private void SetPlace(UIElement element, int index)
-	{
-		if (CardOf(element) is { } card)
-		{
-			AutomationProperties.SetPositionInSet(card, index + 1);
-			AutomationProperties.SetSizeOfSet(card, ViewModel.Entries.Count);
-		}
-	}
+	/// <summary>
+	/// The entry's place, for its card's peer to read (CardPlace). Nixie 1.8.1 (the mem review): set on the card itself it was
+	/// lost, as the repeater prepares the entry before the theme's PosterTemplate has made the card in it (cards 2 to 24 said no
+	/// place to Narrator).
+	/// </summary>
+	private void SetPlace(UIElement element, int index) => Controls.CardPlace.Set(element, index, ViewModel.Entries.Count);
 
 	private void UpdatePlaces()
 	{

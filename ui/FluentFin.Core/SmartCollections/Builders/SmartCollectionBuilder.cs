@@ -28,6 +28,13 @@ public sealed record BuildContext(IndexSnapshot Index, DateTimeOffset Now, IRead
 	public bool Whole { get; init; }
 
 	/// <summary>
+	/// 1.8.1 (the owner's library, fix 7; the owner's yes: "three or more films"): the build is what the pages publish (the
+	/// Collections page, Home, the lineup, the count), not one collection asked for by its id (a pin, <c>Find</c>) or a library's
+	/// presets: a franchise of two films nobody started is made only when asked for.
+	/// </summary>
+	public bool Publishing { get; init; }
+
+	/// <summary>
 	/// 1.7.3 (P0-2b): the index's titles with copies collapsed (<see cref="CanonicalTitles"/>): every builder counts these, so a
 	/// film in three files counts once. Should collapsing fail, each entry is its own title (a kind is never lost to it).
 	/// </summary>

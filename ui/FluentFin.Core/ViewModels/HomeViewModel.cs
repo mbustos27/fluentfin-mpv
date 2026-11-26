@@ -157,7 +157,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		ListenToPlays();
 		if (stale)
 		{
-			await State.RefreshBehindAsync(() => LoadSections(behind: true));
+			await State.RefreshBehindAsync(newest => LoadSections(behind: true, newest)); // 1.8.1 (BH-175-q2): an older refresh writes nothing
 		}
 
 		await RefreshNixieIfNewDay(); // 1.8 (P1-1): kept across a day change: the new day's Made by Nixie rows behind
@@ -173,7 +173,9 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	/// </summary>
 	/// <param name="behind">Nixie 1.7.4: behind a kept Home Back showed: what it shows stays (no saved page shown over it, no
 	/// placeholders), and the sections are asked again when the saved page is not fresh, as on a first load.</param>
-	private async Task<LoadOutcome> LoadSections(bool behind = false)
+	/// <param name="newest">1.8.1 (BH-175-q2, the review): behind Back, whether this refresh is still the newest: its sections and
+	/// the saved page are written only while it is (an older refresh answering last overwrote a newer one's).</param>
+	private async Task<LoadOutcome> LoadSections(bool behind = false, Func<bool>? newest = null)
 	{
 		var retry = !behind && _loads++ > 0;
 		// fluentfin-mpv: the session this load is for, read once: the page is saved under it, and only if it is still the
@@ -200,12 +202,12 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 					IsNextUpLoading |= NextUpItems.Count == 0;
 				}
 
-				var continueLoaded = UpdateContinueItems();
-				var nextUpLoaded = UpdateNextUpItems();
-				await Task.WhenAll(continueLoaded, nextUpLoaded, UpdateRecentItems(), UpdateNixieRows()); // 1.6 collections: Nixie's rows
+				var continueLoaded = UpdateContinueItems(newest);
+				var nextUpLoaded = UpdateNextUpItems(newest);
+				await Task.WhenAll(continueLoaded, nextUpLoaded, UpdateRecentItems(newest), UpdateNixieRows()); // 1.6 collections: Nixie's rows
 				failed = !continueLoaded.Result || !nextUpLoaded.Result;
 
-				if (Snapshot() is { } shown && JellyfinClient.BaseUrl == serverUrl && JellyfinClient.UserId == userId)
+				if (newest?.Invoke() != false && Snapshot() is { } shown && JellyfinClient.BaseUrl == serverUrl && JellyfinClient.UserId == userId)
 				{
 					await homeCache.Save(serverUrl, userId, shown, cached.ChangesSeen);
 				}
@@ -402,7 +404,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	// fluentfin-mpv: a failed request leaves the section as it is (a placeholder goes, cached cards stay); false when the
 	// server did not answer, so the page can say so. An answer asked for before a watch-state change this page applied
 	// to the section is dropped: the section is newer.
-	private async Task<bool> UpdateContinueItems()
+	private async Task<bool> UpdateContinueItems(Func<bool>? newest = null)
 	{
 		var changes = _continueChanges;
 		try
@@ -412,7 +414,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 				return false;
 			}
 
-			if (changes == _continueChanges)
+			if (changes == _continueChanges && newest?.Invoke() != false) // 1.8.1 (BH-175-q2)
 			{
 				SetContinueItems(response.Items ?? []);
 			}
@@ -424,7 +426,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		}
 	}
 
-	private async Task<bool> UpdateNextUpItems()
+	private async Task<bool> UpdateNextUpItems(Func<bool>? newest = null)
 	{
 		var changes = _nextUpChanges;
 		try
@@ -434,7 +436,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 				return false;
 			}
 
-			if (changes == _nextUpChanges)
+			if (changes == _nextUpChanges && newest?.Invoke() != false) // 1.8.1 (BH-175-q2)
 			{
 				SetNextUpItems(response.Items ?? []);
 			}
@@ -450,16 +452,16 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	public static bool HasLatestRow(BaseItemDto view) =>
 		view.CollectionType is not (BaseItemDto_CollectionType.Music or BaseItemDto_CollectionType.Boxsets or BaseItemDto_CollectionType.Playlists);
 
-	private async Task UpdateRecentItems()
+	private async Task UpdateRecentItems(Func<bool>? newest = null)
 	{
 		// fluentfin-mpv: a row per view at once, in the server's order: the cached row of that library, a placeholder, or
 		// (a library that had nothing recent last time) none until it has; each fills in, or goes, as its request answers
 		// Nixie 1.4.0 (the UX review's X3, CL-M5): no "New in Collections" or "New in Playlists": a box set is made when a film is
 		// imported, so the row repeated "New in Movies" (and fed the hero); HasLatestRow
 		var views = (await JellyfinClient.GetUserViews()).Where(HasLatestRow).ToList();
-		if (views.Count == 0 && RecentItems.Count > 0)
+		if ((views.Count == 0 && RecentItems.Count > 0) || newest?.Invoke() == false)
 		{
-			return; // the views could not be read: the cached rows stay
+			return; // the views could not be read: the cached rows stay (1.8.1: or a newer refresh is on its way)
 		}
 
 		var rows = views.Select(view => RecentItems.FirstOrDefault(x => x.Library.Id == view.Id && x.Library.Name == view.Name)
@@ -474,14 +476,14 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			}
 		}
 
-		await Task.WhenAll(views.Zip(rows).Select(x => x.Second is { } row ? UpdateRecentRow(row) : UpdateHiddenRow(x.First, views)));
+		await Task.WhenAll(views.Zip(rows).Select(x => x.Second is { } row ? UpdateRecentRow(row, newest) : UpdateHiddenRow(x.First, views, newest)));
 	}
 
-	private async Task UpdateHiddenRow(BaseItemDto library, List<BaseItemDto> views)
+	private async Task UpdateHiddenRow(BaseItemDto library, List<BaseItemDto> views, Func<bool>? newest = null)
 	{
-		if (await JellyfinClient.GetLatestItems(library) is not { Count: > 0 } items)
+		if (await JellyfinClient.GetLatestItems(library) is not { Count: > 0 } items || newest?.Invoke() == false)
 		{
-			return; // still nothing recent (or the request failed)
+			return; // still nothing recent (or the request failed; 1.8.1: or a newer refresh is on its way)
 		}
 
 		_emptyLibraries.Remove(library.Id!.Value);
@@ -491,7 +493,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		RefreshHero();
 	}
 
-	private async Task UpdateRecentRow(NamedQueryResult row)
+	private async Task UpdateRecentRow(NamedQueryResult row, Func<bool>? newest = null)
 	{
 		var changes = row.Changes;
 		try
@@ -503,9 +505,9 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 				return; // failed: a cached row stays
 			}
 
-			if (changes != row.Changes)
+			if (changes != row.Changes || newest?.Invoke() == false)
 			{
-				return; // asked for before a watch-state change the row shows: older than the row
+				return; // asked for before a watch-state change the row shows: older than the row (1.8.1: or than a newer refresh)
 			}
 
 			if (items is null or { Count: 0 })

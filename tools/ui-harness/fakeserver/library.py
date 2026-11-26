@@ -191,6 +191,73 @@ class Library:
             added.append(vid)
         return added
 
+    # Nixie 1.8.1 (BH-175-q4) -----------------------------------------------------------------------------------------------
+    @staticmethod
+    def saved_at(item):
+        """When the server last saved an item (Jellyfin's DateLastSaved): a harness change's time ("saved"), else when it was
+        added ("created")."""
+        return item.get("saved") or item["created"]
+
+    @staticmethod
+    def parse_date(value):
+        """An ISO 8601 time as the SDK sends it ("2026-11-24T08:00:00.0000000+00:00", "...Z"; a "+" read as a space by the
+        query's decoding), as a naive UTC datetime (the fixture's own); None when there is none or it can't be read."""
+        text = (value or "").strip()
+        if not text:
+            return None
+        if len(text) > 6 and text[-6] == " " and text[-3] == ":":
+            text = text[:-6] + "+" + text[-5:]
+        try:
+            dt = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return dt.astimezone(datetime.timezone.utc).replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+    def add_titles(self, titles):
+        """The harness adds films (POST /__harness/titles {"add": [{"name", "library"}]}), saved now, as a scan would; a
+        library not there is made, a mixed one (no CollectionType: the index skips it) with "collection": null. Their ids."""
+        added = []
+        now = _utcnow()
+        for t in titles:
+            name, view_name = str(t.get("name") or ""), str(t.get("library") or "Movies")
+            if not name:
+                continue
+            vid = _id("view", view_name)
+            if vid not in self.items:
+                self.items[vid] = {"Id": vid, "kind": "view", "Name": view_name, "collection": t.get("collection", "movies"),
+                                   "parent": None, "view": vid, "created": now}
+                self.views.append(vid)
+                self.children[vid] = []
+            mid = _id("movie", view_name, name)
+            if mid in self.items:
+                continue
+            saved, self.rng = self.rng, random.Random(sum(map(ord, name)))
+            try:
+                item = self._common(mid, "movie", name, vid, vid, now, 2026, ["Drama"], "PG-13")
+            finally:
+                self.rng = saved
+            item.update(showcase=None, saved=now)
+            self.items[mid] = item
+            self.children[vid].append(mid)
+            self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
+            added.append(mid)
+        return added
+
+    def remove_titles(self, names):
+        """The harness removes films and shows by name (POST /__harness/titles {"remove": ["name"]}): their ids."""
+        wanted = {str(n) for n in names}
+        gone = [i for i, item in self.items.items() if item["kind"] in ("movie", "series") and item["Name"] in wanted]
+        for iid in gone:
+            under = [d["Id"] for d in self.descendants(iid)]
+            for kids in self.children.values():
+                if iid in kids:
+                    kids.remove(iid)
+            for did in under + [iid]:
+                self.items.pop(did, None)
+                self.children.pop(did, None)
+        return gone
+    # end 1.8.1
+
     def _build(self):
         # repo polish: FAKESERVER_SHOWCASE=<manifest> builds the curated screenshot library (showcase.py) instead of the
         # generated one; off by default, so every other run's fixture is unchanged
@@ -1259,6 +1326,11 @@ class Library:
         if exclude:
             gone = {kind_of.get(t) for t in exclude}
             pool = [i for i in pool if i["kind"] not in gone]
+        # Nixie 1.8.1 (BH-175-q4): only what the server saved since (Jellyfin's MinDateLastSaved: a title added, whatever its
+        # DateCreated, or changed); the fake answered every title, so no harness run took the index's read of a change
+        saved_since = self.parse_date(one("mindatelastsaved"))
+        if saved_since is not None:
+            pool = [i for i in pool if self.saved_at(i) >= saved_since]
         # 1.5 search: matched as 12.4 matches (search.py), not as one plain substring of the name
         raw_term = one("searchterm") or ""
         # 1.5 search: a person's titles (/Items?personIds=)

@@ -57,8 +57,12 @@ public sealed partial class EditorialTabButton : Button
 	protected override AutomationPeer OnCreateAutomationPeer() => new EditorialTabButtonAutomationPeer(this);
 }
 
-internal sealed partial class EditorialTabButtonAutomationPeer(EditorialTabButton owner) : ButtonAutomationPeer(owner), ISelectionItemProvider
+internal sealed partial class EditorialTabButtonAutomationPeer(EditorialTabButton element) : ButtonAutomationPeer(element), ISelectionItemProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private EditorialTabButton Element => Owner as EditorialTabButton ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.TabItem;
 
 	protected override string GetClassNameCore() => nameof(EditorialTabButton);
@@ -66,18 +70,18 @@ internal sealed partial class EditorialTabButtonAutomationPeer(EditorialTabButto
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.SelectionItem ? this : base.GetPatternCore(patternInterface);
 
-	public bool IsSelected => owner.IsSelected;
+	public bool IsSelected => Element.IsSelected;
 
 	public IRawElementProviderSimple? SelectionContainer =>
-		EditorialTabList.Of(owner) is { } list && FromElement(list) is { } peer ? ProviderFromPeer(peer) : null;
+		EditorialTabList.Of(Element) is { } list && FromElement(list) is { } peer ? ProviderFromPeer(peer) : null;
 
-	public void AddToSelection() => owner.Invoke();
+	public void AddToSelection() => Element.Invoke();
 
 	public void RemoveFromSelection()
 	{
 	}
 
-	public void Select() => owner.Invoke();
+	public void Select() => Element.Invoke();
 }
 
 /// <summary>
@@ -268,8 +272,12 @@ public sealed partial class EditorialTabList : ContentControl
 	protected override AutomationPeer OnCreateAutomationPeer() => new EditorialTabListAutomationPeer(this);
 }
 
-internal sealed partial class EditorialTabListAutomationPeer(EditorialTabList owner) : FrameworkElementAutomationPeer(owner), ISelectionProvider
+internal sealed partial class EditorialTabListAutomationPeer(EditorialTabList element) : FrameworkElementAutomationPeer(element), ISelectionProvider
 {
+	// Nixie 1.8.1 (BH-175-M2): its element through Owner, never a field of the peer: UI Automation keeps a peer after its
+	// element has left (Narrator, any assistive tool), and a peer holding the element held it and its whole tree
+	private EditorialTabList Element => Owner as EditorialTabList ?? throw new Microsoft.UI.Xaml.Automation.ElementNotAvailableException();
+
 	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Tab;
 
 	protected override string GetClassNameCore() => nameof(EditorialTabList);
@@ -288,5 +296,5 @@ internal sealed partial class EditorialTabListAutomationPeer(EditorialTabList ow
 	public bool IsSelectionRequired => false;
 
 	public IRawElementProviderSimple[] GetSelection() =>
-		[.. owner.Tabs().Where(t => t.IsSelected).Select(t => FromElement(t) ?? CreatePeerForElement(t)).OfType<AutomationPeer>().Select(ProviderFromPeer)];
+		[.. Element.Tabs().Where(t => t.IsSelected).Select(t => FromElement(t) ?? CreatePeerForElement(t)).OfType<AutomationPeer>().Select(ProviderFromPeer)];
 }

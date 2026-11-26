@@ -76,6 +76,8 @@ public sealed class MoreLikeBuilder(Func<BuildContext, IAnchorSource>? source = 
 		var count = ReasonCount.OfAll(shown);
 		var reason = shared.Count > 0 ? ReasonLine.Of($"Shares {AnchoredSlots.Listed(shared)}", count) : new ReasonLine { Count = count };
 		// its order is the collection's own on its page (the most alike and best first), not A to Z
-		return Make.Of(context, $"{IdPrefix}{title.Id:N}", SmartCollectionKind.MoreLike, NixieTitles.MoreLike(title.Name), reason, hasOwnOrder: false, shown) with { InListOrder = true };
+		// 1.8.1 (the owner's library, fix 1): its anchor's date, which the lineup ranks the personal picks by
+		return Make.Of(context, $"{IdPrefix}{title.Id:N}", SmartCollectionKind.MoreLike, NixieTitles.MoreLike(title.Name), reason, hasOwnOrder: false, shown)
+			with { InListOrder = true, AnchoredAt = anchor.When };
 	}
 }

@@ -135,7 +135,14 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 
 	private CollectionsViewModel Page(LibraryIndex index, ILogger<CollectionsViewModel>? log = null) =>
 		new(_client.Object, new GlobalCommands(Mock.Of<INavigationServiceCore>(), _client.Object, Mock.Of<INavigationViewServiceCore>(), Mock.Of<ISettings>()), index,
-			new SmartCollectionStore(_client.Object, _homeCache, Path.Combine(_folder, "SmartCollections"), new CoreListLogger<SmartCollectionStore>()), logger: log);
+			new SmartCollectionStore(_client.Object, _homeCache, Path.Combine(_folder, "SmartCollections"), new CoreListLogger<SmartCollectionStore>()), logger: log)
+		{
+			// 1.8.1 (the review): the week's Spotlight picks are this test's own, not those of whatever store the app's static
+			// SmartCollectionServices holds (the Collections page tests set it)
+			LaterBuild = (snapshot, now, kindsOff) => SmartCollectionCatalog.BuildLaterAsync(snapshot, now, kindsOff, picks: _picks),
+		};
+
+	private readonly KeptPicks _picks = new();
 
 	private sealed class ManualTime(DateTimeOffset now) : TimeProvider
 	{
@@ -1416,11 +1423,32 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 			Assert.Same(keywords, await ui.Invoke(() => vm.Rows.Single(r => r.Title == "Keywords"))); // the row stayed (the keyboard with it)
 			Assert.True(await ui.Invoke(() => tile.Nixie!.ItemIds.Count) > early.Item1.ItemIds.Count);
 			Assert.NotEqual(early.Detail, await ui.Invoke(() => tile.Detail));
-			await TilesAreOf(ui, vm, index.Current!);
+			await TilesSettleAs(ui, vm, index);
 		}
 		finally
 		{
 			await Settle(release, vm, index, ui);
+		}
+	}
+
+	// 1.8.1 (the review): after the read come the index's people pass and the week's Spotlight, which the page shows as each
+	// comes: compared once the index has settled and the page shows its last snapshot (a few tries while it does), not with
+	// whichever snapshot was the index's in between
+	private static async Task TilesSettleAs(UiThread ui, CollectionsViewModel vm, LibraryIndex index)
+	{
+		await index.Settled.WaitAsync(TimeSpan.FromSeconds(20));
+		for (var i = 0; ; i++)
+		{
+			await vm.SpotlightLater.WaitAsync(TimeSpan.FromSeconds(20));
+			try
+			{
+				await TilesAreOf(ui, vm, index.Current!);
+				return;
+			}
+			catch (Exception) when (i < 50)
+			{
+				await Task.Delay(100);
+			}
 		}
 	}
 

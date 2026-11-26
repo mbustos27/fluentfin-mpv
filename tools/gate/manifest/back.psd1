@@ -9,20 +9,20 @@
         Id       = 'back'
         Class    = 4
         Owner    = 'back'
-        What     = 'Back to a page just left (a collection, playlist, Made by Nixie, library, season, series, film, search results, a person''s titles, Collections, Home) shows it as it was within 1.2 s with every answer held 2.5 s: its card on screen with the keyboard, the scroll kept, no loading state; Forward the same; two libraries and two searches each keep their own page (title and results); a film marked watched shows so after Back; R still asks the server; sign-out lets every kept page go'
+        What     = 'Back to a page just left (a collection, playlist, Made by Nixie, library, season, series, film, search results, a person''s titles, Collections, Home) shows it as it was within 1.2 s with every answer held 2.5 s: its card on screen with the keyboard, the scroll kept, no loading state; Forward the same; two libraries and two searches each keep their own page (title and results); a film marked watched shows so after Back; R still asks the server; sign-out lets every kept page go; 1.8.1: the Back key with the search box''s list of suggestions open goes Back, no list left'
         Kind     = 'then'
         Then     = 'tools\ui-harness\offscreen\then-174-back.ps1'
         Steps    = 'wait:1'
         SignIn   = 'quickconnect'
         Settings = @()
         Env      = @{ FAKESERVER_COLLECTIONS = '1'; FAKESERVER_LONG_TITLE = '1'; FAKESERVER_BIG_SERIES = '24x13'; FAKESERVER_SEARCH = 'sunny'
-                      BK_PAGES = 'collection,forward,playlist,nixie,library,season,series,item,search,person,collections,home,samelibrary,samesearch,change,refresh,signout'
+                      BK_PAGES = 'collection,forward,playlist,nixie,library,season,series,item,search,person,collections,home,samelibrary,samesearch,searchlist,change,refresh,signout'
                       BK_DELAY_MS = '2500'; BK_LIMIT_MS = '1200' }
         Themes   = 'all'
         Sizes    = 'gate'
         Dev      = $true   # not tried on a release package yet
         Minutes  = 30
-        Fails173 = '1.7.3 and 1.7.4: Back loads every page again (the owner''s 1.7.4 report: the collection loads again, a loading state, the place lost); on the 1.7.5 branch samelibrary failed before 755a6338 (Movies'' entry showed the Shows page) and samesearch before 1f6df4e4 (the Back key did nothing from the search box)'
+        Fails173 = '1.7.3 and 1.7.4: Back loads every page again (the owner''s 1.7.4 report: the collection loads again, a loading state, the place lost); on the 1.7.5 branch samelibrary failed before 755a6338 (Movies'' entry showed the Shows page) and samesearch before 1f6df4e4 (the Back key did nothing from the search box); searchlist fails on 1.8.0 (the list held the Back key)'
     }
     @{
         Id       = 'back-arrival'
@@ -58,6 +58,24 @@
         Dev      = $true   # a release build never reads NIXIE_HARNESS_LEAKS
         Minutes  = 20
         Fails173 = 'the 1.7.5 branch before 85ad666d (the review''s Major 3): 51 series pages alive after 50 Backs'
+        Tier     = 'nightly'
+    }
+    @{
+        Id       = 'back-leak-collections'
+        Class    = 4
+        Owner    = 'back'
+        What     = '30 times a collection opened from the Collections page (kept whole for Back since 1.8.1) and Back: one Collections page alive and at most 2 collection pages (the app''s own count, NIXIE_HARNESS_LEAKS); the private bytes a round said'
+        Kind     = 'then'
+        Then     = 'tools\ui-harness\offscreen\then-181-leakcolls.ps1'
+        Steps    = 'wait:1'
+        SignIn   = 'quickconnect'
+        Settings = @()
+        Env      = @{ NIXIE_HARNESS_LEAKS = '1'; FAKESERVER_COLLECTIONS = '1' }
+        Themes   = @('Classic', 'DriveIn')
+        Sizes    = 'none'
+        Dev      = $true   # a release build never reads NIXIE_HARNESS_LEAKS
+        Minutes  = 15
+        Fails173 = 'new in 1.8.1 (the back stream''s review): no build kept the Collections page whole before 87b11835'
         Tier     = 'nightly'
     }
 ) }

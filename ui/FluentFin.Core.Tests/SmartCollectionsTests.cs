@@ -222,6 +222,29 @@ public sealed class SmartCollectionsTests
 		Assert.Equal("1 show", unfinished.CountText);
 	}
 
+	// 1.8.1 (the owner's library, fix 5): a show sampled (one or two episodes: 9 of the owner's 35) isn't one left unfinished, and
+	// one finished by the anchors' rule (90 % of its episodes: Community at 102 of 110, also "You finished Community") isn't either
+	[Fact]
+	public void UnfinishedSeries_NeedThreeEpisodesPlayed_AndNotFinishedByTheRule()
+	{
+		var sampled = Show("Sampled", unplayed: 20);
+		var two = Show("Two in", unplayed: 20);
+		var three = Show("Three in", unplayed: 20);
+		var nearly = Show("Nearly done", unplayed: 8);
+		var plays = new Dictionary<Guid, SeriesPlays>
+		{
+			[sampled.Id] = new(1, November.AddDays(-40)),
+			[two.Id] = new(2, November.AddDays(-40)),
+			[three.Id] = new(3, November.AddDays(-50)),
+			[nearly.Id] = new(102, November.AddDays(-35)),
+		};
+
+		var unfinished = Assert.Single(Built(new UnfinishedSeriesBuilder(), Index([sampled, two, three, nearly], plays)));
+
+		Assert.Equal([three.Id], unfinished.ItemIds);
+		Assert.Equal("1 show", unfinished.CountText);
+	}
+
 	[Fact]
 	public void HighlyRated_IsUnwatchedAndBestFirst()
 	{
@@ -380,7 +403,7 @@ public sealed class SmartCollectionsTests
 	}
 
 	[Fact]
-	public void TheSeasonalRow_IsHalloweenInOctober_AndNothingInNovember()
+	public void TheSeasonalRow_IsHalloweenInOctober_AndNothingEarlyInNovember()
 	{
 		var films = new List<IndexEntry>
 		{
@@ -388,18 +411,68 @@ public sealed class SmartCollectionsTests
 			Film("Scream", 1996, genres: ["Horror"], rating: 7.4),
 			Film("Halloween", 1978, tags: ["halloween"], genres: ["Horror"], rating: 7.5),
 			Film("Home Alone", 1990, tags: ["christmas"]),
+			Film("Elf", 2003, tags: ["christmas"]),
+			Film("Klaus", 2019, tags: ["santa claus"]),
 		};
 
 		var october = Assert.Single(Built(new SeasonalBuilder(), Index(films), new DateTimeOffset(2026, 10, 30, 0, 0, 0, TimeSpan.Zero)));
 		Assert.Equal("Halloween", october.Title);
 		Assert.Equal(3, october.ItemIds.Count);
-		Assert.Empty(Built(new SeasonalBuilder(), Index(films), November));
+		Assert.Empty(Built(new SeasonalBuilder(), Index(films), new DateTimeOffset(2026, 11, 10, 12, 0, 0, TimeSpan.Zero)));
+	}
+
+	// 1.8.1 (the owner's library, fix 4; the owner's choice: "Fixed 20 November"): the Christmas row opens on 20 November on the
+	// PC's own date (it opened on 1 December: the week of Thanksgiving had no seasonal row, with 551 Christmas titles indexed),
+	// and shows to the end of December as before
+	[Theory]
+	[InlineData("2026-11-19T23:30:00-08:00", false)] // the evening of the 19th in California (already the 20th in UTC)
+	[InlineData("2026-11-20T00:10:00-08:00", true)]
+	[InlineData("2026-11-20T00:10:00+09:00", true)]  // the 20th in Tokyo (still the 19th in UTC)
+	[InlineData("2026-11-19T20:00:00+09:00", false)]
+	[InlineData("2026-12-31T23:00:00-08:00", true)]
+	[InlineData("2027-01-01T00:30:00-08:00", false)]
+	public void TheChristmasRow_OpensOn20November_OnThePcsOwnDate_AndShowsToTheEndOfDecember(string when, bool open)
+	{
+		var christmas = new[] { Film("Home Alone", 1990, tags: ["christmas"]), Film("Elf", 2003, tags: ["christmas"]), Film("Klaus", 2019, tags: ["santa claus"]) };
+		var now = DateTimeOffset.Parse(when, System.Globalization.CultureInfo.InvariantCulture);
+
+		var made = Built(new SeasonalBuilder(), Index(christmas), now);
+
+		Assert.Equal(open, made.Count == 1);
+		Assert.Equal(open, SeasonalBuilder.IsChristmas(now));
+		if (open)
+		{
+			Assert.Equal("seasonal:christmas", made[0].Id);
+			Assert.Equal(new DateOnly(now.Year, 12, 31), made[0].Reason?.Until); // its last day as before
+		}
+	}
+
+	// 1.8.1 (the owner's library, fix 4): Christmas and Halloween best first by the quality score, the unwatched first (by the raw
+	// rating a 2026 release with a handful of votes led them), and a watched Halloween title is out, as watched horror films are
+	[Fact]
+	public void TheSeasonalRows_ComeBestFirstByScore_UnwatchedFirst_AndHalloweensWatchedTitlesAreOut()
+	{
+		var fewVotes = Film("New and Barely Rated", 2026, tags: ["christmas"], rating: 9.8);
+		var classic = Film("Classic", 1946, tags: ["christmas"], rating: 8.0, tagCount: 20, critic: 94);
+		var solid = Film("Solid", 1990, tags: ["christmas"], rating: 7.6, tagCount: 12, critic: 70);
+		var seen = Film("Seen Already", 1983, tags: ["christmas"], rating: 9.9, played: true, tagCount: 20, critic: 90);
+		var others = Enumerable.Range(0, 10).Select(i => Film($"Other {i}", rating: 6.5, tagCount: 8)).ToList(); // the library's mean
+
+		var christmas = Assert.Single(Built(new SeasonalBuilder(), Index([fewVotes, classic, solid, seen, .. others]), new DateTimeOffset(2026, 12, 5, 12, 0, 0, TimeSpan.Zero)));
+		Assert.Equal([classic.Id, solid.Id, fewVotes.Id, seen.Id], christmas.ItemIds);
+
+		var watchedHalloween = Film("Halloween (watched)", 1978, tags: ["halloween"], genres: ["Horror"], rating: 9.5, played: true, tagCount: 20);
+		var tagged = Film("Trick", 2007, tags: ["halloween"], genres: ["Horror"], rating: 8.0, tagCount: 15, critic: 80);
+		var barely = Film("Barely", 2026, tags: ["halloween"], genres: ["Horror"], rating: 9.9);
+		var horror = Film("The Thing", 1982, genres: ["Horror"], rating: 8.1, tagCount: 20, critic: 85);
+		var halloween = Assert.Single(Built(new SeasonalBuilder(), Index([watchedHalloween, tagged, barely, horror, .. others]), new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero)));
+		Assert.Equal([tagged.Id, barely.Id, horror.Id], halloween.ItemIds); // the tagged first, each part best first; the watched one out
 	}
 
 	[Fact]
 	public void KindsTurnedOff_AreLeftOut()
 	{
-		var films = new[] { Film("The Matrix", 1999, "2344", rating: 8.3, tagCount: 10), Film("The Matrix Reloaded", 2003, "2344", rating: 7.9, tagCount: 10), Film("Amélie", rating: 7.9, tagCount: 10) };
+		var films = new[] { Film("The Matrix", 1999, "2344", rating: 8.3, tagCount: 10), Film("The Matrix Reloaded", 2003, "2344", rating: 7.9, tagCount: 10), Film("The Matrix Revolutions", 2003, "2344", rating: 6.8, tagCount: 10), Film("Amélie", rating: 7.9, tagCount: 10) };
 
 		var all = SmartCollectionCatalog.BuildAll(Index(films), November);
 		var some = SmartCollectionCatalog.BuildAll(Index(films), November, kindsOff: new HashSet<SmartCollectionKind> { SmartCollectionKind.Franchise });
@@ -413,7 +486,7 @@ public sealed class SmartCollectionsTests
 	[Fact]
 	public void TheCollectionOfTheDay_StaysAllDay_AndChangesTheNext()
 	{
-		var films = Enumerable.Range(0, 30).Select(i => Film($"F{i}", 1980 + i, tmdbCollection: $"{i / 2}")).ToList();
+		var films = Enumerable.Range(0, 30).Select(i => Film($"F{i}", 1980 + i, tmdbCollection: $"{i / 3}")).ToList(); // 1.8.1 (fix 7): threes
 		var all = SmartCollectionCatalog.BuildAll(Index(films), November);
 
 		var morning = SmartCollectionCatalog.OfTheDay(all, November.Date);
@@ -598,13 +671,14 @@ public sealed class SmartCollectionsTests
 				[
 					new BaseItemDto { Id = Guid.NewGuid(), SeriesId = series, UserData = new UserItemDataDto { LastPlayedDate = November.AddDays(-40) } },
 					new BaseItemDto { Id = Guid.NewGuid(), SeriesId = series, UserData = new UserItemDataDto { LastPlayedDate = November.AddDays(-45) } },
+					new BaseItemDto { Id = Guid.NewGuid(), SeriesId = series, UserData = new UserItemDataDto { LastPlayedDate = November.AddDays(-46) } }, // 1.8.1: three (fix 5)
 				],
-				TotalRecordCount = 2,
+				TotalRecordCount = 3,
 			});
 
 		var index = await LibraryIndex.ReadIndex(client.Object, TimeProvider.System, CancellationToken.None);
 
-		Assert.Equal(new SeriesPlays(2, November.AddDays(-40)), index!.SeriesPlays[series]);
+		Assert.Equal(new SeriesPlays(3, November.AddDays(-40)), index!.SeriesPlays[series]);
 		Assert.Equal("Unfinished series", Assert.Single(SmartCollectionCatalog.BuildAll(index, November)).Title);
 	}
 
@@ -853,7 +927,7 @@ public sealed class SmartCollectionsTests
 		// P0-3: an index that makes every kind
 		var director = new IndexPerson("Ava Abara", Guid.NewGuid(), "Director");
 		var actor = new IndexPerson("Otto Always", Guid.NewGuid(), "Actor");
-		var films = Enumerable.Range(0, 24).Select(i => Film($"F{i:D2}", 1980 + (i % 10), tmdbCollection: $"{i / 2}",
+		var films = Enumerable.Range(0, 24).Select(i => Film($"F{i:D2}", 1980 + (i % 10), tmdbCollection: $"{i / 3}", // 1.8.1 (fix 7): threes
 			genres: (i % 3) switch { 0 => ["Comedy", "Horror"], 1 => ["Comedy"], _ => ["Horror"] }, tags: ["heist"], studios: ["Studio A"],
 			countries: [i < 14 ? "United States of America" : "France"], rating: 8, people: [director, actor], tagCount: 10)).ToList();
 		var index = Index([.. films, .. Enumerable.Range(0, 3).Select(i => Show($"S{i}", ["CBS"]))]);

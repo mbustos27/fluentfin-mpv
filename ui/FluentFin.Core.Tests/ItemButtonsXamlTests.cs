@@ -17,8 +17,9 @@ public sealed class ItemButtonsXamlTests
 
 	[Theory]
 	[InlineData("PlayButton", "{x:Bind core:ItemLabels.PlayAction(Model.Dto), Mode=OneWay")]
-	[InlineData("MarkWatchedButton", "{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay")]
-	[InlineData("AddToFavoriteButton", "{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay")]
+	// Nixie 1.8.1 (BH-175-M2): the toggle's state through the card's WatchedShown and FavoriteShown, which follow IsChecked (Mem181Tests)
+	[InlineData("MarkWatchedButton", "{x:Bind core:ItemLabels.WatchedAction(Model.Dto, WatchedShown), Mode=OneWay")]
+	[InlineData("AddToFavoriteButton", "{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, FavoriteShown), Mode=OneWay")]
 	[InlineData("MoreButton", "{x:Bind core:ItemLabels.MoreOptions(Model.Dto), Mode=OneWay")]
 	public void CardButtons_AreNamedForTheirItemAndState_AndTheirTooltipsSayTheSame(string button, string binding)
 	{

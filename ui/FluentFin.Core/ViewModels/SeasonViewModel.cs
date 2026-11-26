@@ -48,12 +48,14 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		if (stale && Dto?.Id is { } id)
 		{
 			var shown = Dto;
-			await State.RefreshBehindAsync(async () =>
+			// 1.8.1 (BH-175-q2, the review): the episodes written only while this refresh is the newest (the season and Play's
+			// label have their own tickets)
+			await State.RefreshBehindAsync(async newest =>
 			{
 				var episodes = _seriesEpisodes.GetList(shown, fresh: true);
 				var play = UpdatePlayTarget(id, reset: false);
 				await UpdateSeason(id);
-				if (await episodes is { Items: { } rows } && !KeptCards.RefreshRecords(Episodes ?? [], rows))
+				if (await episodes is { Items: { } rows } && newest() && !KeptCards.RefreshRecords(Episodes ?? [], rows))
 				{
 					Episodes = [.. rows];
 				}

@@ -10,6 +10,9 @@ the server away and bring it back as a network does, with the app's saved addres
   "devices": {"<DeviceId>": first-seen epoch}}. DeviceId values are read from the requests' Authorization headers as they
   pass; nothing else of a request is kept (never a token).
 - <folder>/stop present: it ends.
+- <folder>/hold-stopped present (Nixie 1.8.1, BH-175-m4): a Stopped report (POST /Sessions/Playing/Stopped) is held in the
+  network, its bytes not passed on, until the file goes (at most 120 s), as on a slow network; "held" in stats.json counts
+  them. The lifecycle check's quick restart during a film: the new copy signs in before the old one's Stopped arrives.
 
 Standard library only. Runs inside the harness's kill-on-close job (drive.ps1 starts it), so it never outlives the run.
 """
@@ -24,6 +27,7 @@ import threading
 import time
 
 DEVICE = re.compile(rb'DeviceId="([^"\r\n]{1,128})"')
+STOPPED = b"post /sessions/playing/stopped"
 
 
 def main():
@@ -36,9 +40,10 @@ def main():
     folder = args.dir
     os.makedirs(folder, exist_ok=True)
     flag, stop = os.path.join(folder, "offline"), os.path.join(folder, "stop")
+    hold = os.path.join(folder, "hold-stopped")   # 1.8.1 (BH-175-m4)
     lock = threading.Lock()
     conns = set()
-    stats = {"offline": False, "resets": 0, "reset_at": [], "connections": 0, "devices": {}}
+    stats = {"offline": False, "resets": 0, "reset_at": [], "connections": 0, "devices": {}, "held": 0}
     dirty = [True]
 
     def save():
@@ -83,6 +88,14 @@ def main():
                                 stats["devices"][dev] = round(time.time(), 3)
                                 dirty[0] = True
                     tail = buf[-256:]
+                    # 1.8.1 (BH-175-m4): a Stopped report held while hold-stopped is there (the request line in this data)
+                    if STOPPED in data.lower() and os.path.exists(hold):
+                        with lock:
+                            stats["held"] += 1
+                            dirty[0] = True
+                        until = time.time() + 120
+                        while os.path.exists(hold) and time.time() < until:
+                            time.sleep(0.05)
                 dst.sendall(data)
         except OSError:
             pass

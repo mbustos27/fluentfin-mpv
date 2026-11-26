@@ -87,7 +87,7 @@ public static class SmartCollectionCatalog
 	// 1.7.3 (P0-3): the published builders, and only their kinds whatever a builder makes
 	private static IReadOnlyList<SmartCollection> BuildPublished(IndexSnapshot index, DateTimeOffset now, IReadOnlySet<string>? boxedFranchises, IReadOnlySet<SmartCollectionKind>? kindsOff,
 		Outside.OutsideListsSnapshot? outside, bool census) =>
-		[.. BuildAll(PublishedBuilders, index, now, boxedFranchises, kindsOff, outside, Log, census).Where(x => Published.Contains(x.Kind))];
+		[.. BuildAll(PublishedBuilders, index, now, boxedFranchises, kindsOff, outside, Log, census, publishing: true).Where(x => Published.Contains(x.Kind))];
 
 	/// <summary>
 	/// 1.7.3: the collections of <paramref name="kinds"/>, published or on demand (a library's presets: its decades, genre
@@ -165,10 +165,12 @@ public static class SmartCollectionCatalog
 	private static readonly ConditionalWeakTable<ILogger, ConcurrentDictionary<(string? Key, DateTimeOffset ReadAt, int Entries), byte>> Censused = new();
 
 	internal static IReadOnlyList<SmartCollection> BuildAll(IReadOnlyList<ISmartCollectionBuilder> builders, IndexSnapshot index, DateTimeOffset now, IReadOnlySet<string>? boxedFranchises,
-		IReadOnlySet<SmartCollectionKind>? kindsOff, Outside.OutsideListsSnapshot? outside, ILogger? log, bool census = false, bool whole = false, CanonicalTitles? titles = null)
+		IReadOnlySet<SmartCollectionKind>? kindsOff, Outside.OutsideListsSnapshot? outside, ILogger? log, bool census = false, bool whole = false, CanonicalTitles? titles = null,
+		bool publishing = false)
 	{
 		var watch = Stopwatch.StartNew();
-		var context = new BuildContext(index, now, boxedFranchises ?? new HashSet<string>()) { Outside = outside ?? Outside.OutsideListsSnapshot.Shared, Whole = whole, Collapsed = titles };
+		// 1.8.1 (fix 7): publishing: the pages' build (BuildContext.Publishing), not one asked for by its id or a library's presets
+		var context = new BuildContext(index, now, boxedFranchises ?? new HashSet<string>()) { Outside = outside ?? Outside.OutsideListsSnapshot.Shared, Whole = whole, Collapsed = titles, Publishing = publishing };
 		var all = new List<SmartCollection>();
 		var said = new List<string>();
 		foreach (var builder in builders)
@@ -245,9 +247,10 @@ public static class SmartCollectionCatalog
 	/// <summary>
 	/// The collections published after the first rows (<see cref="LaterBuilders"/>: the week's Spotlight), off the calling thread,
 	/// once an index (with its outside lists, the week and Settings' switch): every page that asks gets the same work, and only the
-	/// first pays. Call it after showing <see cref="BuildAllAsync"/>'s rows, and add what it gives when it comes
-	/// (<see cref="LaterReady"/> says so too). The week's Spotlight is kept on this PC (<paramref name="picks"/>, the signed-in
-	/// user's <see cref="SmartCollectionStore"/> by default): it holds all week and next week's is another. Counts only in the log.
+	/// first pays. Call it after showing <see cref="BuildAllAsync"/>'s rows, and add what it gives when it comes (1.8.1,
+	/// BH-180-q5: its task says so; the LaterReady event nothing listened to is gone). The week's Spotlight is kept on this PC
+	/// (<paramref name="picks"/>, the signed-in user's <see cref="SmartCollectionStore"/> by default): it holds all week and
+	/// next week's is another. Counts only in the log.
 	/// </summary>
 	public static Task<IReadOnlyList<SmartCollection>> BuildLaterAsync(IndexSnapshot index, DateTimeOffset now, IReadOnlySet<SmartCollectionKind>? kindsOff = null,
 		Outside.OutsideListsSnapshot? outside = null, ISpotlightPicks? picks = null)
@@ -269,9 +272,6 @@ public static class SmartCollectionCatalog
 		}
 	}
 
-	/// <summary>A later build (<see cref="BuildLaterAsync"/>) is in: the index it was made of, and what it made.</summary>
-	public static event Action<IndexSnapshot, IReadOnlyList<SmartCollection>>? LaterReady;
-
 	private sealed record LaterMade(Outside.OutsideListsSnapshot Outside, string Week, bool Off, ISpotlightPicks? Picks, Task<IReadOnlyList<SmartCollection>> Task);
 
 	private static readonly ConditionalWeakTable<IndexSnapshot, LaterMade> Later = new();
@@ -287,7 +287,8 @@ public static class SmartCollectionCatalog
 		IReadOnlyList<SmartCollection> made = [];
 		try
 		{
-			var kept = picks is null ? null : await picks.SpotlightPicksAsync().ConfigureAwait(false);
+			// 1.8.1 (BH-180-q1): the picks of whose index it is (its key), read and saved for that sign-in only
+			var kept = picks is null ? null : await picks.SpotlightPicksAsync(index.Key).ConfigureAwait(false);
 			var context = new BuildContext(index, now, new HashSet<string>()) { Outside = lists, Collapsed = CollapsedOf(index) };
 			made = [.. new SpotlightBuilder(kept).Build(context).Where(x => x.ItemIds.Count > 0)];
 			var gate = context.Gates.Of(SmartCollectionKind.Spotlight) ?? new BuildGates.Gate(made.Count, made.Count, made.Count);
@@ -302,7 +303,7 @@ public static class SmartCollectionCatalog
 			// (a studio's, the people not read yet) held the whole week against the directors and actors that came minutes later
 			if (picks is not null && index.PeopleCovered && made.FirstOrDefault() is { } spotlight && kept?.GetValueOrDefault(week) != spotlight.Id)
 			{
-				await picks.SaveSpotlightPick(week, spotlight.Id).ConfigureAwait(false);
+				await picks.SaveSpotlightPick(week, spotlight.Id, index.Key).ConfigureAwait(false);
 			}
 		}
 		catch (Exception ex)
@@ -311,7 +312,6 @@ public static class SmartCollectionCatalog
 			Log?.LogWarning("Made by Nixie: the Spotlight couldn't be made ({Error})", ex.GetType().Name);
 		}
 
-		LaterReady?.Invoke(index, made);
 		return made;
 	}
 

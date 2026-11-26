@@ -131,6 +131,42 @@ public partial class JellyfinClient
 		}
 	}
 
+	// 1.8.1 (BH-175-m3)
+	/// <summary>
+	/// Nixie 1.8.1 (BH-175-m3; the review): how many films (or shows) an indexed library has now, as the index reads it (its
+	/// kind, recursive), in one request of one title with no fields, images or user data. The library change's read compares
+	/// it with what the saved index has of that library: one removed from Movies while one is added to a library the index
+	/// skips moved the server's check by 0. Null when the server didn't answer.
+	/// </summary>
+	public async Task<int?> GetLibraryTitleCount(BaseItemDto library, CancellationToken cancellationToken)
+	{
+		try
+		{
+			var answer = await _jellyfinApiClient.Items.GetAsync(x =>
+			{
+				var query = x.QueryParameters;
+				query.ParentId = library.Id;
+				query.IncludeItemTypes = IndexKinds(library);
+				query.Recursive = true;
+				query.EnableImages = false;
+				query.EnableUserData = false;
+				query.Limit = 1;
+				query.EnableTotalRecordCount = true;
+			}, cancellationToken);
+			return answer?.TotalRecordCount;
+		}
+		catch (Exception) when (cancellationToken.IsCancellationRequested)
+		{
+			return null;
+		}
+		catch (Exception ex)
+		{
+			logger.LogInformation("A library's count: {Error}", ex.Message);
+			return null;
+		}
+	}
+	// end 1.8.1
+
 	/// <summary>What a library's index holds: films, or shows (not their episodes); null for a library the index skips.</summary>
 	internal static BaseItemKind[]? IndexKinds(BaseItemDto library) => library.CollectionType switch
 	{

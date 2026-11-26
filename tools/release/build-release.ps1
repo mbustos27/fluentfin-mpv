@@ -41,7 +41,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '1.8.0',
+    [string]$Version = '1.8.1',
     [string]$SourceUrl,
     [switch]$Reuse,
     [switch]$SkipTests,  # only to try the packaging itself; a release runs them

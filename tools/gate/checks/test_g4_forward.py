@@ -116,6 +116,29 @@ class ForwarderTests(unittest.TestCase):
         os.remove(flag)
         self.assertTrue(_wait(lambda: (self.stats() or {}).get("offline") is False))
 
+    # 1.8.1 (BH-175-m4): a Stopped report held in the network while hold-stopped is there; anything else goes on
+    def test_a_stopped_report_is_held_while_asked_and_passes_once_let_go(self):
+        hold = os.path.join(self.dir, "hold-stopped")
+        open(hold, "w").close()
+        other = self.connect()
+        other.sendall(b"POST /Sessions/Playing/Progress HTTP/1.1\r\n\r\n")
+        self.assertTrue(other.recv(65536).startswith(b"POST /Sessions/Playing/Progress"), "a progress report is not held")
+        s = self.connect()
+        req = b"POST /Sessions/Playing/Stopped HTTP/1.1\r\nContent-Length: 0\r\n\r\n"
+        s.sendall(req)
+        s.settimeout(1.0)
+        with self.assertRaises(socket.timeout):
+            s.recv(65536)   # held: nothing came back
+        self.assertTrue(_wait(lambda: (self.stats() or {}).get("held") == 1))
+        os.remove(hold)
+        s.settimeout(3)
+        got = b""
+        while len(got) < len(req):
+            got += s.recv(65536)
+        self.assertEqual(got, req)
+        s.close()
+        other.close()
+
     def test_offline_resets_and_refuses_then_online_forwards_again(self):
         open_conn = self.connect()
         open_conn.sendall(b"x")

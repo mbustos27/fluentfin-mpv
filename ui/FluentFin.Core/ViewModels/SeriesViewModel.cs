@@ -54,18 +54,20 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		if (stale && Dto?.Id is { } id)
 		{
 			var shown = Dto;
-			await State.RefreshBehindAsync(async () =>
+			// 1.8.1 (BH-175-q2): the seasons and episodes written only while this refresh is the newest (the series and Play's label
+			// have their own tickets): an older one whose answers came last overwrote a newer one's
+			await State.RefreshBehindAsync(async newest =>
 			{
 				var seasons = JellyfinClient.GetItems(shown);
 				var episodes = SelectedSeason is { } season ? _seriesEpisodes.GetList(season, fresh: true) : null;
 				var play = UpdatePlayTarget(id, reset: false);
 				await UpdateSeries(id);
-				if (await seasons is { Items: { } list } && !(Seasons is { } cards && KeptCards.Refresh([.. cards], list)))
+				if (await seasons is { Items: { } list } && newest() && !(Seasons is { } cards && KeptCards.Refresh([.. cards], list)))
 				{
 					await UpdateSeasons(Dto, seasons);
 				}
 
-				if (episodes is not null && await episodes is { Items: { } rows } && !KeptCards.RefreshRecords(Episodes, rows))
+				if (episodes is not null && await episodes is { Items: { } rows } && newest() && !KeptCards.RefreshRecords(Episodes, rows))
 				{
 					Episodes = [.. rows];
 				}

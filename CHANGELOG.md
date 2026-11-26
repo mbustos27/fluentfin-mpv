@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.8.1
+
+Fixes: Made by Nixie's picks fit a real library better, Back to Collections is instant, and pages you come back to
+no longer hold on to memory.
+
+- **Made by Nixie, tuned on a real library of 30,000 titles:**
+  - Picks tied to what you watched most recently come first, on Home and in This week.
+  - **"More like"** leaves out shows and films you've already started, so a show you're watching isn't suggested back
+    to you.
+  - A show with episodes left says **"You watched 36 of 39 episodes of …"**, not "You finished".
+  - **Unfinished series** leaves out shows with only one or two episodes played, and shows you've finished.
+  - **Christmas collections open on 20 November**, best first, unwatched first. Halloween's are in the same order.
+  - **Franchises need three films**, or one you've started or pinned. Two-film pairs no longer fill the Collections
+    page, and they still lead you to the next film.
+  - "Next in X-Men" where it read "Next after X-Men", a franchise pick no longer says "Next after" the very film it
+    offers, and no country or network is named first in "Shares …".
+  - Switching user while the week's Spotlight was being made no longer gives one user the other's pick.
+- **Back:**
+  - Back to Collections puts you on the collection you left at once, even on a busy PC.
+  - Back, and the mouse's back and forward buttons, work with the search suggestions open.
+  - Quick Back and Forward on a slow server keep the newest resume points, watched episodes and results, on every page
+    that refreshes behind Back.
+  - Home just after midnight shows the new day's picks, also after a restart.
+- **Memory:** a film or Collection page you come back to with Back no longer keeps 6 to 15 MB each time, Narrator
+  reading or not.
+- **Narrator** says each card's place on a Collection page ("2 of 24"), on the first visit and after Back.
+- **Closing and reopening:** closing Nixie during a film, or just after leaving one, and opening it again at once keeps
+  your place and stays one device.
+- **The library index:** a server with a mixed library no longer makes Nixie read every title again at the start, and
+  a title removed while another was added there leaves Made by Nixie at the next start.
+- **Tiles:** a server collection's or playlist's tile no longer has empty space under its words.
+- **First start:** on a new install, Made by Nixie, the Collections page and the Movies and Shows tabs could stop
+  working, and settings stopped saving, until Nixie was restarted.
+
 ## 1.8.0
 
 Collections, better: Made by Nixie picks about ten collections for the week and says why each is there, among them

@@ -361,36 +361,64 @@ public sealed class SpotlightTests(ITestOutputHelper output)
 		Assert.DoesNotContain(published, x => x.Kind == SmartCollectionKind.Spotlight);
 		Assert.DoesNotContain(SmartCollectionCatalog.PublishedBuilders, x => x is SpotlightBuilder);
 
-		IReadOnlyList<SmartCollection>? announced = null;
-		void Heard(IndexSnapshot of, IReadOnlyList<SmartCollection> made)
-		{
-			if (ReferenceEquals(of, index))
-			{
-				announced = made;
-			}
-		}
+		var picks = new KeptPicks();
+		var later = SmartCollectionCatalog.BuildLaterAsync(index, Tuesday, outside: FluentFin.Core.Outside.OutsideListsSnapshot.Empty, picks: picks);
+		Assert.Same(later, SmartCollectionCatalog.BuildLaterAsync(index, Tuesday.AddHours(1), outside: FluentFin.Core.Outside.OutsideListsSnapshot.Empty, picks: picks)); // one work a page or two
+		var spotlight = Assert.Single(await later); // what a page adds when its task comes
+		Assert.Equal(spotlight.Id, picks.Kept["2026-W48"]); // kept on this PC
+		Assert.Equal(SmartCollectionKind.Spotlight, SmartCollectionCatalog.KindOf(spotlight.Id));
+		Assert.False(RetiredCollections.IsGone(spotlight.Id)); // never taken out as a director's pin was
+		Assert.Equal(spotlight.ItemIds, SmartCollectionCatalog.Find(index, spotlight.Id, Tuesday)?.ItemIds); // a pin of the week's
+		var other = SpotlightBuilder.Candidates(new BuildContext(index, Tuesday, new HashSet<string>())).First(x => x.Id != spotlight.Id);
+		var pinned = SmartCollectionCatalog.Find(index, other.Id, Tuesday);
+		Assert.NotNull(pinned); // another one's, by its id (a pin): its retrospective, with no end date
+		Assert.Null(pinned.Reason?.Until);
+		Assert.Empty(await SmartCollectionCatalog.BuildLaterAsync(index, Tuesday, new HashSet<SmartCollectionKind> { SmartCollectionKind.Spotlight }, FluentFin.Core.Outside.OutsideListsSnapshot.Empty, picks)); // switched off
+	}
 
-		SmartCollectionCatalog.LaterReady += Heard;
+	// 1.8.1 (BH-180-q5): BuildLaterAsync's LaterReady had no subscriber in the app (the pages await its task): gone, so nothing
+	// is told to nobody, and no test keeps a seam the app doesn't use. The review: that event only, not any event the catalog
+	// may need later
+	[Fact]
+	public void TheLaterBuild_HasNoLaterReadyNobodyListensTo()
+	{
+		const System.Reflection.BindingFlags any = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+		Assert.Empty(typeof(SmartCollectionCatalog).GetMember("LaterReady", any)); // no event, nor its backing field or delegate
+	}
+
+	// 1.8.1 (BH-180-q1): a Switch user during the Spotlight's build (0.2 to 0.7 s): the build is of user A's index, and its
+	// pick was saved in the store as it was when the build ended, user B's: B's week held A's pick. The picks are read and
+	// saved for the index's own sign-in (its key) only
+	[Fact]
+	public async Task ASwitchUserDuringTheBuild_SavesNothingInTheNextUsersStore()
+	{
+		var folder = Path.Combine(Path.GetTempPath(), "nixie-spotlight-" + Guid.NewGuid().ToString("N"));
 		try
 		{
-			var picks = new KeptPicks();
-			var later = SmartCollectionCatalog.BuildLaterAsync(index, Tuesday, outside: FluentFin.Core.Outside.OutsideListsSnapshot.Empty, picks: picks);
-			Assert.Same(later, SmartCollectionCatalog.BuildLaterAsync(index, Tuesday.AddHours(1), outside: FluentFin.Core.Outside.OutsideListsSnapshot.Empty, picks: picks)); // one work a page or two
-			var spotlight = Assert.Single(await later);
-			Assert.Same(await later, announced); // published when ready
-			Assert.Equal(spotlight.Id, picks.Kept["2026-W48"]); // kept on this PC
-			Assert.Equal(SmartCollectionKind.Spotlight, SmartCollectionCatalog.KindOf(spotlight.Id));
-			Assert.False(RetiredCollections.IsGone(spotlight.Id)); // never taken out as a director's pin was
-			Assert.Equal(spotlight.ItemIds, SmartCollectionCatalog.Find(index, spotlight.Id, Tuesday)?.ItemIds); // a pin of the week's
-			var other = SpotlightBuilder.Candidates(new BuildContext(index, Tuesday, new HashSet<string>())).First(x => x.Id != spotlight.Id);
-			var pinned = SmartCollectionCatalog.Find(index, other.Id, Tuesday);
-			Assert.NotNull(pinned); // another one's, by its id (a pin): its retrospective, with no end date
-			Assert.Null(pinned.Reason?.Until);
-			Assert.Empty(await SmartCollectionCatalog.BuildLaterAsync(index, Tuesday, new HashSet<SmartCollectionKind> { SmartCollectionKind.Spotlight }, FluentFin.Core.Outside.OutsideListsSnapshot.Empty, picks)); // switched off
+			var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+			var user = a;
+			var client = new Moq.Mock<FluentFin.Core.Contracts.Services.IJellyfinClient>();
+			client.SetupGet(x => x.BaseUrl).Returns("http://127.0.0.1:8096");
+			client.SetupGet(x => x.UserId).Returns(() => user);
+			using var home = new FluentFin.Core.Services.HomeCache(Path.Combine(folder, "home"), new System.Reactive.Subjects.Subject<Jellyfin.Sdk.WebSockets.IOutboundWebSocketMessage>(), new CoreListLogger<FluentFin.Core.Services.HomeCache>(), TimeProvider.System);
+			var store = new SmartCollectionStore(client.Object, home, Path.Combine(folder, "sc"), new CoreListLogger<SmartCollectionStore>());
+			var ofA = Index(ThreeDirectors()) with { Key = FluentFin.Core.Services.HomeCache.FileKey("http://127.0.0.1:8096", a) };
+
+			user = b; // Switch user: B signed in while A's Spotlight is made
+			var made = Assert.Single(await SmartCollectionCatalog.BuildLaterAsync(ofA, Tuesday, outside: FluentFin.Core.Outside.OutsideListsSnapshot.Empty, picks: store));
+
+			Assert.Empty(await store.SpotlightPicksAsync()); // B's week holds nothing of A's
+			user = a;
+			Assert.DoesNotContain(made.Id, (await store.SpotlightPicksAsync()).Values); // and A's is made again at A's next visit
+			var mine = Assert.Single(await SmartCollectionCatalog.BuildLaterAsync(ofA with { }, Tuesday, outside: FluentFin.Core.Outside.OutsideListsSnapshot.Empty, picks: store));
+			Assert.Equal(mine.Id, (await store.SpotlightPicksAsync())["2026-W48"]); // A signed in: kept for A
 		}
 		finally
 		{
-			SmartCollectionCatalog.LaterReady -= Heard;
+			if (Directory.Exists(folder))
+			{
+				Directory.Delete(folder, recursive: true);
+			}
 		}
 	}
 
@@ -622,9 +650,9 @@ internal sealed class KeptPicks : ISpotlightPicks
 {
 	public Dictionary<string, string> Kept { get; } = new(StringComparer.Ordinal);
 
-	public Task<IReadOnlyDictionary<string, string>> SpotlightPicksAsync() => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>(Kept));
+	public Task<IReadOnlyDictionary<string, string>> SpotlightPicksAsync(string? of = null) => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>(Kept));
 
-	public Task SaveSpotlightPick(string week, string id)
+	public Task SaveSpotlightPick(string week, string id, string? of = null)
 	{
 		Kept[week] = id;
 		return Task.CompletedTask;

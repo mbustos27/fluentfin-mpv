@@ -163,7 +163,8 @@ public sealed partial class IndexOnABigServerTests
 	private readonly Dictionary<Guid, DateTimeOffset> _savedAt = [];
 
 	// every film dated as added a minute after the one before; the server's pages of the titles saved since a time
-	// (MinDateLastSaved), counted
+	// (MinDateLastSaved), counted. 1.8.1 (BH-175-m3; the review): and each indexed library's count now (Movies: the films; a
+	// library the index skips, _elsewhere, never asked), counted too
 	private System.Runtime.CompilerServices.StrongBox<int> SavedSince()
 	{
 		for (var i = 0; i < _films.Count; i++)
@@ -179,8 +180,19 @@ public sealed partial class IndexOnABigServerTests
 				var saved = _films.Where(x => _savedAt.GetValueOrDefault(x.Id!.Value, FirstAdded) >= since).OrderBy(x => x.SortName).ToList();
 				return new BaseItemDtoQueryResult { Items = [.. saved.Skip(start).Take(limit)], TotalRecordCount = total ? saved.Count : null };
 			});
+		_client.Setup(x => x.GetLibraryTitleCount(It.IsAny<BaseItemDto>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync((BaseItemDto library, CancellationToken _) =>
+			{
+				Interlocked.Increment(ref _counted);
+				return library.Id == MoviesId ? _films.Count : 0;
+			});
 		return asked;
 	}
+
+	// 1.8.1 (BH-175-m3): the films of a library the index skips (a mixed library: never asked by the index), and the requests of
+	// a library's count
+	private readonly List<BaseItemDto> _elsewhere = [];
+	private int _counted;
 
 	// a film added to the library at a scan an hour after the first read: saved then, dated as the server dates it
 	private BaseItemDto Added(int i, DateTimeOffset dated, DateTimeOffset scanned)
@@ -218,6 +230,7 @@ public sealed partial class IndexOnABigServerTests
 
 		Assert.Equal(pages, _pages); // no page of every title
 		Assert.Equal(1, asked.Value); // one page of the titles saved since
+		Assert.Equal(1, _counted); // 1.8.1 (BH-175-m3): and Movies' count
 		var now = index.Current!;
 		Assert.Equal(["Film 02500", "Film 02501", "Film 02502"], now.Entries.Skip(2500).Select(x => x.Name));
 		Assert.All(now.Entries.Skip(2500), x => Assert.Equal((MoviesId, true), (x.LibraryId, x.InLibrary(MoviesId))));
@@ -225,7 +238,7 @@ public sealed partial class IndexOnABigServerTests
 		Assert.Equal("2503:newer", now.Check); // what the next check is compared with
 		Assert.Equal(first.ReadAt, now.ReadAt); // the day's read still comes at its time
 		Assert.True(now.BackingKnown);
-		Assert.Contains(log.Entries, x => x.Message.StartsWith("Library index: 3 titles added and 1 changed since the last read, read in 1 requests", StringComparison.Ordinal));
+		Assert.Contains(log.Entries, x => x.Message.StartsWith("Library index: 3 titles added and 1 changed since the last read, read in 2 requests", StringComparison.Ordinal));
 		Assert.Contains(log.Entries, x => x.Message.StartsWith("Library index: a library change read as the titles saved since the last read: 2503 titles, ", StringComparison.Ordinal));
 		await WaitForSaved(x => x.Contains("\"Check\":\"2503:newer\"", StringComparison.Ordinal));
 		using var restart = Index(time);
@@ -239,17 +252,20 @@ public sealed partial class IndexOnABigServerTests
 
 	// what the titles saved since can't explain is read whole, as before: a title removed (the count moved by less), and the
 	// 1.7.5 review's case, a title removed while one is added with an older date and one newest (the first build read newest
-	// first by DateCreated, didn't see the older one, and the count matched: the removed title stayed); one added in a library
-	// the index skips; a library added
+	// first by DateCreated, didn't see the older one, and the count matched: the removed title stayed); 1.8.1 (BH-175-m3): a
+	// title removed while one is added in a library the index skips (a mixed library: the server's check moved by 0, and the
+	// removed title stayed in Made by Nixie until the day's read): Movies' own count moved by -1 with nothing added there; a
+	// library added
 	[Theory]
 	[InlineData("removed")]
 	[InlineData("removed, one older and one newest added")]
-	[InlineData("added in a skipped library")]
+	[InlineData("removed, one added in a skipped library")]
 	[InlineData("library added")]
 	public async Task ALibraryChange_TheTitlesSavedSinceCantExplain_ReadsEveryTitle(string change)
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
 		var asked = SavedSince();
+		_elsewhere.Add(Film(9001)); // a mixed library's film, there before the first read (counted by the check, never indexed)
 		await ReadAndSave(time);
 		var pages = _pages;
 		var removed = _films[10];
@@ -266,8 +282,10 @@ public sealed partial class IndexOnABigServerTests
 				_films.AddRange([Added(2500, scan, scan), Added(2501, FirstAdded.AddDays(-400), scan)]);
 				_check = "2501:newer"; // one gone, two added: by 1, not 2
 				break;
-			case "added in a skipped library":
-				_check = "2501:elsewhere"; // a title in a mixed library: counted, never in a library the index reads
+			case "removed, one added in a skipped library":
+				_films.Remove(removed);
+				_elsewhere.Add(Added(9002, scan, scan));
+				_check = "2500:elsewhere"; // one gone from Movies, one added to the mixed library: by 0
 				break;
 			default:
 				var kidsId = Guid.Parse("aaaaaaaa-3333-0000-0000-000000000175");
@@ -299,13 +317,76 @@ public sealed partial class IndexOnABigServerTests
 				Assert.Contains(now.Entries, x => x.Name == "Film 02501"); // the older-dated one came
 				Assert.Equal(2501, now.Entries.Count);
 				break;
-			case "added in a skipped library":
-				Assert.Equal(2500, now.Entries.Count);
+			case "removed, one added in a skipped library":
+				Assert.DoesNotContain(now.Entries, x => x.Id == removed.Id); // gone from Made by Nixie now, not at the day's read
+				Assert.Equal(2499, now.Entries.Count);
+				Assert.DoesNotContain(now.Entries, x => x.Name is "Film 09001" or "Film 09002"); // never a skipped library's
 				break;
 			default:
 				Assert.Equal(2, now.Libraries.Count);
 				Assert.Equal(0, asked.Value); // the libraries changed: no page of the titles saved since asked
 				break;
 		}
+	}
+
+	// 1.8.1 (BH-175-m3): a title added to a library the index skips (a mixed library) moves the server's check, but no indexed
+	// library's count: nothing is read whole (1.7.5 read every title for it, 28 requests on the throwaway 25,736-film server),
+	// and the index takes the check, with none of that library's titles
+	[Fact]
+	public async Task ATitleAddedInALibraryTheIndexSkips_IsSeen_AndNothingIsReadWhole()
+	{
+		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		var asked = SavedSince();
+		await ReadAndSave(time);
+		var pages = _pages;
+		var scan = time.Now + TimeSpan.FromHours(1);
+		_elsewhere.Add(Added(9002, scan, scan));
+		_check = "2501:elsewhere";
+
+		time.Now += TimeSpan.FromHours(2);
+		var log = new CoreListLogger<LibraryIndex>();
+		using var index = Index(time, log);
+		await index.GetAsync();
+		await WaitForIndex(index, x => x.Check == "2501:elsewhere");
+		await index.Checking;
+		await index.Settled;
+
+		Assert.Equal(pages, _pages); // no page of every title
+		Assert.Equal((1, 1), (asked.Value, _counted));
+		Assert.Equal(2500, index.Current!.Entries.Count);
+		Assert.DoesNotContain(index.Current.Entries, x => x.Name == "Film 09002");
+		Assert.Contains(log.Entries, x => x.Message.StartsWith("Library index: 0 titles added and 0 changed since the last read, read in 2 requests (every title was not read)", StringComparison.Ordinal));
+	}
+
+	// 1.8.1 (the review of BH-175-m3's first fix): a title saved in a library the index skips within the day's margin before the
+	// read (or only saved again since) counted as added there, so a film added to Movies was read as every title, again at each
+	// check for up to a day (28 requests on a 25,800-film server). Each indexed library's own count says what changed: Movies
+	// moved by its one film, read as the titles saved since
+	[Fact]
+	public async Task AFilmAddedToMovies_WithASaveInASkippedLibrary_IsReadAsTheTitlesSavedSince()
+	{
+		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		var asked = SavedSince();
+		_elsewhere.Add(Added(9001, time.Now - TimeSpan.FromHours(2), time.Now - TimeSpan.FromHours(2))); // saved within the margin before the read
+		_check = "2501:mixed"; // the server's check counts it: Movies' 2,500 and the mixed library's one
+		await ReadAndSave(time);
+		var pages = _pages;
+		var scan = time.Now + TimeSpan.FromHours(1);
+		_films.Add(Added(2500, scan, scan)); // a film added to Movies
+		_savedAt[_elsewhere[0].Id!.Value] = scan; // and the mixed library's film saved again
+		_check = "2502:newer";
+
+		time.Now += TimeSpan.FromHours(2);
+		var log = new CoreListLogger<LibraryIndex>();
+		using var index = Index(time, log);
+		await index.GetAsync();
+		await WaitForIndex(index, x => x.Entries.Count == 2501);
+		await index.Checking;
+		await index.Settled;
+
+		Assert.Equal(pages, _pages); // no page of every title
+		Assert.Equal(1, asked.Value);
+		Assert.Contains(index.Current!.Entries, x => x.Name == "Film 02500");
+		Assert.Contains(log.Entries, x => x.Message.StartsWith("Library index: a library change read as the titles saved since the last read: 2501 titles", StringComparison.Ordinal));
 	}
 }
