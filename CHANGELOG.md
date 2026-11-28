@@ -52,6 +52,9 @@ say which of your titles are inside, a Spotlight picked by taste, and far fewer 
   no threats in the installer or the zip.
 - The basics gate on the release package: 99 of 110 jobs. No app bug: the rows at 2560 × 1392 didn't run (the large
   monitor was off, 8 jobs), and one check couldn't set up its case because the people read finished first (3 jobs).
+- The upgrade, in Windows Sandbox as a standard user, right after publishing (6:16 to 6:30 PM): passed, every check.
+  1.9.0 installs over 1.8.1 and keeps its data; Restart to update installs quietly and opens Nixie again; and 1.8.1's
+  own Restart to update brings 1.9.0, which says "Updated".
 
 **Known issues:**
 
