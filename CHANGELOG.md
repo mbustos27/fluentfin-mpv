@@ -35,6 +35,34 @@ say which of your titles are inside, a Spotlight picked by taste, and far fewer 
   with no extra read. On a server whose titles carry no TMDb keywords, most film categories can't be made, and show
   categories come from genres, networks and summaries.
 
+**Verified**
+
+- Six streams for the categories (the catalogue, the matcher, the wiring, the lineup, the summary pass, the page), each
+  reviewed when it was done and again after its fixes, then an independent critical review that reshaped See all and led
+  to the "because you watched" rebuild, reviewed in turn. Every fix has a test that fails without it.
+- Offline runs of 1.9's own code on copies of a real library of about 190,000 titles (no server contacted, the copies
+  deleted after): the shows played there that land in a shown category went from 20 (1.8) to 31.
+- A bug hunt on the merged build; its Majors (a first-start settings race was 1.8.1's; here, the week saved before the
+  summaries were read, and show categories ranked below films) were fixed before the build.
+- The Collections page's scroll, timed in a new release check on a fake server of about 190,000 titles: no frame over
+  50 ms in 48 full scrolls, in all four themes.
+- The library reads on a fake server of 190,000 titles: a start with a small change made 13 requests and 163 KB, against
+  about 200 requests and 329 MB before.
+- The release build: Core 6,329 tests and UI 1,896 passed, none failed; the package's checks ran; Windows Defender found
+  no threats in the installer or the zip.
+- The basics gate on the release package: 99 of 110 jobs. No app bug: the rows at 2560 × 1392 didn't run (the large
+  monitor was off, 8 jobs), and one check couldn't set up its case because the people read finished first (3 jobs).
+
+**Known issues:**
+
+- Removing a played mark on another device shows after the day's whole read, not at once.
+- A title removed from the server stays in Collections until the day's read (opening it says it's gone).
+- Country codes on some servers ("IT" for Italy) and networks listed as production companies keep some categories
+  empty.
+- On a server with no critics' ratings and few community ratings, quality can't tell categories apart, so "For you"
+  leans on fit alone.
+- Going back to 1.8.1 can show keywords 1.9 only uses for matching, until 1.8.1's next daily read.
+
 ## 1.8.1
 
 Fixes: Made by Nixie's picks fit a real library better, Back to Collections is instant, and pages you come back to

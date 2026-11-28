@@ -175,15 +175,48 @@ runs post keys and cannot move the real cursor or hear sound).
     a press (off-screen runs read the UI Automation names, not what Narrator says): not run, for the owner.
 
 ## Nixie 1.9: Collections 2
-Pre-release fixes on `wip/190-fix` (from the merged 1.9 at `a278808a`): the offline run on the owner's library
-(`docs\reports\Collections 2 on the owner's library 2026-11-26.md`, local) and the bug hunt (`docs\bughunt\BH-190.md`,
-local). Fixed before release: the week kept before the summaries' pass read the shows (BH-190-M2); a missing episode
-length failing every length rule; started shows leading a category's tiles with "none watched"; show categories ranked
-below film ones (BH-190-M1); a two-minute wait before every summaries pass with no Made by Nixie row on Home
-(BH-190-m1); finished franchises leading the Franchises row (BH-190-m4); a few catalogue lines (documentaries, talk,
-reality and news out of seven show categories); two nits.
+Released 2026-11-27 at 6:16 PM (`93de2611`, tag `v1.9.0`). Six streams for the categories, each reviewed when done and
+again after its fixes; an independent critical review (`briefs\collections2-critical-review.md`) that led to the
+"because you watched" rebuild (`briefs\190-plan.md` Phase 3), reviewed in turn; the scroll fix and the library index fix
+(a whole read at most once a day), each reviewed and fixed; a bug hunt (`docs\bughunt\BH-190.md`, local); and offline
+runs on the owner's library (`docs\reports\Collections 2 on the owner's library 2026-11-26.md` and
+`docs\reports\Collections 2 rebuild on the owner's library 2026-11-27.md`, local). CHANGELOG.md has what it brings.
+
+**Fixed before release** (from the merged 1.9 at `a278808a`, on `wip/190-fix`): the week kept before the summaries' pass
+read the shows (BH-190-M2); a missing episode length failing every length rule; started shows leading a category's tiles
+with "none watched"; show categories ranked below film ones (BH-190-M1); a two-minute wait before every summaries pass
+with no Made by Nixie row on Home (BH-190-m1); finished franchises leading the Franchises row (BH-190-m4); a few catalogue
+lines (documentaries, talk, reality and news out of seven show categories); two nits. Then the rebuild's review: two
+streams' test helpers with one name broke the Core tests at the merge (renamed); More like anchored on a show with one
+episode, or on a streaming platform's studio alone (now 3 episodes or a finish, and a studio or network alone isn't a
+shared feature); a near-flat Spotlight draw (now weighted by place); taste categories kept for months (now at most 6
+carried over); weeks kept before the rebuild reset once; owner-shaped test data anonymised. The index stream's review:
+a partial favourites page unmarking favourites, and an uncapped delta read after a mass re-save (both Majors), and its
+Minors.
+
+**The rebuild's bar, on the owner's library:** clearly more than 27 of the 87 shows they played in a shown category,
+aiming for 45. Reached 31 (20 in 1.8). The most any 12 of the made categories can hold there is 33: the gap to 45 is
+the catalogue (below).
 
 **Left (1.9.1 or later):**
+- **Taste clusters (R4)**, the plan's next step when the core misses the bar: group the played shows by likeness into 5
+  to 8 rows, each named by its anchor titles. They don't need catalogue rules, so they reach shows no category holds (30
+  of the 87 there fit no rule). Deferred to after the weekly usage reset (Monday 2026-11-30), if the owner wants it.
+- **The catalogue's reach** (about 10 to 15 more played shows there): production-company prefixes for networks and ISO
+  country codes (both below), a ceiling for the two biggest word-list categories (868 and 1,055 shows), word lists that
+  take the wrong summaries (a horror series in a family-sitcom list, a thriller in a workplace-comedy list), and filter
+  categories holding one played show, which the row's rule keeps out.
+- **The row is near static week to week:** with up to 6 taste categories carried over, most weeks change only the rest
+  and the explore pick. The owner's call.
+- **Two sitcom-theme tiles can open on the same posters:** the row has no first-posters rule like This week's.
+- **The release gate's misses** (99 of 110 jobs): the rows checks at 2560 × 1392 didn't run (the large monitor was off,
+  8 jobs), and focus180's setup case again (3 jobs; in 1.8.1's Left).
+- **A WinUI input crash, 1 run in 3,** when the harness's synthetic wheel scrolls right after See all (the nightly
+  scroll190-nav check; the release tier's scroll check passed 33 of 33 in each theme). Seen only with the synthetic
+  wheel.
+- **The index reads only what changed, so two things wait for the day's whole read:** a played mark removed on another
+  device, and a title removed from the server (opening it says the server doesn't have it any more). Removals by id
+  cost about a whole read, and `MinDateLastSavedForUser` doesn't narrow anything on Jellyfin 10.11 or 12.4.
 - **Country codes against names.** Some servers give films ISO codes ("IT", "KR", "HK") where the catalogue says "Italy".
   The owner's library does, so its 27 country rules match nothing. Map the 12 countries the catalogue uses in
   `MicroGenreMatcher.cs` (`Clean` and the posting lists): about 21 more film categories there (Spaghetti Westerns, Hong
