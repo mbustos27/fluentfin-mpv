@@ -15,6 +15,16 @@ public static class Hold
 	public static long Block(DateTimeOffset now) => now.Date.Ticks / TimeSpan.TicksPerDay / Days;
 
 	/// <summary>
+	/// 1.9 (the Phase 3 review): a play dated up to this far after this PC's clock (a server whose clock runs ahead) counts as
+	/// played now: dated "in the future", the title just played was neither fresh nor played lately, and its More like and its
+	/// categories went last. Further ahead than this, it is no date to trust.
+	/// </summary>
+	public static readonly TimeSpan ClockAhead = TimeSpan.FromDays(1);
+
+	/// <summary>1.9 (the Phase 3 review): <paramref name="when"/> as this PC reads it: up to <see cref="ClockAhead"/> after <paramref name="now"/> is now.</summary>
+	public static DateTimeOffset? AsOf(DateTimeOffset? when, DateTimeOffset now) => when is { } at && at > now && at - now <= ClockAhead ? now : when;
+
+	/// <summary>
 	/// The anchors (the latest played first, <see cref="AnchorFinder.Of"/>) in the order the personal slots take them: those
 	/// finished on one of the last <see cref="Days"/> calendar days (<see cref="DaysBetween"/>), newest first; then the <see cref="AnchorFinder.Recent"/> latest of the
 	/// rest (with every undated one when the dated don't fill them: their order isn't known), turned by the block; then the
@@ -22,7 +32,7 @@ public static class Hold
 	/// </summary>
 	public static IReadOnlyList<Anchor> Order(IReadOnlyList<Anchor> anchors, DateTimeOffset now)
 	{
-		bool Fresh(Anchor x) => x.When is { } when && when <= now && DaysBetween(when, now) < Days;
+		bool Fresh(Anchor x) => AsOf(x.When, now) is { } when && when <= now && DaysBetween(when, now) < Days; // 1.9: a clock ahead
 		var fresh = anchors.Where(Fresh).ToList();
 		var rest = anchors.Where(x => !Fresh(x)).ToList();
 		var dated = rest.Where(x => x.When is not null).ToList();
@@ -38,7 +48,7 @@ public static class Hold
 	/// none (an index without play dates: the owner's 42 films).
 	/// </summary>
 	public static int Recency(DateTimeOffset? when, DateTimeOffset now) =>
-		when is not { } at ? 2 : at <= now && DaysBetween(at, now) < Days ? 0 : 1;
+		AsOf(when, now) is not { } at ? 2 : at <= now && DaysBetween(at, now) < Days ? 0 : 1; // 1.9: a clock ahead (AsOf)
 
 	/// <summary>
 	/// Calendar days from <paramref name="when"/> to <paramref name="now"/>, both on <paramref name="now"/>'s clock: a title

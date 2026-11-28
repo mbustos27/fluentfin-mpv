@@ -56,6 +56,11 @@ public static class HarnessPointer
 		/// shows it with its video (the video gone after a crash, or at the end, and back with the next playback).
 		/// </summary>
 		HidePlayer = 8,
+		/// <summary>
+		/// Nixie 1.9 (the scroll stream): the frame clock (<see cref="HarnessFrames"/>): a high word of 1 starts timing the frames
+		/// the UI thread draws, 2 stops and logs them ("[harness] frames: ..."). No point needed.
+		/// </summary>
+		Frames = 9,
 	}
 
 	/// <summary>Whether the hook listens: never in a release package, otherwise only with <see cref="Variable"/> exactly 1.</summary>
@@ -115,6 +120,22 @@ public static class HarnessPointer
 		{
 			if (window.Content is not UIElement content || content.XamlRoot is not { } root)
 			{
+				return;
+			}
+
+			// Nixie 1.9 (the scroll stream): the frame clock, started or stopped (no point)
+			if (kind is Kind.Frames)
+			{
+				if (high == 1)
+				{
+					HarnessFrames.Start(content);
+					Log().LogInformation("[harness] frames: timing");
+				}
+				else
+				{
+					HarnessFrames.Log(Log(), HarnessFrames.Stop());
+				}
+
 				return;
 			}
 

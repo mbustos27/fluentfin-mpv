@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.9.0
+
+Collections 2: Made by Nixie learns from what you watch. More like rows for what you've been watching, categories that
+say which of your titles are inside, a Spotlight picked by taste, and far fewer library reads on big servers.
+
+- **More like, for what you're watching.** One row for each show you watched 3 or more episodes of, or finished, in the
+  last 30 days, and each film you finished, newest first, up to six. Titles count as alike only when they share more
+  than a studio or network, and the reason says what they share.
+- **Categories.** Named categories of films and shows ("Crime Dramas from the 1970s", "BBC Sitcoms Made Since 2000"),
+  made on this PC from the server's genres, networks, decades, countries and keywords, and for shows from what each
+  summary says. Summaries are read once, on this PC; nothing about your library leaves it.
+  - The Collections page's **Categories** row picks about 12 for the week from what you watch. Each names up to two of
+    your titles inside (With “…” and “…”). A category made of a genre, a network or a decade alone shows only with two or
+    more of your titles inside. Up to six of your categories stay from week to week; the rest change.
+  - **See all** shows the categories your watching supports, plus one to explore, best fit first and the same all week.
+    A to Z is a click away. With nothing watched yet, it shows the row.
+  - Holiday categories show only in their season: Christmas from 20 November, and a Thanksgiving row from 1 November.
+  - **Settings > Collections > Categories** turns them off, which also stops the summary reading and deletes what it
+    found. If every Made by Nixie kind was off before the update, Categories starts off too.
+- **The weekly Spotlight follows your taste.** It's drawn from the directors, actors and studios nearest what you've
+  played, and none comes back within 8 weeks.
+- **Franchises** opens on the ones in progress, then the ones you haven't started, then the ones you finished.
+  Franchises with the same name show their years.
+- **Fairer rankings.** Brand-new titles and concert films no longer lead Acclaimed on a handful of ratings, and shows
+  aren't ranked below films for having no critics' ratings.
+- **Big servers.** Nixie reads the whole library of a server at most once a day. Other starts, and R, read only what
+  changed: 13 requests where it made about 200 on a server of 190,000 titles. Watched marks and favourites from other
+  devices come in at the start and on R. A title removed from the server leaves Collections at that day's read, and
+  opening it before then says the server doesn't have it any more.
+- **Scrolling.** The Collections page moves a full step per wheel notch at any speed, hands the wheel to the rows at its
+  end, and Page Down works.
+- **After the update:** the saved library shows at once, and the categories' keywords come with the next daily read,
+  with no extra read. On a server whose titles carry no TMDb keywords, most film categories can't be made, and show
+  categories come from genres, networks and summaries.
+
 ## 1.8.1
 
 Fixes: Made by Nixie's picks fit a real library better, Back to Collections is instant, and pages you come back to

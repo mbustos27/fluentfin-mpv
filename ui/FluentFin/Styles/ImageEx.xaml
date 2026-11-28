@@ -9,7 +9,16 @@
     <Style TargetType="controls:LoadingImage">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="CacheMode" Value="BitmapCache" />
-        <Setter Property="EnableLazyLoading" Value="True" />
+        <!--
+            Nixie 1.9 (the scroll stream; the owner: "scrolling the collections page takes a longgg time"): no lazy loading. ImageEx's
+            (DevWinUI's ImageExBase) hears LayoutUpdated for it from the moment it is turned on until it is turned off, loaded or not,
+            and on every layout pass anywhere in the window each picture walks up the tree to its scroll viewer: the Collections
+            page's 237 pictures (five a tile) did that about 40 times a second while it scrolled, and its frames took twice as long
+            (p95 12 ms, 7 without; the scroll gate's frame clock, Classic at 2560 x 1392). Every LoadingImage is in a list that
+            makes only what is near the view (the rows' and grids' ItemsRepeater, a ListView) or one of a few, so there is nothing
+            for it to put off
+        -->
+        <Setter Property="EnableLazyLoading" Value="False" />
         <Setter Property="IsCacheEnabled" Value="True" />
         <Setter Property="Foreground" Value="{ThemeResource ApplicationForegroundThemeBrush}" />
         <Setter Property="IsTabStop" Value="False" />

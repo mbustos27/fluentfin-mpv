@@ -132,6 +132,34 @@ public static class FranchiseNames
 	}
 	// end 1.7 keyless
 
+	// 1.9 (the owner's library, fix 6)
+	/// <summary>
+	/// 1.9 (the owner's library, fix 6): the names two or more franchises share, compared without case ("Godzilla" three
+	/// times, "Batman" twice on the owner's library). Each of those franchises is then named with its years (<see cref="WithYears"/>).
+	/// </summary>
+	public static IReadOnlySet<string> Repeated(IEnumerable<string> names) =>
+		names.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).GroupBy(x => x, StringComparer.CurrentCultureIgnoreCase)
+			.Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.CurrentCultureIgnoreCase);
+
+	/// <summary>
+	/// 1.9 (fix 6): a repeated name with its films' years: "Godzilla (1954–1975)", "Halloween (2018)" when they all came out in
+	/// one year. The name as it is when none of the films has a year (missing data adds nothing).
+	/// </summary>
+	public static string WithYears(string name, IEnumerable<IndexEntry> films)
+	{
+		var years = films.Select(x => x.Year).OfType<int>().Where(x => x > 0).ToList();
+		if (years.Count == 0)
+		{
+			return name;
+		}
+
+		var (first, last) = (years.Min(), years.Max());
+		return first == last
+			? $"{name.Trim()} ({first.ToString(System.Globalization.CultureInfo.InvariantCulture)})"
+			: $"{name.Trim()} ({first.ToString(System.Globalization.CultureInfo.InvariantCulture)}–{last.ToString(System.Globalization.CultureInfo.InvariantCulture)})";
+	}
+	// end 1.9
+
 	private static List<string> Words(string name) => [.. name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
 
 	private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);

@@ -1,0 +1,172 @@
+{
+  "about": "1.9: sentences each summary word list must match, and must not (the text review's false matches among them). Written for the test, not taken from any summary. A case's show has its category's genres (genresAll and the first of genresAny) unless it names its own, and a length, network and years its rule allows. Census.Tests runs every case, and the app's TextWords must say the same of each (a throwaway check, see HANDOFF).",
+  "cases": [
+    { "id": "tv-workplace-comedies", "match": true, "text": "A mockumentary about the employees of a mid-sized paper company and their clueless boss." },
+    { "id": "tv-workplace-comedies", "match": true, "text": "Coworkers at a big-box store juggle customers, a new manager and each other." },
+    { "id": "tv-workplace-comedies", "match": false, "text": "A former child star tries to revive a career after a box office flop." },
+    { "id": "tv-workplace-comedies", "match": false, "text": "An old-school con man runs for office in a small town." },
+    { "id": "tv-workplace-comedies", "match": false, "text": "A staff sergeant comes home to a family that moved on without him." },
+    { "id": "tv-workplace-comedies", "match": false, "text": "A man and his crime boss uncle plan one last heist." },
+
+    { "id": "tv-friends-comedies", "match": true, "text": "Four egocentric friends who run a neighborhood pub in Philadelphia scheme their way through life." },
+    { "id": "tv-friends-comedies", "match": true, "text": "Six best friends navigate love and careers in Manhattan." },
+    { "id": "tv-friends-comedies", "match": false, "text": "A widow navigates life with the help of her family and friends." },
+
+    { "id": "tv-family-sitcoms", "match": true, "text": "A sportswriter copes with his overbearing parents and his jealous older brother." },
+    { "id": "tv-family-sitcoms", "match": true, "text": "Three related families, told by a mom, a dad and their kids." },
+    { "id": "tv-family-sitcoms", "match": false, "text": "A widow navigates life with the help of her family and friends." },
+    { "id": "tv-family-sitcoms", "match": false, "text": "A slacker lands a job at a call center." },
+
+    { "id": "tv-school-comedies", "match": true, "text": "A substitute teacher takes over a class of misfit students at an inner-city high school." },
+    { "id": "tv-school-comedies", "match": true, "text": "A study group at a community college forms an unlikely bond." },
+    { "id": "tv-school-comedies", "match": false, "text": "An old-school con man swindles his way across the Midwest." },
+    { "id": "tv-school-comedies", "match": false, "text": "A disgraced chef opens a food truck." },
+
+    { "id": "tv-bar-restaurant-comedies", "match": true, "text": "The regulars of a Boston drinking hole share their troubles." },
+    { "id": "tv-bar-restaurant-comedies", "match": true, "text": "A young chef from fine dining comes home to run his family's sandwich shop." },
+    { "id": "tv-bar-restaurant-comedies", "match": false, "text": "A young lawyer who just passed the bar exam joins a small firm." },
+    { "id": "tv-bar-restaurant-comedies", "match": false, "text": "A con man ends up behind bars." },
+
+    { "id": "tv-mockumentary-sitcoms", "match": true, "text": "A documentary crew follows the staff of a small-town parks department." },
+    { "id": "tv-mockumentary-sitcoms", "match": true, "text": "A documentary-style look at the nightly lives of four vampire roommates." },
+    { "id": "tv-mockumentary-sitcoms", "match": false, "text": "A camera-shy accountant inherits a bakery." },
+
+    { "id": "tv-small-town-comedies", "match": true, "text": "A wealthy family loses everything and moves to a tiny town they once bought as a joke." },
+    { "id": "tv-small-town-comedies", "match": true, "text": "Life on a farm in rural Canada." },
+    { "id": "tv-small-town-comedies", "match": false, "text": "A comedian makes it big in Greenwich Village." },
+    { "id": "tv-small-town-comedies", "match": false, "text": "A town council election turns the city upside down." },
+
+    { "id": "tv-small-town-mysteries", "match": true, "text": "A detective returns to her quiet coastal town to solve a murder." },
+    { "id": "tv-small-town-mysteries", "match": true, "text": "The sheriff of a remote mountain town investigates a disappearance." },
+    { "id": "tv-small-town-mysteries", "match": false, "text": "A detective hunts a killer across London." },
+
+    { "id": "tv-supernatural-comedies", "match": true, "text": "A couple inherits a country house full of bickering ghosts." },
+    { "id": "tv-supernatural-comedies", "match": true, "text": "Four vampires who have lived together for centuries struggle with modern life." },
+    { "id": "tv-supernatural-comedies", "match": false, "text": "After a scandal, a teacher faces a witch hunt at work." },
+    { "id": "tv-supernatural-comedies", "match": false, "text": "A diner owner in a ghost town dreams of fame." },
+    { "id": "tv-supernatural-comedies", "match": false, "text": "A speed demon cab driver races through New York." },
+
+    { "id": "tv-lgbtq", "match": true, "text": "Two rival hockey players fall into a secret gay romance." },
+    { "id": "tv-lgbtq", "match": true, "text": "A lesbian couple raises a family in Los Angeles.", "genres": ["Romance"] },
+    { "id": "tv-lgbtq", "match": false, "text": "A young man moves to the city to start a new career." },
+
+    { "id": "tv-animated-superheroes", "match": true, "text": "A teenager discovers he has inherited his father's superpowers." },
+    { "id": "tv-animated-superheroes", "match": true, "text": "The Justice League defends Earth from cosmic threats." },
+    { "id": "tv-animated-superheroes", "match": false, "text": "Four friends and a dog solve mysteries and unmask villains in haunted houses." },
+
+    { "id": "tv-lego", "match": true, "text": "Young ninjas protect Ninjago from the forces of evil." },
+    { "id": "tv-lego", "match": false, "text": "A boy builds a robot from spare parts." },
+
+    { "id": "tv-mecha-anime", "match": true, "text": "Teenagers piloting giant robots defend the last city from mysterious angels." },
+    { "id": "tv-mecha-anime", "match": true, "text": "A young pilot is drafted into a war of mobile suits.", "genres": ["Anime", "Sci-Fi & Fantasy"] },
+    { "id": "tv-mecha-anime", "match": false, "text": "A robot butler learns what it means to be human." },
+    { "id": "tv-mecha-anime", "match": false, "text": "Fighter pilots duel above a ruined planet." },
+
+    { "id": "tv-isekai-anime", "match": true, "text": "An office worker dies and is reincarnated as a slime in another world." },
+    { "id": "tv-isekai-anime", "match": true, "text": "A gamer is trapped in a game where death is real." },
+    { "id": "tv-isekai-anime", "match": false, "text": "Smuggled cargo is transported across the border." },
+    { "id": "tv-isekai-anime", "match": false, "text": "A witness is summoned before the court." },
+
+    { "id": "tv-school-romance-anime", "match": true, "text": "A shy transfer student falls for the class president." },
+    { "id": "tv-school-romance-anime", "match": true, "text": "Two classmates pretend to date to fool their friends at high school." },
+    { "id": "tv-school-romance-anime", "match": false, "text": "An old-school samurai falls in love with a merchant's daughter." },
+    { "id": "tv-school-romance-anime", "match": false, "text": "Two strangers meet at a night club in Tokyo." },
+
+    { "id": "tv-demon-hunter-anime", "match": true, "text": "A boy joins the demon slayers after his family is slaughtered." },
+    { "id": "tv-demon-hunter-anime", "match": true, "text": "Jujutsu sorcerers fight cursed spirits born of human fear." },
+    { "id": "tv-demon-hunter-anime", "match": false, "text": "A gambler is cursed with bad luck." },
+    { "id": "tv-demon-hunter-anime", "match": false, "text": "A scandal curses the royal family." },
+
+    { "id": "tv-superhero-anime", "match": true, "text": "In a world where most people have a super power, a powerless boy dreams of becoming a hero." },
+    { "id": "tv-superhero-anime", "match": true, "text": "A bald superhero defeats every enemy with one punch." },
+    { "id": "tv-superhero-anime", "match": false, "text": "A girl with odd quirks joins the tea club." },
+
+    { "id": "tv-post-apocalyptic-anime", "match": true, "text": "Humanity hides behind walls from man-eating titans." },
+    { "id": "tv-post-apocalyptic-anime", "match": true, "text": "Two girls wander a wasteland after the end of the world." },
+    { "id": "tv-post-apocalyptic-anime", "match": false, "text": "A scandal ruins the career of a pop idol." },
+    { "id": "tv-post-apocalyptic-anime", "match": false, "text": "Survivors of a shipwreck rebuild their lives." },
+
+    { "id": "tv-medical-dramas", "match": true, "text": "Surgical interns compete for residencies at a Seattle hospital." },
+    { "id": "tv-medical-dramas", "match": true, "text": "An emergency room's doctors and nurses face a brutal shift." },
+    { "id": "tv-medical-dramas", "match": false, "text": "The Doctor, a time-travelling alien, explores the universe in a blue police box.", "genres": ["Drama", "Science Fiction"] },
+    { "id": "tv-medical-dramas", "match": false, "text": "The residents of a quiet coastal town hide a dark secret." },
+    { "id": "tv-medical-dramas", "match": false, "text": "A detective wakes up in a hospital with no memory." },
+
+    { "id": "tv-legal-dramas", "match": true, "text": "A brilliant college dropout talks his way into a job at a top law firm." },
+    { "id": "tv-legal-dramas", "match": true, "text": "A small-time lawyer cuts corners in Albuquerque." },
+    { "id": "tv-legal-dramas", "match": false, "text": "The attorney general's son goes missing." },
+
+    { "id": "tv-political-dramas", "match": true, "text": "The senior staff of the White House navigate one crisis after another." },
+    { "id": "tv-political-dramas", "match": true, "text": "A ruthless congressman schemes his way to power in Washington." },
+    { "id": "tv-political-dramas", "match": false, "text": "A shy girl runs against the student body president." },
+    { "id": "tv-political-dramas", "match": false, "text": "A marketing campaign goes wrong at an advertising agency." },
+
+    { "id": "tv-teen-dramas", "match": true, "text": "A group of high school students navigate love, drugs and identity." },
+    { "id": "tv-teen-dramas", "match": true, "text": "Teenagers at an elite high school hide dangerous secrets." },
+    { "id": "tv-teen-dramas", "match": false, "text": "A mother and her teenage daughter move to a new town." },
+
+    { "id": "tv-mob-dramas", "match": true, "text": "A New Jersey mob boss balances his crime family and his therapy." },
+    { "id": "tv-mob-dramas", "match": true, "text": "The rise and fall of a cartel in 1980s Colombia." },
+    { "id": "tv-mob-dramas", "match": false, "text": "An angry mob gathers outside the courthouse." },
+
+    { "id": "tv-cop-dramas", "match": true, "text": "Detectives of a Baltimore homicide unit chase a drug ring." },
+    { "id": "tv-cop-dramas", "match": true, "text": "A police lieutenant and her squad patrol the city." },
+    { "id": "tv-cop-dramas", "match": false, "text": "A chemistry teacher turned drug maker evades the police." },
+    { "id": "tv-cop-dramas", "match": false, "text": "A family of thieves plans one last job." },
+
+    { "id": "tv-true-story-mini-series", "match": true, "text": "Based on a true story, the series follows the cover-up of a nuclear disaster." },
+    { "id": "tv-true-story-mini-series", "match": true, "text": "Inspired by real events in a small mining town." },
+    { "id": "tv-true-story-mini-series", "match": false, "text": "A fictional family saga set in the 1920s." },
+
+    { "id": "tv-superhero-series", "match": true, "text": "Superheroes who abuse their superpowers are hunted by a ragtag crew." },
+    { "id": "tv-superhero-series", "match": true, "text": "A team of young supes trains at a college for heroes." },
+    { "id": "tv-superhero-series", "match": false, "text": "Spies race to stop rival world powers from going to war." },
+    { "id": "tv-superhero-series", "match": false, "text": "A masked vigilante cleans up the streets of a corrupt city." },
+
+    { "id": "tv-space-series", "match": true, "text": "The crew of a starship explores deep space." },
+    { "id": "tv-space-series", "match": true, "text": "Colonists on a distant planet fight for survival." },
+    { "id": "tv-space-series", "match": false, "text": "A couple learns to respect each other's personal space." },
+    { "id": "tv-space-series", "match": false, "text": "Activists fight to save the planet." },
+
+    { "id": "tv-time-travel", "match": true, "text": "A combat nurse in 1945 is swept back in time to 18th-century Scotland." },
+    { "id": "tv-time-travel", "match": true, "text": "A time traveler from the future must prevent a war.", "genres": ["Sci-Fi & Fantasy"] },
+    { "id": "tv-time-travel", "match": false, "text": "A family saga told across two timelines.", "genres": ["Drama"] },
+    { "id": "tv-time-travel", "match": false, "text": "A family saga told across two timelines." },
+    { "id": "tv-time-travel", "match": false, "text": "A reporter goes back in time to 1960s Mississippi to reopen a cold case.", "genres": ["Drama", "Crime"] },
+    { "id": "tv-time-travel", "match": false, "text": "A reporter goes back in time to 1960s Mississippi to reopen a cold case." },
+
+    { "id": "tv-post-apocalyptic", "match": true, "text": "Two hundred years after the apocalypse, the residents of fallout shelters return to the surface." },
+    { "id": "tv-post-apocalyptic", "match": true, "text": "A smuggler crosses a wasteland after a fungal pandemic.", "genres": ["Drama", "Sci-Fi & Fantasy"] },
+    { "id": "tv-post-apocalyptic", "match": false, "text": "The true story of a 1986 nuclear disaster and the cover-up that followed.", "genres": ["Drama", "History", "Mini-Series"] },
+    { "id": "tv-post-apocalyptic", "match": false, "text": "Survivors of a plane crash in the wilderness, then and twenty-five years later.", "genres": ["Drama", "Mystery", "Horror"] },
+    { "id": "tv-post-apocalyptic", "match": false, "text": "Survivors of abuse rebuild their lives in a small town.", "genres": ["Drama"] },
+
+    { "id": "tv-dystopian", "match": true, "text": "In a totalitarian society, fertile women are forced into servitude." },
+    { "id": "tv-dystopian", "match": true, "text": "Teenagers rebel against the rulers of Gilead." },
+    { "id": "tv-dystopian", "match": false, "text": "A general rises under the regime of a ruthless dictator.", "genres": ["Drama", "War"] },
+    { "id": "tv-dystopian", "match": false, "text": "A general rises under the oppressive regime of an authoritarian ruler." },
+
+    { "id": "tv-zombies", "match": true, "text": "Survivors of a zombie outbreak search for a safe haven.", "genres": ["Drama", "Horror"] },
+    { "id": "tv-zombies", "match": true, "text": "The undead rise in a small Georgia town." },
+    { "id": "tv-zombies", "match": false, "text": "Doctors race to contain an infected population as walkers fill the streets.", "genres": ["Drama"] },
+    { "id": "tv-zombies", "match": false, "text": "Doctors race to contain an infected population as walkers fill the streets." },
+
+    { "id": "tv-vampires", "match": true, "text": "A vampire falls for a mortal girl in a rainy town.", "genres": ["Fantasy", "Romance"] },
+    { "id": "tv-vampires", "match": false, "text": "The secret lives of vampire bats.", "genres": ["Documentary"] },
+
+    { "id": "tv-aliens", "match": true, "text": "Extraterrestrials land in a small farming town." },
+    { "id": "tv-aliens", "match": true, "text": "An alien assassin hides out as a small-town doctor.", "genres": ["Comedy", "Sci-Fi & Fantasy"] },
+    { "id": "tv-aliens", "match": false, "text": "Allied troops prepare for the invasion of Normandy.", "genres": ["War", "Drama"] },
+    { "id": "tv-aliens", "match": false, "text": "Allied troops prepare for the invasion of Normandy." },
+
+    { "id": "tv-horror-anthologies", "match": true, "text": "An anthology of horror stories, with a new tale each season." },
+    { "id": "tv-horror-anthologies", "match": false, "text": "A family moves into a haunted house." },
+
+    { "id": "tv-paranormal", "match": true, "text": "A team of ghost hunters investigates haunted locations." },
+    { "id": "tv-paranormal", "match": false, "text": "Brothers distill spirits in the Appalachian mountains." },
+
+    { "id": "tv-drag", "match": true, "text": "Drag queens compete to be the next drag superstar." },
+    { "id": "tv-drag", "match": false, "text": "Street racers drag race through the city at night." },
+    { "id": "tv-drag", "match": false, "text": "A family from Queens drags itself through a long winter." }
+  ]
+}

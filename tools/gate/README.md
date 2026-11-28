@@ -40,7 +40,8 @@ and the player's controls; settings; lifecycle).
     tools\gate\run-gate.ps1                the runner
     tools\gate\run-job.ps1                 one job in its own hidden PowerShell (the runner's; checks don't call it)
     tools\gate\gate-common.ps1             helpers a check may dot-source
-    tools\gate\manifest\<owner>.psd1       each owner's checks (g1.psd1, g2.psd1, g3.psd1, g4.psd1, back.psd1, c180.psd1, m181.psd1): one file
+    tools\gate\manifest\<owner>.psd1       each owner's checks (g1.psd1, g2.psd1, g3.psd1, g4.psd1, back.psd1, c180.psd1, m181.psd1,
+                                           c190.psd1, s190.psd1): one file
                                            per owner, so no two streams write the same file; the runner reads them all
     tools\gate\checks\<class>-<name>.ps1   a check's own script, e.g. 1-signin-methods.ps1
 
@@ -139,4 +140,12 @@ check in one theme. A job that failed while Windows minimized its window (a moni
   in `manifest\back.psd1` at its merge.
 - g4: the player's controls (`then-174-hud`), `keys-matrix`.
 - c180 (1.8, BH-180-m3): `then-180-week`, `then-180-tiles`, `then-180-reverse`, `then-180-focus` (BH-180-M1), `then-180-off`
-  (BH-180-M2); nightly `then-180-census` and `then-180-first-row`. test_gate checks every `then-18x` script is in a manifest.
+  (BH-180-M2); nightly `then-180-census` and `then-180-first-row`. test_gate checks every `then-18x` and `then-19x` script is
+  in a manifest.
+- c190 (1.9, the ui stream): `then-190-collections` (categories190: the Categories row, the Franchises row's order and the
+  twins' years, the Categories switch), and rows190 (`4-rows.ps1` on the Collections page, every row; `RG_WAIT_ROW`), on a
+  25,000-film library with `FAKESERVER_FRANCHISES190`.
+- s190 (1.9, the scroll stream; release blocker): `then-190-scroll` (scroll190: a full scroll of the Collections page by the wheel,
+  Page Down and Page Up, the keys and the D-pad; nightly scroll190-nav: See all's grid and mixed input, kept out of release
+  runs by WinUI's known input fail-fast after a page change; both timed in frames by the dev build's frame clock,
+  `HarnessFrames`) at 190,992 titles (`FAKESERVER_BIG_LIBRARY=152800`, `FAKESERVER_BIG_SHOWS=37700`).

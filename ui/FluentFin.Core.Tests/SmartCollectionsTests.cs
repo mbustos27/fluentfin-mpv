@@ -827,7 +827,9 @@ public sealed class SmartCollectionsTests
 		// fix round (BH-173-m1): no title has a critics' rating or 5+ tags, so Acclaimed ranks by the rating alone, and says so
 		Assert.StartsWith("Made by Nixie census: 7 entries, 5 titles once copies are one; kind candidates/floor/cap: NextIn 0/0/0, MoreLike 0/0/0, MoreFrom 0/0/0, Franchise 1/0/0, Keyword 1/1/1, "
 			+ "HighlyRated 5/5/5 [rating only, no title has a critics' rating or 5+ tags: critic 0, tags5+ 0, listed 0], "
-			+ "UnfinishedSeries 0/0/0, Seasonal 0/0/0, ShortFilms 0/0/0, Award 0/0/0; 2 collections in ", line.Message); // 1.8: the Spotlight is made after the first rows (BuildLaterAsync)
+			+ "UnfinishedSeries 0/0/0, Seasonal 0/0/0, ShortFilms 0/0/0, Award 0/0/0, MicroGenre ", line.Message); // 1.8: the Spotlight is made after the first rows (BuildLaterAsync)
+		// 1.9: the categories last, their counts the shipped catalogue's (none past the floor of 8 here)
+		Assert.Matches($@", MicroGenre {MicroGenres.Shipped.Categories.Count}/0/0 \[[^\]]*\]; 2 collections in \d+ ms$", line.Message);
 		Assert.DoesNotContain("Secretname", line.Message);
 		Assert.DoesNotContain("Heat", line.Message);
 	}
@@ -966,7 +968,7 @@ public sealed class SmartCollectionsTests
 		// Find knows every builder's ids (1.8: the anchored slots' in AnchorsTests)
 		Assert.All(SmartCollectionCatalog.Builders.Except(FluentFin.Core.SmartCollections.Anchors.AnchoredSlots.Builders), x => Assert.Contains((SmartCollectionKind?)x.Kind, new[] { "franchise:1", "decade:movie:1980", "director:a", "actor:a", "studio:a", "network:a",
 			"genres:movie:a+b", "keyword:heist", "country:france", "pick:highly-rated", "pick:short-films", "pick:unfinished-series", "seasonal:halloween", "award:q1",
-			"spotlight:director:a" /* 1.8 (P1-3) */ }
+			"spotlight:director:a" /* 1.8 (P1-3) */, "micro:a" /* 1.9 */ }
 			.Select(SmartCollectionCatalog.KindOf)));
 		Assert.Null(SmartCollectionCatalog.KindOf("saved:1234"));
 	}

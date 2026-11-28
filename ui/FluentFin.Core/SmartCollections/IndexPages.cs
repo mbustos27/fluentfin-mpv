@@ -101,6 +101,17 @@ internal sealed class IndexPages
 	/// <summary>The pause before try <c>n + 1</c> (tests shorten it).</summary>
 	internal Func<int, CancellationToken, Task> Pause { get; init; } = (tried, cancellationToken) => Task.Delay(TimeSpan.FromSeconds(tried), cancellationToken);
 
+	// 1.9 (stream text)
+	/// <summary>
+	/// Nixie 1.9: awaited before each request, outside its <see cref="PageTimeout"/> (the summaries' pass waits here while the PC
+	/// is on standby, and stops here when its switch is off): a wait is never a page that ran out of time.
+	/// </summary>
+	internal Func<CancellationToken, Task>? BeforeAsk { get; init; }
+
+	/// <summary>Nixie 1.9: the requests asked so far (every try).</summary>
+	internal int Requests => Volatile.Read(ref _requests);
+	// end 1.9 (stream text)
+
 	/// <summary>A page came in (any order, off the UI thread): what is read so far, of how many (null until every count is in).</summary>
 	public event Action<int, int?>? PageIn;
 
@@ -365,6 +376,11 @@ internal sealed class IndexPages
 
 	private async Task<(BaseItemDtoQueryResult? Answer, TimeSpan Took, bool RanOut)> AskTimed(int library, int start, int limit, bool withTotal, CancellationToken cancellationToken)
 	{
+		if (BeforeAsk is { } before)
+		{
+			await before(cancellationToken).ConfigureAwait(false); // 1.9 (stream text): before the page's time starts
+		}
+
 		using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		timeout.CancelAfter(PageTimeout);
 		Interlocked.Increment(ref _requests);

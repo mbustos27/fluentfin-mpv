@@ -106,7 +106,7 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 			var fresh = await JellyfinClient.GetItem(id);
 			if (fresh is null)
 			{
-				return LoadMessages.CouldNotLoad("this movie");
+				return LoadMessages.CouldNotLoadTitle("this movie"); // 1.9: or that the server no longer has it
 			}
 
 			if (newest() && KeptCards.RefreshItem(shown, fresh))
@@ -157,7 +157,7 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 			await UpdateMovie(id);
 			if (Dto?.Id != id)
 			{
-				return LoadMessages.CouldNotLoad("this movie");
+				return LoadMessages.CouldNotLoadTitle("this movie"); // 1.9: or that the server no longer has it
 			}
 
 			await Task.WhenAll(UpdateSimilar(dto), UpdatePartOf(id));

@@ -482,7 +482,10 @@ function Rg-TestWheel([string]$Name) {
         $v0 = [RgUi]::PageV($script:hwnd, $script:ui.Id); $h0 = Rg-H $r
         [OffscreenUi]::Wheel($script:hwnd, $script:ui.Id, $c[0], $c[1], -720, $false, $false); Start-Sleep -Milliseconds 400
         $v1 = [RgUi]::PageV($script:hwnd, $script:ui.Id); $r1 = Rg-Row $Name; $h1 = if ($r1) { Rg-H $r1 } else { $h0 }
-        $pm = $v0 -ge 0 -and [Math]::Abs($v1 - $v0) -gt 0.05; $rm = [Math]::Abs($h1 - $h0) -gt 0.05
+        # Nixie 1.9 (c190's rows190): a row the notch took out of view is read at the centre of what is left of it, which can
+        # be another scroller (Editorial's top bar over it): its move counts only while it is still wholly in view
+        $inView = $r1 -and $r1.Rect -and $r1.Rect.H -ge $fullHeight * 0.8 -and (Rg-Whole $r1.Rect (Rg-View))
+        $pm = $v0 -ge 0 -and [Math]::Abs($v1 - $v0) -gt 0.05; $rm = $inView -and [Math]::Abs($h1 - $h0) -gt 0.05
         if ($pm) { $pageMoves++ }; if ($rm) { $rowMoves++ }; if ($pm -and $rm) { $rowWhilePage++ }
         if (-not $pm -and -not $rm) { break }
     }
@@ -731,7 +734,17 @@ foreach ($rgSize in $rgSizes) {
                 'cast' { if (Rg-OpenSeason) { Rg-TestCast } else { Rg-Record 'Cast & crew' 'found' 'fail' 'the season page did not open' } }
                 'series' { if (Rg-OpenSeries) { Start-Sleep -Seconds 2; Rg-TestPage } else { Rg-Record '(series)' 'found' 'fail' 'the series page did not open' } }
                 'home' { Open-Nav 'Home'; Start-Sleep -Seconds 4; Rg-TestPage }
-                'collections' { Open-Nav 'Collections'; [void](Wait-Ui -Id 'TitleText' -Name 'Collections' -Seconds 20); Start-Sleep -Seconds 6; Rg-TestPage }
+                'collections' {
+                    Open-Nav 'Collections'; [void](Wait-Ui -Id 'TitleText' -Name 'Collections' -Seconds 20); Start-Sleep -Seconds 6
+                    # Nixie 1.9 (c190's rows190): RG_WAIT_ROW names a row a first read of a big library brings (the Categories row
+                    # on 25,000 films): it is waited for, then the index's line, so the page's rows are all in when they are tested
+                    if ($env:RG_WAIT_ROW) {
+                        [void](Wait-Ui -Name $env:RG_WAIT_ROW -Type 'List' -OffscreenToo -Seconds 300 -PollMs 700)
+                        [void](Wait-Until { @(Get-ChildItem (Join-Path $DataDir 'Logs') -Filter 'log*.txt' -ErrorAction SilentlyContinue | Select-String -Pattern 'Library index: \d+ titles in \d+ libraries' -ErrorAction SilentlyContinue).Count } -Seconds 120 -PollMs 1000)
+                        Start-Sleep -Seconds 3
+                    }
+                    Rg-TestPage
+                }
                 'movie' { Open-Library $fixture.movie.library; Open-Card $fixture.movie.name; [void](Wait-ItemPage $fixture.movie.name); Start-Sleep -Seconds 3; Rg-TestPage }
                 'library' { Open-Library $fixture.movie.library; Start-Sleep -Seconds 3; Rg-TestPage }
                 'search' {

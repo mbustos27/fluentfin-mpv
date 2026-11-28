@@ -169,7 +169,7 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 			await UpdateSeries(id);
 			if (Dto?.Id != id)
 			{
-				return LoadMessages.CouldNotLoad("this series");
+				return LoadMessages.CouldNotLoadTitle("this series"); // 1.9: or that the server no longer has it
 			}
 
 			// 1.2.0: asked alongside the seasons; the list opens on the season Play starts in, so Play's label and the list agree

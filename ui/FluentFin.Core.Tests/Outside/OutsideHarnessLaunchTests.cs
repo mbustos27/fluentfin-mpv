@@ -194,7 +194,8 @@ public sealed class OutsideHarnessLaunchTests
 			&& a.ConstructorArguments.Select(x => x.Value as string).SequenceEqual(["Category", category]));
 		var assembly = typeof(OutsideHarnessLaunchTests).Assembly;
 		Assert.Equal([typeof(LiveOutsideSourcesTests)], assembly.GetTypes().Where(Live("LiveOutside")).ToList());
-		Assert.Equal([typeof(LiveIndexTests)], assembly.GetTypes().Where(Live("LiveIndex")).ToList());
+		// 1.9: and the index's requests on a big fake server (LiveIndexLoad190Tests), in the same category
+		Assert.Equal([typeof(LiveIndexLoad190Tests), typeof(LiveIndexTests)], assembly.GetTypes().Where(Live("LiveIndex")).OrderBy(t => t.Name, StringComparer.Ordinal).ToList());
 		Assert.Equal([typeof(LiveTrendingSourcesTests)], assembly.GetTypes().Where(Live("LiveTrending")).ToList());
 
 		// every test the release can't run (an opt-in Skip) sits in one of the three categories left out, so none is "not run"

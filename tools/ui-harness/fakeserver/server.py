@@ -22,6 +22,10 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
 - FAKESERVER_SHOWCASE=<manifest.json or its folder> (repo polish): the README screenshots' curated library (showcase.py)
   instead of the generated one: its films, series and collections with their own files for pictures, nothing generated;
   GET /__harness/showcase lists its credits and problems. Off by default.
+- FAKESERVER_BIG_SHOWS=<n> (Nixie 1.9, the summaries' pass): a "Shows Archive" library of n shows, each a season of one
+  episode, every show's summary themed for the categories' word lists or plain, about 8 % with none; with
+  FAKESERVER_BIG_LIBRARY=25877 and FAKESERVER_BIG_SHOWS=4975, the survey's library shape (30,852 titles). Every
+  generated show's summary begins with a theme sentence about two times in three (library.py's SHOW_THEMES).
 - FAKESERVER_BIG_SERIES=<seasons>x<episodes> (e.g. 10x20): a second showcase series in Shows, "A Tide of Seasons", every
   episode named uniquely in it; the fixture's "big_series" lists its seasons and episodes (null when off). Nixie 1.7.4: the
   series and its seasons have a cast of 16 with long names (library.py's LONG_CAST; the fixture's "big_series"."cast").

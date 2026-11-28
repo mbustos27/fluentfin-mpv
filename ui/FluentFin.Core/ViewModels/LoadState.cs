@@ -262,6 +262,24 @@ public static class LoadMessages
 	public static LoadOutcome CouldNotLoad(string what) => LoadOutcome.Failed($"Couldn't load {what}", CheckServer());
 
 	/// <summary>
+	/// Nixie 1.9 (the index's load): a film's or a show's page whose title the server no longer has (it answered that it hasn't
+	/// it, <see cref="Services.AnswerTrace.NotOnServer"/>): the library index reads every title at most once a day, so a row of
+	/// Collections can still hold a title removed since. Says so, with no step on the server (rule 11); else
+	/// <see cref="CouldNotLoad"/>.
+	/// </summary>
+	public static LoadOutcome CouldNotLoadTitle(string what)
+	{
+		if (Services.AnswerTrace.Current is not { NotOnServer: true })
+		{
+			return CouldNotLoad(what);
+		}
+
+		var name = ServerName();
+		return LoadOutcome.Failed($"Couldn't load {what}",
+			$"{(name == "the server" ? "The server" : name)} doesn't have it any more. {AppIdentity.Name}'s collections drop it when they're next read in full, within a day; go back to pick another.");
+	}
+
+	/// <summary>
 	/// 1.7.3 (rule 11): the server answered with an error of its own (5xx): the fault is on its side, so its owner is named,
 	/// and what the user can do here comes first.
 	/// </summary>

@@ -42,6 +42,59 @@ public partial class JellyfinClient
 	public Task<BaseItemDtoQueryResult?> GetLibraryPeoplePage(BaseItemDto library, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken) =>
 		IndexPage(library, PeopleFields, startIndex, limit, withTotal, cancellationToken, lean: true); // 1.7.1: lean
 
+	// 1.9 (Collections 2, stream text)
+	/// <summary>
+	/// Nixie 1.9: the summaries' pass (<see cref="SmartCollections.TextPass"/>): <see cref="ItemFields.Overview"/> and
+	/// <see cref="ItemFields.Taglines"/> alone, lean as the people pass (no images, no user data). Each summary is matched against
+	/// the categories' word lists as it comes and let go: the index never keeps one.
+	/// </summary>
+	internal static readonly ItemFields[] TextFields = [ItemFields.Overview, ItemFields.Taglines];
+
+	public Task<BaseItemDtoQueryResult?> GetLibraryTextPage(BaseItemDto library, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken) =>
+		IndexPage(library, TextFields, startIndex, limit, withTotal, cancellationToken, lean: true);
+
+	/// <summary>
+	/// Nixie 1.9: these titles' summaries by id (lean: the id, <see cref="TextFields"/>, no images, no user data), for the text
+	/// pass's titles new since it last ran; null when the server didn't answer. The server refusing (401, 403) ends the pass
+	/// (<see cref="IndexRefusedException"/>), as an index page does.
+	/// </summary>
+	public async Task<IReadOnlyList<BaseItemDto>?> GetTextByIds(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+	{
+		if (ids.Count == 0)
+		{
+			return [];
+		}
+
+		try
+		{
+			var page = await _jellyfinApiClient.Items.GetAsync(x =>
+			{
+				var query = x.QueryParameters;
+				query.Ids = [.. ids.Select(id => (Guid?)id)];
+				query.Fields = TextFields;
+				query.EnableImages = false;
+				query.EnableUserData = false;
+				query.EnableTotalRecordCount = false;
+			}, cancellationToken);
+			return page?.Items is { } items ? [.. items] : null;
+		}
+		catch (Exception) when (cancellationToken.IsCancellationRequested)
+		{
+			return null;
+		}
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 401 or 403)
+		{
+			logger.LogWarning("Summaries of {Count} titles: refused (HTTP {Status})", ids.Count, ex.ResponseStatusCode);
+			throw new IndexRefusedException(ex.ResponseStatusCode);
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning("Summaries of {Count} titles: {Error}", ids.Count, ex.GetType().Name); // no ids or text (rule 10)
+			return null;
+		}
+	}
+	// end 1.9 (stream text)
+
 	// 1.7.5 (fx1, BH-171-m5): the same page, of the titles the server saved since a time (MinDateLastSaved; /Items has no
 	// MinDateCreated, and a title's DateCreated can be its file's, years back)
 	public Task<BaseItemDtoQueryResult?> GetLibraryIndexPageSavedSince(BaseItemDto library, DateTimeOffset since, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken) =>
@@ -166,6 +219,126 @@ public partial class JellyfinClient
 		}
 	}
 	// end 1.8.1
+
+	// 1.9 (the index's load on a server that isn't the user's): the user's marks brought up to date without reading every
+	// title. The review's items 5 and 9: a 401 or 403 ends them (IndexRefusedException); a failure logs its type, never its
+	// message (which can carry the server's address)
+	// title. MinDateLastSavedForUser can't do it: on 10.11.11 and 12.4.0 it follows the titles' own save date, not the user's
+	// data (a film marked played or favourite a minute before isn't among them: tools\qa-servers\live-user-data-since.ps1)
+	/// <summary>
+	/// Nixie 1.9: the films and episodes the user played, latest first (by the time played), lean: the id, the user data and
+	/// an episode's show, no fields or images. Null on a failure.
+	/// </summary>
+	public Task<BaseItemDtoQueryResult?> GetPlayedLatelyPage(int startIndex, int limit, CancellationToken cancellationToken) =>
+		MarksPage([BaseItemKind.Movie, BaseItemKind.Episode], ItemFilter.IsPlayed, [ItemSortBy.DatePlayed, ItemSortBy.SortName], [SortOrder.Descending, SortOrder.Ascending],
+			startIndex, limit, withTotal: false, "Played lately", cancellationToken);
+
+	/// <summary>Nixie 1.9: the user's favourite films and shows, by name, lean (the id and the user data); null on a failure.</summary>
+	public Task<BaseItemDtoQueryResult?> GetFavoritesPage(int startIndex, int limit, CancellationToken cancellationToken) =>
+		MarksPage([BaseItemKind.Movie, BaseItemKind.Series], ItemFilter.IsFavorite, [ItemSortBy.SortName], [SortOrder.Ascending], startIndex, limit, withTotal: true, "Favourites", cancellationToken);
+
+	/// <summary>Nixie 1.9: how many of a show's episodes the user played (one request of one episode); null on a failure.</summary>
+	public async Task<int?> GetPlayedEpisodeCount(Guid seriesId, CancellationToken cancellationToken)
+	{
+		try
+		{
+			var answer = await _jellyfinApiClient.Items.GetAsync(x =>
+			{
+				var query = x.QueryParameters;
+				query.ParentId = seriesId;
+				query.IncludeItemTypes = [BaseItemKind.Episode];
+				query.Recursive = true;
+				query.Filters = [ItemFilter.IsPlayed];
+				query.EnableImages = false;
+				query.EnableUserData = false;
+				query.Limit = 1;
+				query.EnableTotalRecordCount = true;
+			}, cancellationToken);
+			return answer?.TotalRecordCount;
+		}
+		catch (Exception) when (cancellationToken.IsCancellationRequested)
+		{
+			return null;
+		}
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 401 or 403)
+		{
+			throw new IndexRefusedException(ex.ResponseStatusCode); // the review's item 5: the marks end there
+		}
+		catch (Exception ex)
+		{
+			logger.LogInformation("A show's played episodes: {Error}", ex.GetType().Name); // the review's item 9: no address
+			return null;
+		}
+	}
+
+	/// <summary>Nixie 1.9: these titles' user data (lean: the id and the user data); null on a failure.</summary>
+	public async Task<IReadOnlyList<BaseItemDto>?> GetUserDataByIds(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+	{
+		if (ids.Count == 0)
+		{
+			return [];
+		}
+
+		try
+		{
+			var page = await _jellyfinApiClient.Items.GetAsync(x =>
+			{
+				var query = x.QueryParameters;
+				query.Ids = [.. ids.Select(id => (Guid?)id)];
+				query.EnableImages = false;
+				query.EnableTotalRecordCount = false;
+			}, cancellationToken);
+			return page?.Items is { } items ? [.. items] : null;
+		}
+		catch (Exception) when (cancellationToken.IsCancellationRequested)
+		{
+			return null;
+		}
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 401 or 403)
+		{
+			throw new IndexRefusedException(ex.ResponseStatusCode); // the review's item 5
+		}
+		catch (Exception ex)
+		{
+			logger.LogInformation("User data of {Count} titles: {Error}", ids.Count, ex.GetType().Name);
+			return null;
+		}
+	}
+
+	private async Task<BaseItemDtoQueryResult?> MarksPage(BaseItemKind[] kinds, ItemFilter filter, ItemSortBy[] sortBy, SortOrder[] order, int startIndex, int limit, bool withTotal,
+		string what, CancellationToken cancellationToken)
+	{
+		try
+		{
+			return await _jellyfinApiClient.Items.GetAsync(x =>
+			{
+				var query = x.QueryParameters;
+				query.IncludeItemTypes = kinds;
+				query.Recursive = true;
+				query.Filters = [filter];
+				query.SortBy = sortBy;
+				query.SortOrder = order;
+				query.EnableImages = false;
+				query.StartIndex = Math.Max(0, startIndex);
+				query.Limit = Math.Max(1, limit);
+				query.EnableTotalRecordCount = withTotal;
+			}, cancellationToken);
+		}
+		catch (Exception) when (cancellationToken.IsCancellationRequested)
+		{
+			return null;
+		}
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 401 or 403)
+		{
+			throw new IndexRefusedException(ex.ResponseStatusCode); // the review's item 5: the marks end there
+		}
+		catch (Exception ex)
+		{
+			logger.LogInformation("{What} {Start}+{Limit}: {Error}", what, startIndex, limit, ex.GetType().Name); // the review's item 9: no address
+			return null;
+		}
+	}
+	// end 1.9
 
 	/// <summary>What a library's index holds: films, or shows (not their episodes); null for a library the index skips.</summary>
 	internal static BaseItemKind[]? IndexKinds(BaseItemDto library) => library.CollectionType switch

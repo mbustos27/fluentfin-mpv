@@ -16,6 +16,7 @@ it). The generation uses a random source of its own, after everything else, so t
 """
 
 import datetime
+import os
 import random
 
 COUNTRIES = (["United States of America"] * 10 + ["United Kingdom"] * 3 + ["France"] * 3 + ["Japan"] * 2 +
@@ -24,6 +25,20 @@ DIRECTORS = ["Ava Abara", "Bruno Okonkwo-Lind", "Celeste Marrow"]
 FRANCHISES = [("9101", 3), ("9102", 2), ("9103", 4), ("9104", 2), ("9105", 3), ("9106", 2)]
 BOXED_FRANCHISE = "9001"
 BOXED_NAME = "Kestrel Bay Trilogy"
+# Nixie 1.9 (the ui stream; the owner's library, fix 6): FAKESERVER_FRANCHISES190=1 adds eight franchises of three films to
+# Movies: two that share a name (Nixie says each with its years) and one the user started (its first film played half an hour
+# ago), named to come last A to Z, so the Franchises row, by relevance, opens on it while See all opens on another
+TWIN_NAME = "Harbor Watch"
+STARTED_NAME = "Zenith Lane"
+FRANCHISES190 = [
+    ("9191", [(TWIN_NAME, 1958), (TWIN_NAME + " Returns", 1961), (TWIN_NAME + " Forever", 1966)]),
+    ("9192", [(TWIN_NAME, 2015), (TWIN_NAME + ": Tides", 2018), (TWIN_NAME + ": Undertow", 2022)]),
+    ("9193", [(STARTED_NAME, 2001), (STARTED_NAME + " 2", 2004), (STARTED_NAME + " 3", 2008)]),
+] + [
+    # and five more nobody started, so the Franchises row runs past its dozen (See all) on any seed of the rest
+    (str(9194 + k), [(name, 1990 + k), (name + " 2", 1993 + k), (name + " 3", 1996 + k)])
+    for k, name in enumerate(["Amber Coast", "Bluebell Ridge", "Cinder Point", "Driftwood Bay", "Echo Valley"])
+]
 
 
 def apply(lib, view_id):
@@ -68,6 +83,39 @@ def apply(lib, view_id):
                 ud.update(played=True, play_count=1, last_played=when + datetime.timedelta(minutes=k), position=0)
             else:
                 ud.update(played=False, position=0, last_played=None)
+    if os.environ.get("FAKESERVER_FRANCHISES190"):
+        franchises190(lib, view_id)
+
+
+def franchises190(lib, view_id):
+    """Nixie 1.9: the twins and the started franchise (FRANCHISES190), with a random source of their own, after the rest."""
+    saved, lib.rng = lib.rng, random.Random(1909)
+    try:
+        for tmdb, films in FRANCHISES190:
+            for k, (name, year) in enumerate(films):
+                mid = lib_id("movie", "Movies", name, year)   # the twins' first films share a name
+                if mid in lib.items:
+                    continue
+                item = lib._common(mid, "movie", name, view_id, view_id, lib.now - datetime.timedelta(days=400 + k),
+                                   year, ["Drama", "Mystery"], "PG-13")
+                item.update(showcase=None, tmdb_collection=tmdb)
+                lib.items[mid] = item
+                lib.children[view_id].append(mid)
+                lib._names.add(name)
+                ud = lib._ud(mid)
+                if tmdb == "9193" and k == 0:
+                    ud.update(played=True, play_count=1, last_played=lib.now - datetime.timedelta(minutes=30), position=0)
+                else:
+                    ud.update(played=False, play_count=0, last_played=None, position=0)
+        lib.children[view_id].sort(key=lambda i: lib.sort_name(lib.items[i]))
+    finally:
+        lib.rng = saved
+
+
+def lib_id(*parts):
+    """An item id as library.py makes them (its _id: imported late, as library imports this module)."""
+    import library
+    return library._id(*parts)
 
 
 def provider_ids(lib, item):
@@ -82,7 +130,8 @@ def provider_ids(lib, item):
 
 
 def with_fields(lib, d, item, fields):
-    """An /Items answer's item: ProviderIds, Studios, People and ProductionLocations only when Fields asks for them."""
+    """An /Items answer's item: ProviderIds, Studios, People, ProductionLocations and (1.9) Taglines only when Fields asks
+    for them."""
     if item["kind"] in ("view", "person"):
         return d
     if "providerids" in fields:
@@ -93,6 +142,8 @@ def with_fields(lib, d, item, fields):
         d["People"] = list(item.get("people") or [])
     if "productionlocations" in fields and item["kind"] == "movie":
         d["ProductionLocations"] = list(item.get("countries") or [])
+    if "taglines" in fields:   # Nixie 1.9 (stream text): the summaries' pass asks Overview and Taglines
+        d["Taglines"] = [item["tagline"]] if item.get("tagline") else []
     return d
 
 

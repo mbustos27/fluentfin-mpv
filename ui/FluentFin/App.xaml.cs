@@ -237,6 +237,7 @@ public partial class App : Application
 			// 1.6 collections: the library index Nixie's collections are built from, and what the user keeps of them (on this PC)
 			services.AddSingleton<Core.SmartCollections.LibraryIndex>();
 			services.AddSingleton<Core.SmartCollections.SmartCollectionStore>();
+			services.AddSingleton<Core.SmartCollections.TextPass>(); // 1.9 (stream text): the summaries' pass, behind the index
 			services.AddSingleton<Core.SmartCollections.NixieLibraryPresets>();
 			// the colpage stream's seams (its LibraryPresets.cs): the presets strip's Nixie entries, and Save as collection
 			services.AddSingleton<Core.SmartCollections.NixieLibraryPresetSource>();
@@ -429,6 +430,13 @@ public partial class App : Application
 			Core.ViewModels.SmartCollectionServices.Index = GetService<Core.SmartCollections.LibraryIndex>();
 			Core.ViewModels.SmartCollectionServices.Store = GetService<Core.SmartCollections.SmartCollectionStore>();
 			Core.ViewModels.SmartCollectionServices.Settings = GetService<ILocalSettingsService>();
+			// 1.9 (the ui stream; wire's review, Minor 9): every 1.8.1 kind off keeps Made by Nixie off: the categories go off too,
+			// once, before anything reads the kinds (the summaries' pass below, the index, the pages)
+			Core.SmartCollections.CollectionSettings.Migrate(GetService<ILocalSettingsService>(), GetService<ILogger<App>>());
+			// 1.9 (stream text): the summaries' pass follows the index from its first load (it runs after Home's first Made by Nixie
+			// row). Home isn't marked stale by what it finds: Home's build makes no category (wire's review, Minor 3)
+			Core.SmartCollections.TextPass.App = GetService<Core.SmartCollections.TextPass>();
+			// end 1.9 (stream text)
 			GetService<Core.SmartCollections.NixieLibraryPresets>(); // listening to the index from the start: the presets are ready when a library opens
 			Core.SmartCollections.SmartCollectionCatalog.Log = GetService<Microsoft.Extensions.Logging.ILoggerFactory>().CreateLogger(typeof(Core.SmartCollections.SmartCollectionCatalog)); // 1.7.2: a kind that couldn't be made
 			// 1.7 keyless: the outside lists (each source's cache; what is stale is fetched, for the sources turned on). When they
@@ -457,6 +465,7 @@ public partial class App : Application
 			base.OnLaunched(args);
 
 			MainWindow.AppWindow.Closing += AppWindow_Closing;
+			Services.BackgroundPauseWatch.Start(MainWindow, GetService<ILogger<App>>()); // 1.9 (stream text, rule 5): standby, display off, minimised
 
 			// a hung mpv window would freeze our input too (the queues of the two processes are attached)
 			GetService<MpvVideoHost>().Unresponsive += reason => GetService<IMpvBackend>().Kill(reason);

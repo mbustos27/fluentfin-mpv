@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Nixie 1.9 (Collections 2, stream cat): the census of the category catalogue on a saved library index, counts only
+       (tools\collections\README.md). Reads the index with the app's own IndexEntry and CanonicalTitles. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <RootNamespace>Nixie.Collections</RootNamespace>
+    <AssemblyName>Census</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ui\FluentFin.Core\FluentFin.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Census.Tests" />
+  </ItemGroup>
+
+</Project>

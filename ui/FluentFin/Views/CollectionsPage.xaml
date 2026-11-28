@@ -160,7 +160,16 @@
         </DataTemplate>
     </Page.Resources>
 
-    <ScrollView x:Name="PageScroller" HorizontalScrollMode="Disabled">
+    <!--
+        Nixie 1.9 (the review of the ui stream; older than 1.9): the ScrollView took the mouse wheel itself, so the rows' own
+        hand-over (EdgeScroller: the page while it can move, then the row under the pointer) never ran, and at the page's end the
+        wheel over a row moved nothing. It ignores the wheel now: over a row EdgeScroller decides, elsewhere the page's handler
+        (CollectionsPage.xaml.cs) scrolls it. Touch, the keyboard and the scroll bar are as before
+    -->
+    <ScrollView
+        x:Name="PageScroller"
+        HorizontalScrollMode="Disabled"
+        IgnoredInputKinds="MouseWheel">
         <StackPanel
             x:Name="PageContent"
             Padding="36,72,36,48"
@@ -263,6 +272,20 @@
                 Orientation="Horizontal"
                 Spacing="10"
                 Visibility="{x:Bind ViewModel.IsSeeAll, Mode=OneWay}">
+                <!--
+                    1.9 (the owner: "i dont think the categories should be alphabetical"): the categories' See all orders "For you"
+                    (the lineup's ranking) or A to Z; this button swaps them, Narrator "For you, switch to A to Z". Only there; a
+                    tab stop before the direction button, so keyboard and gamepad reach it
+                -->
+                <Button
+                    x:Name="GridOrderButton"
+                    AutomationProperties.Name="{x:Bind ViewModel.GridOrderName, Mode=OneWay}"
+                    Click="GridOrder_Click"
+                    Content="{x:Bind ViewModel.GridOrderWords, Mode=OneWay}"
+                    Style="{StaticResource NixieCompactButtonStyle}"
+                    ToolTipService.Placement="Bottom"
+                    ToolTipService.ToolTip="{x:Bind ViewModel.GridOrderTip, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.HasGridOrder, Mode=OneWay}" />
                 <Button
                     x:Name="GridDirectionButton"
                     AutomationProperties.Name="{x:Bind ViewModel.GridDirectionName, Mode=OneWay}"

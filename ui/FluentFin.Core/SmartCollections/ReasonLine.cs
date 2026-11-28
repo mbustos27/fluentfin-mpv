@@ -231,7 +231,7 @@ public static class ReasonFacts
 	public static string Finished(string name) => $"You finished {name.Trim()}";
 
 	/// <summary>
-	/// 1.8.1 (the owner's library, fix 3): "You watched 36 of 39 episodes of What We Do in the Shadows": a show the anchors count
+	/// 1.8.1 (the owner's library, fix 3): "You watched 36 of 39 episodes of Moonlit Flatmates": a show the anchors count
 	/// finished (90 % of its episodes) with episodes left, which "You finished" misstated.
 	/// </summary>
 	public static string WatchedEpisodes(string name, int played, int of) =>
@@ -245,6 +245,23 @@ public static class ReasonFacts
 
 	/// <summary>"Next: Mission: Impossible III (2006)".</summary>
 	public static string Next(string name, int? year) => $"Next: {Named(name, year)}";
+
+	// 1.9 (Phase 3, R2: the critical review's option 3)
+	/// <summary>A category's reason names at most this many of the titles played inside it.</summary>
+	public const int WithMost = 2;
+
+	/// <summary>
+	/// 1.9 (Phase 3, R2): "With “Cowboy Bebop” and “Trigun”": the titles a category holds that were played, at most
+	/// <see cref="WithMost"/>, as given (the latest played first), each in curly quotes as the keyword reason's (the Phase 3
+	/// review: "With You and Your Lie in April" read as about the viewer). A fact about the category's titles, never about the
+	/// viewer's habits; "" for none.
+	/// </summary>
+	public static string With(IEnumerable<string?> names)
+	{
+		var named = names.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!.Trim()).Distinct(StringComparer.Ordinal).Take(WithMost).ToList();
+		return named.Count == 0 ? "" : $"With {string.Join(" and ", named.Select(x => $"“{x}”"))}";
+	}
+	// end 1.9 (Phase 3)
 }
 
 /// <summary>

@@ -1,0 +1,116 @@
+// Nixie 1.9 (stream match): a small catalogue of the shipped format, for the loader's, the matcher's and the builder's tests
+// until the cat stream's SmartCollections\Data\micro-genres.json lands. Every rule field is used at least once.
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "crime-drama-1970s",
+      "name": "Gritty 1970s Crime Dramas",
+      "kind": "films",
+      "family": "crime",
+      "parent": "keyword:neo-noir",
+      "rule": {
+        "genresAll": ["Crime", "Drama"], "genresAny": [], "genresNone": ["Animation", "Documentary"],
+        "keywordsAny": [], "keywordsAll": [], "keywordsNone": [],
+        "years": [1970, 1979],
+        "countriesAny": [], "studiosAny": [],
+        "lengthMinutes": [null, null],
+        "communityMin": null, "criticMin": null,
+        "textAny": []
+      },
+      "reason": "Crime and drama, 1970–79"
+    },
+    {
+      "id": "hong-kong-action",
+      "name": "Hong Kong Action Movies",
+      "kind": "films",
+      "family": "action",
+      "parent": "keyword:martial arts",
+      "rule": { "genresAll": ["Action"], "countriesAny": ["Hong Kong"] },
+      "reason": "Action, made in Hong Kong"
+    },
+    {
+      "id": "korean-thrillers",
+      "name": "South Korean Thrillers",
+      "kind": "films",
+      "family": "thriller",
+      "rule": { "genresAll": ["Thriller"], "genresNone": ["Comedy"], "countriesAny": ["South Korea"] },
+      "reason": "Thrillers made in South Korea"
+    },
+    {
+      "id": "heists-rated-7",
+      "name": "Highly Rated Heist Movies",
+      "kind": "films",
+      "family": "crime",
+      "parent": "keyword:heist",
+      "rule": { "keywordsAny": ["heist"], "communityMin": 7 },
+      "reason": "TMDb keyword “heist”, rated 7 or more"
+    },
+    {
+      "id": "time-twist-comedies",
+      "name": "Time-bending Comedies",
+      "kind": "films",
+      "family": "time",
+      "parent": "keyword:time travel",
+      "rule": { "genresAll": ["Comedy"], "keywordsAny": ["time travel", "time loop"] },
+      "reason": "Comedies with time travel or a time loop"
+    },
+    {
+      "id": "acclaimed-war-films",
+      "name": "Critically Acclaimed War Movies",
+      "kind": "films",
+      "family": "war",
+      "parent": "keyword:world war ii",
+      "rule": { "genresAll": ["War"], "criticMin": 80 },
+      "reason": "War films, critics' rating 80 or more"
+    },
+    {
+      "id": "small-town-mysteries",
+      "name": "Small-town Mysteries",
+      "kind": "films",
+      "family": "mystery",
+      "rule": { "genresAll": ["Mystery"], "keywordsAll": ["small town"], "keywordsNone": ["christmas"] },
+      "reason": "Mysteries set in a small town"
+    },
+    {
+      "id": "short-90s-comedies",
+      "name": "Short Comedies from the 1990s",
+      "kind": "films",
+      "family": "comedy",
+      "rule": { "genresAll": ["Comedy"], "genresAny": ["Romance", "Family"], "years": [1990, 1999], "lengthMinutes": [null, 90] },
+      "reason": "Comedies of 90 minutes or less, 1990–99"
+    },
+    {
+      "id": "sitcoms-2000s",
+      "name": "2000s Sitcoms",
+      "kind": "shows",
+      "family": "sitcom",
+      "rule": { "genresAll": ["Comedy"], "genresNone": ["Animation"], "years": [2000, 2009], "lengthMinutes": [null, 35] },
+      "reason": "Comedy, episodes of 35 minutes or less, 2000–09"
+    },
+    {
+      "id": "hour-long-crime-dramas",
+      "name": "Hour-long Crime Dramas",
+      "kind": "shows",
+      "family": "crime",
+      "rule": { "genresAll": ["Crime", "Drama"], "lengthMinutes": [40, null], "communityMin": 7.5 },
+      "reason": "Crime and drama, episodes of 40 minutes or more"
+    },
+    {
+      "id": "hbo-dramas",
+      "name": "HBO Dramas",
+      "kind": "shows",
+      "family": "network",
+      "rule": { "genresAll": ["Drama"], "studiosAny": ["HBO"] },
+      "reason": "Dramas from HBO"
+    },
+    {
+      "id": "workplace-comedies",
+      "name": "Workplace Comedies",
+      "kind": "shows",
+      "family": "sitcom",
+      "rule": { "genresAll": ["Comedy"], "textAny": ["office", "coworkers", "boss"] },
+      "reason": "Its summary mentions an office"
+    }
+  ]
+}

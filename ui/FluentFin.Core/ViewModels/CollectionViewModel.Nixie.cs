@@ -150,6 +150,14 @@ public partial class CollectionViewModel
 			return LoadMessages.CouldNotLoad("this collection");
 		}
 
+		// 1.9 (the index's load, the review's item 4): titles asked by id that the server didn't answer, while the index says
+		// titles were removed (RemovalsDue): out of the index now, Made by Nixie's other rows with them, not at the day's read
+		if (nixie.Collection.Filter is null && items.Count < nixie.Collection.ItemIds.Count && SmartCollectionServices.Index is { } index)
+		{
+			var came = items.Select(x => x.Id).OfType<Guid>().ToHashSet();
+			_ = index.TitlesGone([.. nixie.Collection.ItemIds.Where(x => !came.Contains(x))]);
+		}
+
 		_serverOrder = [.. items];
 		_placeKnown = false;
 		RecallDirection(KeepsPlace?.Invoke() == true); // 1.8: R puts a Made by Nixie collection's direction back too

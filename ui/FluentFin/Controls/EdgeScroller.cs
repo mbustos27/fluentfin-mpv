@@ -254,7 +254,7 @@ internal sealed class EdgeScroller
 		// the plain wheel is the page's while the page can move its way; at the page's end (or on a page that does not scroll)
 		// the row under the pointer takes it, so a row is never out of the wheel's reach
 		var pageCanUse = page is not null ? RowPaging.PageCanScroll(SmoothScroll.Current(page, horizontal: false), page.ScrollableHeight, pixels)
-			: view is not null && RowPaging.PageCanScroll(view.VerticalOffset, view.ScrollableHeight, pixels);
+			: view is not null && RowPaging.PageCanScroll(SmoothScroll.Current(view), view.ScrollableHeight, pixels);
 		// 1.7.4 integration (the rows review's m3): at the page's end the row takes the wheel only once the page has stopped there
 		// and the wheel has rested (a timestamp, no timer): a fast spin or a touchpad's coasting no longer slides the row
 		var now = Environment.TickCount64;
@@ -281,9 +281,9 @@ internal sealed class EdgeScroller
 			s_pageTookTheWheelAt = now;
 			if (pageCanUse)
 			{
-				// a page of the newer ScrollView (the Collections page), which the row's scroll viewer kept the wheel from
-				var animation = SafeMotion.Allowed ? ScrollingAnimationMode.Auto : ScrollingAnimationMode.Disabled;
-				view.ScrollBy(0, pixels, new ScrollingScrollOptions(animation, ScrollingSnapPointsMode.Ignore));
+				// a page of the newer ScrollView (the Collections page), which the row's scroll viewer kept the wheel from. Nixie 1.9
+				// (the scroll stream): from where the page is going (SmoothScroll), not where it is: ScrollBy lost most of a quick spin
+				SmoothScroll.By(view, pixels);
 			}
 		}
 

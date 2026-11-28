@@ -174,6 +174,62 @@ runs post keys and cannot move the real cursor or hear sound).
     its reason and count, and its badges; the button as "Newest first, switch to oldest first", and the new words after
     a press (off-screen runs read the UI Automation names, not what Narrator says): not run, for the owner.
 
+## Nixie 1.9: Collections 2
+Pre-release fixes on `wip/190-fix` (from the merged 1.9 at `a278808a`): the offline run on the owner's library
+(`docs\reports\Collections 2 on the owner's library 2026-11-26.md`, local) and the bug hunt (`docs\bughunt\BH-190.md`,
+local). Fixed before release: the week kept before the summaries' pass read the shows (BH-190-M2); a missing episode
+length failing every length rule; started shows leading a category's tiles with "none watched"; show categories ranked
+below film ones (BH-190-M1); a two-minute wait before every summaries pass with no Made by Nixie row on Home
+(BH-190-m1); finished franchises leading the Franchises row (BH-190-m4); a few catalogue lines (documentaries, talk,
+reality and news out of seven show categories); two nits.
+
+**Left (1.9.1 or later):**
+- **Country codes against names.** Some servers give films ISO codes ("IT", "KR", "HK") where the catalogue says "Italy".
+  The owner's library does, so its 27 country rules match nothing. Map the 12 countries the catalogue uses in
+  `MicroGenreMatcher.cs` (`Clean` and the posting lists): about 21 more film categories there (Spaghetti Westerns, Hong
+  Kong Action, South Korean Thrillers). Its shows have countries too: a country form of "South Korean TV Dramas" would
+  catch the Korean dramas played there.
+- **Network rules against production companies.** Most of that library's shows list production companies as studios
+  ("FX Productions", "20th Century Fox Television"), so the network rules miss them (three FX
+  comedies played there). Add the production arms to the rules' `studiosAny`, or match a studio whose key starts with
+  the network's (`MicroGenreMatcher.KeyOf`).
+- **The quality score with no backing data.** A server with no critics, no tags and no lists runs the score in plain
+  mode, where the confidence is only "in two or more libraries": k is 0 for nearly every title, so the score is the
+  kind's mean, the new-title and concert caution has nothing to halve (2026 titles lead 5 categories there), and shows
+  (mean 6.96) push films (5.98) out of Acclaimed (19 of 20 shows). Give every rated title a base confidence
+  (`QualityScore.Backing`), rank mixed lists by the distance from each kind's mean (`HighlyRatedBuilder`), and make the
+  backing gate per kind. It moves every ranking: re-tune on both libraries. (Fix G ranks the categories by their place
+  within their kind, which doesn't need the score fixed.)
+- **Done before 1.9 shipped: the Spotlight's taste on a big library.** 11,812 candidates there; those with a taste of 2 or
+  more held 25 % of the draw, so the pick was close to random. Phase 3 (R5) draws from the nearest by likeness only (the
+  top 1 to 5 %), the rebuild's fix weighs each of them by its place (`SpotlightBuilder.NearestDecay`: the 20 most alike
+  get most of the weeks), and a show sampled once no longer counts toward the nearness.
+- **A fixed cap beside the 1 % ceiling.** 1 % of 152,849 films lets a 1,315-film "History Documentaries" through. Cap the
+  ceiling (about 400 films and 150 shows) in `MicroGenreBuilder.CeilingOf` and the lineup's `CategoryCeiling`.
+- **Going back to 1.8.1** can name keywords outside the allowlist until 1.8.1's daily read rewrites the index (1.9's
+  index keeps the matchable keywords beside the allowlist). The installer blocks downgrades, so this needs a manual
+  reinstall or a portable copy. 1.8.1 doesn't know `LibraryIndex\Summaries` either,
+  so a sign-out under it leaves that user's matches (category ids per title id) on this PC (BH-190-q3).
+- **BH-190-m2: a show's summary is read once.** A show the server re-identifies, or whose overview is edited or filled in
+  later, keeps its first summary's categories until the word lists change (`TextPass.Plan` asks a title again only when
+  it had no summary). Re-ask by id the titles whose index entry changed (a stamp of name, year and provider ids), or a
+  slow rotation (a thirtieth a day).
+- **BH-190-m3: the fake server's shows nearly all have a summary.** Its blank-overview shows keep a tagline, which the
+  pass counts as a summary: 1.3 % unknown to the app, not about 8 %, so the harness barely runs rule 4's unknown path.
+  Blank the tagline with the overview in `_big_shows` and give generated shows taglines rarely (real servers: 0 of 31).
+- **From the offline run, for later:** word lists too broad on a big library (School Comedies 868 shows; Paranormal
+  Investigation takes nature documentaries; LEGO Series takes Rick & Steve: changing a list reads the summaries once); no
+  seasonal row on a library without tags (Christmas and Thanksgiving are tag-only); "Superhero Series" and "Superhero
+  Anime" in one row (different families, one theme); More like by people alone drifts (a sitcom's More like offered a
+  cast member's crime drama).
+- **A server that refuses the summaries' read** (HTTP 401 or 403 on the lean request) never has a week's categories kept
+  (fix A waits for the summaries): the row is chosen again at each build (it can move as plays come in) until the
+  next sign-in lets the pass try again.
+- **The census tool** (`tools\collections\Census`) keeps its own matcher: it doesn't know fix B's rule (a length keeps
+  the titles of no length where most of their kind have none), so it undercounts length rules on such a library.
+- **BH-190 nits:** the pass's logged duration includes the time it was paused, and "the pass waits" is logged once for
+  each page in flight (q1); Categories off keeps the weekly history of the categories shown, as a sign-out doesn't (q2).
+
 ## Nixie 1.8.1: the fix release
 Released 2026-11-25 at 9:41 PM (`eae19dd6`, tag `v1.8.1`). Three streams (back, mem, minors), each reviewed when done and
 again after its fixes, a second review of the collection fixes, a bug hunt (`docs\bughunt\BH-181.md`, local) and a

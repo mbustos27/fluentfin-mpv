@@ -131,7 +131,7 @@ public sealed record BuildContext(IndexSnapshot Index, DateTimeOffset Now, IRead
 		}
 
 		var backing = RatingBacking.Of(titles.Entries, listed, Index.BackingKnown);
-		var score = QualityScore.Of(titles, listed, plain: !backing.Any);
+		var score = QualityScore.Of(titles, listed, plain: !backing.Any, now: Now); // 1.9 (fix 9): the day says what is new
 		_quality = (titles, Outside, score, backing);
 		return (score, backing);
 	}

@@ -28,6 +28,9 @@ public static class SmartCollectionCatalog
 		.. Anchors.AnchoredSlots.Builders, // 1.8 (P1-2, stream a): Next in, More like, More from (none without an anchor)
 		new FranchiseBuilder(), new KeywordBuilder(), new HighlyRatedBuilder(), new UnfinishedSeriesBuilder(), new SeasonalBuilder(), new ShortFilmsBuilder(),
 		new AwardBuilder(), // 1.7 keyless: Wikidata's awards (nothing without its lists)
+		// 1.9 (Collections 2): the catalogue's categories, with the first rows: its posting lists are made once an index (the
+		// round's titles, CollapsedOf), and 300 rules match in about 5 ms over 31,000 titles (MicroGenreBuilderBudgetTests)
+		new MicroGenreBuilder(),
 	];
 
 	/// <summary>The builders of the kinds made only when asked for (<see cref="Find"/>, <see cref="BuildKinds"/>), never published.</summary>
@@ -85,9 +88,12 @@ public static class SmartCollectionCatalog
 		BuildPublished(index, now, boxedFranchises, kindsOff, outside, census: false);
 
 	// 1.7.3 (P0-3): the published builders, and only their kinds whatever a builder makes
+	// 1.9 (Collections 2): with the index's titles collapsed once an index (CollapsedOf), not once a build: the categories'
+	// posting lists are kept with them (MicroGenreMatcher.For), so the pages' builds of one index make them once (about 35 ms
+	// at 31,000 titles), not at each page
 	private static IReadOnlyList<SmartCollection> BuildPublished(IndexSnapshot index, DateTimeOffset now, IReadOnlySet<string>? boxedFranchises, IReadOnlySet<SmartCollectionKind>? kindsOff,
 		Outside.OutsideListsSnapshot? outside, bool census) =>
-		[.. BuildAll(PublishedBuilders, index, now, boxedFranchises, kindsOff, outside, Log, census, publishing: true).Where(x => Published.Contains(x.Kind))];
+		[.. BuildAll(PublishedBuilders, index, now, boxedFranchises, kindsOff, outside, Log, census, titles: CollapsedOf(index), publishing: true).Where(x => Published.Contains(x.Kind))];
 
 	/// <summary>
 	/// 1.7.3: the collections of <paramref name="kinds"/>, published or on demand (a library's presets: its decades, genre
@@ -124,7 +130,8 @@ public static class SmartCollectionCatalog
 	// once a pin (the Collections page's PinnedOnDemand), and collapsing 36,000 entries took about 170 ms each time
 	private static readonly ConditionalWeakTable<IndexSnapshot, Lazy<CanonicalTitles>> Collapsed = new();
 
-	private static CanonicalTitles CollapsedOf(IndexSnapshot index) =>
+	/// <summary>1.7.5: an index's titles, copies collapsed once an index. 1.9 (wire's review): the lineup's <see cref="LineupData"/> too.</summary>
+	internal static CanonicalTitles CollapsedOf(IndexSnapshot index) =>
 		Collapsed.GetValue(index, x => new Lazy<CanonicalTitles>(() => BuildContext.Collapse(x.Entries))).Value;
 	// end 1.7.5
 
@@ -152,6 +159,7 @@ public static class SmartCollectionCatalog
 		("pick:highly-rated", SmartCollectionKind.HighlyRated), ("pick:short-films", SmartCollectionKind.ShortFilms),
 		("pick:unfinished-series", SmartCollectionKind.UnfinishedSeries), ("seasonal:", SmartCollectionKind.Seasonal), ("award:", SmartCollectionKind.Award),
 		("spotlight:", SmartCollectionKind.Spotlight), // 1.8 (P1-3, stream s)
+		(MicroGenre.IdPrefix, SmartCollectionKind.MicroGenre), // 1.9 (Collections 2): "micro:crime-dramas-1970s"
 	];
 
 	// 1.7.2: a kind whose builder throws is left out, and said once in the log (its kind and the exception's type: no titles);
@@ -162,7 +170,9 @@ public static class SmartCollectionCatalog
 	private static readonly ConditionalWeakTable<ILogger, ConcurrentDictionary<SmartCollectionKind, byte>> Said = new();
 
 	// 1.7.3 (P0-1): the indexes a census was said of, by log: whose index, when it was read, how many entries
-	private static readonly ConditionalWeakTable<ILogger, ConcurrentDictionary<(string? Key, DateTimeOffset ReadAt, int Entries), byte>> Censused = new();
+	// 1.9 (the review of wip/190-wire, Minor 3): and whether its categories were made: Home's build leaves them out (HomeViewModel.HomeBuildOff),
+	// and as Home builds first, its line took the index's census and the categories' counts were never said
+	private static readonly ConditionalWeakTable<ILogger, ConcurrentDictionary<(string? Key, DateTimeOffset ReadAt, int Entries, bool Categories), byte>> Censused = new();
 
 	internal static IReadOnlyList<SmartCollection> BuildAll(IReadOnlyList<ISmartCollectionBuilder> builders, IndexSnapshot index, DateTimeOffset now, IReadOnlySet<string>? boxedFranchises,
 		IReadOnlySet<SmartCollectionKind>? kindsOff, Outside.OutsideListsSnapshot? outside, ILogger? log, bool census = false, bool whole = false, CanonicalTitles? titles = null,
@@ -203,7 +213,7 @@ public static class SmartCollectionCatalog
 			all.AddRange(made);
 		}
 
-		if (census && log is not null && index.Reading is null && Censused.GetOrCreateValue(log).TryAdd((index.Key, index.ReadAt, index.Entries.Count), 0))
+		if (census && log is not null && index.Reading is null && Censused.GetOrCreateValue(log).TryAdd((index.Key, index.ReadAt, index.Entries.Count, kindsOff?.Contains(SmartCollectionKind.MicroGenre) != true && builders.Any(x => x.Kind == SmartCollectionKind.MicroGenre)), 0))
 		{
 			Census(log, context, said, all.Count, watch.Elapsed);
 		}
@@ -300,8 +310,10 @@ public static class SmartCollectionCatalog
 
 			var week = SpotlightWeek.Of(now).Seed;
 			// 1.8 (stream l, the re-review): kept for the week only once the people are in (PeopleCovered): a first start's pick
-			// (a studio's, the people not read yet) held the whole week against the directors and actors that came minutes later
-			if (picks is not null && index.PeopleCovered && made.FirstOrDefault() is { } spotlight && kept?.GetValueOrDefault(week) != spotlight.Id)
+			// (a studio's, the people not read yet) held the whole week against the directors and actors that came minutes later.
+			// 1.9 (the lineup's review, item 7): nor while the played episodes are due: the draw leans on what the user watched
+			// (SpotlightCandidate.Taste), and a pick made without them held the week against them
+			if (picks is not null && index.PeopleCovered && !index.PlaysDue && made.FirstOrDefault() is { } spotlight && kept?.GetValueOrDefault(week) != spotlight.Id)
 			{
 				await picks.SaveSpotlightPick(week, spotlight.Id, index.Key).ConfigureAwait(false);
 			}

@@ -123,11 +123,33 @@ namespace FluentFin.Core.Contracts.Services
 		/// </summary>
 		Task<int?> GetLibraryTitleCount(BaseItemDto library, CancellationToken cancellationToken);
 
+		// 1.9 (the index's load): the user's marks brought up to date without reading every title (IndexRead.MarksAsync)
+		/// <summary>Nixie 1.9: the films and episodes the user played, latest first, lean (the id, the user data, an episode's show).</summary>
+		Task<BaseItemDtoQueryResult?> GetPlayedLatelyPage(int startIndex, int limit, CancellationToken cancellationToken);
+
+		/// <summary>Nixie 1.9: the user's favourite films and shows, lean, with their count.</summary>
+		Task<BaseItemDtoQueryResult?> GetFavoritesPage(int startIndex, int limit, CancellationToken cancellationToken);
+
+		/// <summary>Nixie 1.9: how many of a show's episodes the user played, in one request of one episode.</summary>
+		Task<int?> GetPlayedEpisodeCount(Guid seriesId, CancellationToken cancellationToken);
+
+		/// <summary>Nixie 1.9: these titles' user data, lean.</summary>
+		Task<IReadOnlyList<BaseItemDto>?> GetUserDataByIds(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+		// end 1.9
+
 		/// <summary>
 		/// Nixie 1.8 (P1-2): these titles' people (lean: the id and People), for the people pass's top-up of the titles new
 		/// since the index before; null when the server didn't answer.
 		/// </summary>
 		Task<IReadOnlyList<BaseItemDto>?> GetPeopleByIds(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+
+		// 1.9 (Collections 2, stream text): the summaries' pass (SmartCollections\TextPass.cs)
+		/// <summary>Nixie 1.9: a page of a library's summaries: Overview and Taglines alone, lean (no images, no user data).</summary>
+		Task<BaseItemDtoQueryResult?> GetLibraryTextPage(BaseItemDto library, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
+
+		/// <summary>Nixie 1.9: these titles' summaries by id (lean), for the titles new since the text pass last ran; null when the server didn't answer.</summary>
+		Task<IReadOnlyList<BaseItemDto>?> GetTextByIds(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+		// end 1.9 (stream text)
 
 		/// <summary>Nixie 1.7.1: how many films and shows the user has and the newest one added ("25736:&lt;id&gt;"), to tell whether the saved index is current; null when not known.</summary>
 		Task<string?> GetIndexCheck(CancellationToken cancellationToken);

@@ -1,0 +1,10 @@
+// Nixie 1.9 (stream match): a matchable keyword list of the shapes the loader reads (a keyword, or an object with one), for
+// the tests until the cat stream's SmartCollections\Data\keywords-matchable.json lands
+{
+  "version": 1,
+  "keywords": [
+    "small town",
+    { "keyword": "boarding school", "note": "authors' notes are not read" },
+    "  Office  "
+  ]
+}

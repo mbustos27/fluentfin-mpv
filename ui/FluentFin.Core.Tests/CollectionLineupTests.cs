@@ -143,7 +143,7 @@ public sealed class CollectionLineupTests(ITestOutputHelper output)
 
 	// 1.8.1 (the owner's library, fix 1): the personal picks by their anchor's recency across their slots, a fresh anchor (the last
 	// three days) first, then a dated one, then one with no date, the slot's prior only breaking ties within a group. On the
-	// owner's library "Next in Ant-Man" (films there have no play date) led Home over "More like What We Do in the Shadows",
+	// owner's library "Next in Ant-Man" (films there have no play date) led Home over the More like of a show
 	// finished two days before
 	[Fact]
 	public void ThePersonalPicks_ComeByTheirAnchorsRecency_FreshThenDatedThenUndated()
@@ -567,7 +567,7 @@ public sealed class CollectionLineupTests(ITestOutputHelper output)
 		var lineup = Assemble(sets.SelectMany(x => x), sets.Select((titles, i) => new LineupCandidate(Of($"{slot}:{i}", SmartCollectionKind.Keyword, titles), slot)));
 
 		Assert.Equal(Math.Min(3, CollectionLineup.Cap(slot)), lineup.Picks.Count(x => x.Slot == slot));
-		Assert.Equal(slot is LineupSlot.MoreLike or LineupSlot.Theme or LineupSlot.Seasonal ? 2 : 1, CollectionLineup.Cap(slot)); // the report's caps
+		Assert.Equal(slot is LineupSlot.MoreLike or LineupSlot.Theme or LineupSlot.Seasonal or LineupSlot.Category ? 2 : 1, CollectionLineup.Cap(slot)); // the report's caps; 1.9: up to 2 categories
 	}
 
 	[Fact]
@@ -610,7 +610,7 @@ public sealed class CollectionLineupTests(ITestOutputHelper output)
 		var home = File.ReadAllText(Path.Combine(HomeAndLibraryXamlTests.RepoRoot, "FluentFin.Core", "ViewModels", "HomeViewModel.Nixie.cs"));
 		Assert.Contains("PickNixieRows(made.Home,", home, StringComparison.Ordinal);
 		Assert.Contains("bool Shown(SmartCollection x) => NixieRowShown(x, rowsOff, kindsOff);", home, StringComparison.Ordinal);
-		Assert.Contains("CollectionLineup.BuildAsync(snapshot, now, boxed, kindsOff, extra, homeShown: Shown)", home, StringComparison.Ordinal);
+		Assert.Contains("CollectionLineup.BuildAsync(snapshot, now, boxed, HomeBuildOff(kindsOff), extra, homeShown: Shown)", home, StringComparison.Ordinal); // 1.9 (wire, review Minor 3): no category
 		Assert.Contains("CollectionLineup.AssembleAsync(snapshot, made.All, [.. extra, .. spotlight], now, shown, fallback: made)", home, StringComparison.Ordinal); // the Spotlight's too
 	}
 
@@ -738,6 +738,18 @@ public sealed class CollectionLineupTests(ITestOutputHelper output)
 			PrimaryTag = random.Next(30) == 0 ? null : "p",
 		}).ToList();
 		var index = new IndexSnapshot([], films, new Dictionary<Guid, SeriesPlays>(), HasPeople: false, Tuesday);
+		// 1.9 (wire's review): the lineup shares the catalog's collapse of the index, so the first lineup build is as warm as the
+		// second: the titles kept is counted, not timed (the second was the faster only while the first collapsed on its own)
+		var collapses = 0;
+		void Count(IReadOnlyList<IndexEntry> entries)
+		{
+			if (ReferenceEquals(entries, index.Entries))
+			{
+				Interlocked.Increment(ref collapses);
+			}
+		}
+
+		BuildContext.Collapsing += Count;
 
 		var plain = Stopwatch.StartNew();
 		var collections = SmartCollectionCatalog.BuildAll(index, Tuesday, outside: OutsideListsSnapshot.Empty);
@@ -748,6 +760,7 @@ public sealed class CollectionLineupTests(ITestOutputHelper output)
 		var again = Stopwatch.StartNew();
 		var second = CollectionLineup.Build(index, Tuesday, null, null, [], OutsideListsSnapshot.Empty); // the titles kept
 		again.Stop();
+		BuildContext.Collapsing -= Count;
 
 		output.WriteLine($"collections alone {plain.ElapsedMilliseconds} ms; collections and lineup {built.ElapsedMilliseconds} ms; again (titles kept) {again.ElapsedMilliseconds} ms");
 		output.WriteLine($"{made.All.Count} collections; lineup: {string.Join(", ", made.Lineup.Picks.Select(x => x.Slot))}");
@@ -756,7 +769,7 @@ public sealed class CollectionLineupTests(ITestOutputHelper output)
 		Assert.InRange(made.Lineup.Picks.Count, 1, CollectionLineup.Slots);
 		Assert.Equal(Shown(made.Lineup), Shown(second.Lineup));
 		Assert.True(built.Elapsed < TimeSpan.FromSeconds(6), $"collections and lineup in {built.ElapsedMilliseconds} ms");
-		Assert.True(again.Elapsed < built.Elapsed, $"again {again.ElapsedMilliseconds} ms, first {built.ElapsedMilliseconds} ms");
+		Assert.Equal(1, collapses); // the titles kept: collapsed once for the collections and both lineups
 		var said = MadeByNixieLog.Instance.Entries.Where(x => x.Message.StartsWith("Made by Nixie lineup: ", StringComparison.Ordinal)).ToList();
 		Assert.NotEmpty(said);
 		Assert.All(said, x => Assert.DoesNotContain("Film", x.Message, StringComparison.Ordinal)); // counts and slots, never a title
@@ -1395,6 +1408,31 @@ public sealed class HomeLineupTests : IDisposable
 		_settings.SaveSetting(CollectionSettingKeys.HomeRowsOff.Name, "");
 		_settings.SaveSetting(CollectionSettingKeys.KindsOff.Name, "MoreFrom,Spotlight");
 		Assert.False(CollectionSettings.PeopleWanted(_settings));
+	}
+
+	// the pre-release fix H (BH-190-m1): Home never shows a category, so with its Made by Nixie rows off its first row never
+	// came, and every summaries' pass waited two minutes for it
+	[Fact]
+	public async Task AHomeWithNoMadeByNixieRowToShow_TellsTheSummariesPassToBegin_AHomeWithRowsByItsFirstRow()
+	{
+		_settings.SaveSetting(CollectionSettingKeys.HomeRowsOff.Name, string.Join(",", Enum.GetNames<NixieHomeRow>()));
+		await Index();
+		var off = Home();
+		await off.OnNavigatedTo(new object());
+		await off.NixieFill;
+		Assert.Empty(off.NixieRows);
+		Assert.Null(off.FirstNixieRowFrom);
+		Assert.True(off.NoNixieRowSaid);
+
+		await off.OnNavigatedFrom();
+		_settings.SaveSetting(CollectionSettingKeys.HomeRowsOff.Name, "");
+		_homeCache.MarkStale(); // as the rows' switches do
+		var on = Home();
+		await on.OnNavigatedTo(new object());
+		await on.NixieFill;
+		Assert.NotEmpty(on.NixieRows);
+		Assert.NotNull(on.FirstNixieRowFrom); // its first row told the pass
+		Assert.False(on.NoNixieRowSaid);
 	}
 
 	[Fact]

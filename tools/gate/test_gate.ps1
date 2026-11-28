@@ -380,8 +380,9 @@ T 'drive.ps1: the end of run reads the app log with the gate check''s name (GATE
 # 1.8 (BH-180-m3): a release's own harness checks are in the gate: every offscreen\then-18x-*.ps1 is a manifest entry's Then
 # (release or nightly). 1.8's were in the repo and in no manifest
 $m3Then = @(Get-ChildItem (Join-Path $repo 'tools\gate\manifest') -Filter '*.psd1' | ForEach-Object { (Import-PowerShellDataFile $_.FullName).Checks } | ForEach-Object { "$($_.Then)" })
-$m3Missing = @(Get-ChildItem (Join-Path $repo 'tools\ui-harness\offscreen') -Filter 'then-18*.ps1' | Where-Object { $m3Then -notcontains "tools\ui-harness\offscreen\$($_.Name)" } | ForEach-Object { $_.Name })
-T 'every then-18x check is in a gate manifest (release or nightly)' ($m3Missing.Count -eq 0) "not in one: $($m3Missing -join ', ')"
+# 1.9 (the ui stream): and every then-19x-*.ps1
+$m3Missing = @(Get-ChildItem (Join-Path $repo 'tools\ui-harness\offscreen') -Filter 'then-1*.ps1' | Where-Object { $_.Name -match '^then-1[89]\d-' -and $m3Then -notcontains "tools\ui-harness\offscreen\$($_.Name)" } | ForEach-Object { $_.Name })
+T 'every then-18x and then-19x check is in a gate manifest (release or nightly)' ($m3Missing.Count -eq 0) "not in one: $($m3Missing -join ', ')"
 
 Write-Host ("--- test_gate: {0}" -f $(if ($failures) { "$failures failed" } else { 'all passed' }))
 if ($failures) { exit 1 }

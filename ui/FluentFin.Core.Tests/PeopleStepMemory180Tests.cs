@@ -202,7 +202,10 @@ public sealed class PeopleStepMemory180Tests(ITestOutputHelper output) : IDispos
 
 		var (rClient, _) = Server((start, token) => start >= Films / 2 ? half.Task.WaitAsync(token) : Task.CompletedTask);
 		using var rHomeCache = new HomeCache(Path.Combine(_folder, "HomeCacheR"), _messages, new CoreListLogger<HomeCache>(), TimeProvider.System);
-		using var rIndex = new LibraryIndex(rClient.Object, rHomeCache, Path.Combine(_folder, "LibraryIndexR"), _messages, new CoreListLogger<LibraryIndex>(), TimeProvider.System);
+		using var rIndex = new LibraryIndex(rClient.Object, rHomeCache, Path.Combine(_folder, "LibraryIndexR"), _messages, new CoreListLogger<LibraryIndex>(), TimeProvider.System)
+		{
+			WholeReadEvery = TimeSpan.Zero, // 1.9 (the index's load): R reads every title again, as before (the day's limit: IndexOnABigServerTests.Load190.cs)
+		};
 		Assert.NotNull(await rIndex.GetAsync());
 		var rTitles = Collected();
 		var (rPeak, rTook) = await Peak(async () =>

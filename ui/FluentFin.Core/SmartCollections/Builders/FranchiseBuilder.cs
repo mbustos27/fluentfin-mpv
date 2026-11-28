@@ -27,20 +27,28 @@ public sealed class FranchiseBuilder : ISmartCollectionBuilder
 			.GroupBy(x => x.TmdbCollection!)
 			.ToList();
 		var floor = groups.Where(g => g.Count() >= Least).ToList();
+		// 1.7 keyless: TMDb's own name for the franchise when its export file is on; else the name from the films. 1.9 (the
+		// owner's library, fix 6): a name two franchises share takes its years ("Godzilla (1954–1975)"), counted over every
+		// franchise of two films or more, boxed or published or not, so a pin, a title page and the Collections page name it alike
+		string? TmdbName(string key) => context.Outside.FranchiseNames.TryGetValue(key, out var tmdbName) ? tmdbName : null;
+		string NameOf(IGrouping<string, IndexEntry> g) => TmdbName(g.Key) is { } tmdb && FranchiseNames.FromTmdb(tmdb) is { Length: > 0 } named
+			? named
+			: FranchiseNames.Name(Make.ByRelease(g));
+		var names = floor.ToDictionary(g => g.Key, NameOf);
+		var repeated = FranchiseNames.Repeated(names.Values);
 		var made = floor.Where(g => !context.BoxedFranchises.Contains(g.Key))
 			.Where(g => !context.Publishing || g.Count() >= Published || Started(g)) // 1.8.1 (fix 7)
 			.Select(g =>
 			{
 				var films = Make.ByRelease(g);
-				// 1.7 keyless: TMDb's own name for the franchise when its export file is on; else the name from the films.
+				var name = repeated.Contains(names[g.Key]) ? FranchiseNames.WithYears(names[g.Key], films) : names[g.Key]; // 1.9 (fix 6)
 				// 1.8 (P1-4): the reason line says where the films are listed together and counts them
-				if (context.Outside.FranchiseNames.TryGetValue(g.Key, out var tmdbName) && FranchiseNames.FromTmdb(tmdbName) is { Length: > 0 } named)
+				if (TmdbName(g.Key) is { } tmdbName && FranchiseNames.FromTmdb(tmdbName) is { Length: > 0 })
 				{
-					return Make.Of(context, $"franchise:{g.Key}", Kind, named, ReasonLine.Of($"TMDb's “{tmdbName.Trim()}”", ReasonCount.Of(films)), hasOwnOrder: true, films,
+					return Make.Of(context, $"franchise:{g.Key}", Kind, name, ReasonLine.Of($"TMDb's “{tmdbName.Trim()}”", ReasonCount.Of(films)), hasOwnOrder: true, films,
 						why: $"Films in TMDb's “{tmdbName.Trim()}”, in release order") with { TmdbCollection = g.Key };
 				}
 
-				var name = FranchiseNames.Name(films);
 				return Make.Of(context, $"franchise:{g.Key}", Kind, name, ReasonLine.Of("One collection on TMDb", ReasonCount.Of(films)), hasOwnOrder: true, films,
 					why: "Films that TMDb lists in one collection, in release order") with { TmdbCollection = g.Key };
 			})

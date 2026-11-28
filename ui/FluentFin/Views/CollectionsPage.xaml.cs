@@ -41,6 +41,65 @@ public sealed partial class CollectionsPage : Page
 		};
 		Unloaded += (_, _) => ViewModel.PropertyChanged -= OnViewModelChanged;
 		ShowReadingLine();
+		// 1.9 (the review of the ui stream): the page ignores the wheel (its XAML): a wheel no row took scrolls it here
+		PageScroller.AddHandler(PointerWheelChangedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(PageScroller_PointerWheelChanged), false);
+		// 1.9 (the scroll stream): Page Down and Page Up scroll the page from wherever the keyboard is on it
+		// (handled events too: a row's horizontal scroll viewer may mark Page Down handled without moving anything)
+		PageScroller.AddHandler(KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler(PageScroller_KeyDown), true);
+	}
+
+	/// <summary>
+	/// Nixie 1.9 (the scroll stream): Page Down and Page Up move the page most of a view
+	/// (<see cref="PageKeyPixels"/>), from a tile, a heading or See all's grid. The page's ScrollView left them alone, and a row's
+	/// Page Down scrolls only a ScrollViewer page (ShelfRow), so here three Page Downs from a tile moved the page 0 px (the scroll
+	/// gate's pgdn, at the owner's shape; older than 1.9).
+	/// </summary>
+	private void PageScroller_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+	{
+		if (PageKeyPixels(e.Key, PageScroller.ViewportHeight) is not { } pixels || PageScroller.ScrollableHeight <= 0)
+		{
+			return;
+		}
+
+		SmoothScroll.By(PageScroller, pixels);
+		e.Handled = true;
+	}
+
+	/// <summary>
+	/// Nixie 1.9: how far a key moves the Collections page: Page Down most of a view down (as a row's Page Down on a ScrollViewer
+	/// page: 85 %, so a line of what was at the foot stays at the top), Page Up up; null for any other key. Not a gamepad's triggers:
+	/// something on the page already acts on them (with them here too, a right trigger moved the page 279 px at 1280 x 720 and
+	/// 984 px at 2560 x 1392, not 85 % of the view), and the D-pad reaches every row.
+	/// </summary>
+	public static double? PageKeyPixels(Windows.System.VirtualKey key, double viewport) => key switch
+	{
+		Windows.System.VirtualKey.PageDown => viewport * 0.85,
+		Windows.System.VirtualKey.PageUp => -viewport * 0.85,
+		_ => null,
+	};
+
+	/// <summary>
+	/// 1.9 (the review of the ui stream): a plain wheel over the page that no row took (a heading, the reading line, a gap, See
+	/// all's grid) scrolls the page by the rows' notch (<see cref="RowPaging.Pixels"/>), animated unless Windows says not to
+	/// (<see cref="SafeMotion"/>). A row's own wheel is EdgeScroller's (handled there), so it never reaches this.
+	/// </summary>
+	private void PageScroller_PointerWheelChanged(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+	{
+		if (e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch)
+		{
+			return;
+		}
+
+		var properties = e.GetCurrentPoint(PageScroller).Properties;
+		if (properties.IsHorizontalMouseWheel || properties.MouseWheelDelta == 0 || PageScroller.ScrollableHeight <= 0)
+		{
+			return;
+		}
+
+		// Nixie 1.9 (the scroll stream): each notch from where the page is going (SmoothScroll): ScrollBy counted from where it
+		// was, so a quick spin lost most of its notches (the owner: "scrolling the collections page takes a longgg time")
+		SmoothScroll.By(PageScroller, RowPaging.Pixels(properties.MouseWheelDelta));
+		e.Handled = true;
 	}
 
 	// Nixie 1.7.4: the page hears its view model's state while it is shown (it added its handler in its constructor, and Back hands a
@@ -411,4 +470,7 @@ public sealed partial class CollectionsPage : Page
 
 	// 1.8: See all's direction button: the grid runs the other way (the button keeps the keyboard)
 	private void GridDirection_Click(object sender, RoutedEventArgs e) => ViewModel.ReverseGrid();
+
+	// 1.9: the categories' See all order, For you or A to Z
+	private void GridOrder_Click(object sender, RoutedEventArgs e) => ViewModel.SwitchGridOrder();
 }

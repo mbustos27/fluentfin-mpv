@@ -82,15 +82,43 @@ public static class Keywords
 		["stop motion"] = "Stop motion",
 	};
 
-	/// <summary>Seasonal keywords the index keeps too (the seasonal Home row), beside the allowlist.</summary>
-	public static IReadOnlySet<string> Seasonal { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+	/// <summary>
+	/// 1.9 (the review of wip/190-wire, Minor 4): the seasonal keywords the index kept before its revision 4 (1.7 to 1.8.1): on
+	/// an index of revision 3 they are there, Thanksgiving's isn't.
+	/// </summary>
+	internal static IReadOnlySet<string> SeasonalBeforeRevision4 { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 	{
 		"halloween", "christmas", "christmas party", "christmas eve", "santa claus", "holiday",
 	};
 
-	/// <summary>The tags the index keeps of a title's: those on either list, trimmed and lower-cased.</summary>
+	/// <summary>Seasonal keywords the index keeps too (the seasonal Home row), beside the allowlist. 1.9: and Thanksgiving's.</summary>
+	public static IReadOnlySet<string> Seasonal { get; } = new HashSet<string>(SeasonalBeforeRevision4, StringComparer.OrdinalIgnoreCase)
+	{
+		"thanksgiving", // 1.9 (stream wire): the Thanksgiving row (kept since the index's revision 4)
+	};
+
+	/// <summary>1.9 (review Minor 4): whether an index of revision 3 kept this keyword: the allowlist's and the six seasonal ones.</summary>
+	public static bool KeptByRevision3(string? tag) => tag is not null && (Allowed.ContainsKey(tag.Trim()) || SeasonalBeforeRevision4.Contains(tag.Trim()));
+
+	// 1.9 (Collections 2): the keyword tiers. Named: the allowlist (Allowed), the only keywords that ever name a collection or say
+	// a reason. Matchable: those, the seasonal ones, and the vetted list a category's rule may use (Data\keywords-matchable.json):
+	// kept in the index (its revision 4), matched, never said. A server's other tags (TMDb's ~100,000 keywords, junk and harmful
+	// ones too, and tags typed by hand) are still dropped when a title is read; only their count stays (TagCount)
+	/// <summary>
+	/// 1.9: the keywords the index keeps, lower case: the allowlist's, the seasonal ones and the catalogue's matchable ones
+	/// (<see cref="MicroGenres.Matchable"/>; the allowlist and the seasonal ones alone should its file be damaged).
+	/// </summary>
+	public static IReadOnlySet<string> Matchable => MicroGenres.Matchable;
+
+	/// <summary>1.9: whether a keyword may be said anywhere (a collection's name, a reason line): on the allowlist only.</summary>
+	public static bool IsNamed(string? tag) => tag is not null && Allowed.ContainsKey(tag.Trim());
+
+	/// <summary>
+	/// The tags the index keeps of a title's, trimmed and lower-cased: the allowlist's and the seasonal ones; 1.9, and the
+	/// matchable ones (<see cref="Matchable"/>).
+	/// </summary>
 	public static string[] Kept(IEnumerable<string?>? tags) =>
-		tags is null ? [] : [.. tags.Select(t => t?.Trim().ToLowerInvariant()).Where(t => !string.IsNullOrEmpty(t) && (Allowed.ContainsKey(t) || Seasonal.Contains(t))).Distinct()!];
+		tags is null ? [] : [.. tags.Select(t => t?.Trim().ToLowerInvariant()).Where(t => !string.IsNullOrEmpty(t) && Matchable.Contains(t)).Distinct()!];
 
 	// 1.7 keyless (review #1): TMDb's keyword names only confirm the allowlist, never add to it: a server's tags can be any of
 	// TMDb's ~100,000 keywords, junk and harmful ones too ("duringcreditsstinger", "suicide"), and only hand-picked keywords

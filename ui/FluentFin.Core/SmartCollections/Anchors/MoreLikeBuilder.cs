@@ -9,7 +9,9 @@ namespace FluentFin.Core.SmartCollections.Anchors;
 /// not watched yet that share an anchor's rare features (<see cref="TitleSimilarity"/>), its own franchise left to "Next
 /// in". The <see cref="Considered"/> most alike, ordered by similarity times quality (the report's order), the first
 /// <see cref="Most"/>; made only with <see cref="Least"/> or more alike. One a recent anchor, in the slots' order (the
-/// lineup takes up to two). "Shares space, anime and Megumi Hayashibara · 12 shows".
+/// lineup takes up to two). "Shares space, anime and Megumi Hayashibara · 12 shows". 1.9 (Phase 3, R1; the critical
+/// review's option 5): one a title played in the last 30 days (a show under way too), newest first, at most six
+/// (<see cref="AnchorData.Lately"/>), each without the titles a newer one shows.
 /// </summary>
 public sealed class MoreLikeBuilder(Func<BuildContext, IAnchorSource>? source = null) : ISmartCollectionBuilder
 {
@@ -41,8 +43,19 @@ public sealed class MoreLikeBuilder(Func<BuildContext, IAnchorSource>? source = 
 
 		var watch = Stopwatch.StartNew();
 		var data = AnchoredSlots.DataOf(context, (source ?? IndexAnchorSource.For)(context));
-		var anchors = data.Ordered.Take(AnchorFinder.Recent).ToList();
-		var made = anchors.Select(anchor => For(context, data, anchor)).OfType<SmartCollection>().ToList();
+		// 1.9 (Phase 3, R1): one a title played in the last 30 days, newest first (1.8's turns fill in when there are fewer), each
+		// of titles no newer one shows: two sitcoms of one company opened on the same posters
+		var anchors = data.Lately.ToList();
+		var made = new List<SmartCollection>();
+		var shown = new HashSet<Guid>();
+		foreach (var anchor in anchors)
+		{
+			if (For(context, data, anchor, shown) is { } like)
+			{
+				made.Add(like);
+				shown.UnionWith(like.ItemIds);
+			}
+		}
 		context.Gates.Count(Kind, anchors.Count, made.Count, made.Count);
 		if (anchors.Count > 0)
 		{
@@ -53,12 +66,20 @@ public sealed class MoreLikeBuilder(Func<BuildContext, IAnchorSource>? source = 
 		return made;
 	}
 
-	/// <summary>The collection of one anchor; null when fewer than <see cref="Least"/> titles are alike.</summary>
-	internal static SmartCollection? For(BuildContext context, AnchorData data, Anchor anchor)
+	/// <summary>
+	/// The collection of one anchor; null when fewer than <see cref="Least"/> titles are alike. 1.9 (Phase 3, R1): none of
+	/// <paramref name="taken"/> (the titles a newer anchor's More like shows).
+	/// </summary>
+	internal static SmartCollection? For(BuildContext context, AnchorData data, Anchor anchor, IReadOnlySet<Guid>? taken = null)
 	{
 		var title = anchor.Title;
 		// review (Minor, stream a): not watched by the anchors' own rule (a show at 90 % of its episodes is watched)
 		var like = data.LikeOf(title); // 1.8 (stream l): and not its own franchise; made once an index read
+		if (taken is { Count: > 0 })
+		{
+			like = [.. like.Where(x => !taken.Contains(x.Title.Id))]; // 1.9 (Phase 3, R1)
+		}
+
 		if (like.Count < Least)
 		{
 			return null;

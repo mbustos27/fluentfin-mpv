@@ -422,26 +422,26 @@ public sealed class AnchorsTests(ITestOutputHelper output)
 		Assert.Empty(TitleSimilarity.Of([bare, twin, .. others], new Facts()).Shared(bare, [twin], 3));
 	}
 
-	// 1.8.1 (the owner's library, fix 3): a show the 90 % rule counts finished, with episodes left, says how far ("You finished
-	// What We Do in the Shadows" at 36 of 39 was untrue); one played to its end, and a film, still say "You finished"
+	// 1.8.1 (the owner's library, fix 3): a show the 90 % rule counts finished, with episodes left, says how far ("You finished"
+	// at 36 of 39 was untrue); one played to its end, and a film, still say "You finished"
 	[Fact]
 	public void AShowWithEpisodesLeft_SaysHowFar_NotYouFinished()
 	{
-		var shadows = Series("What We Do in the Shadows", 2019, unplayed: 3);
-		var done = Series("Chernobyl", 2019, unplayed: 0, played: true);
+		var shadows = Series("Moonlit Flatmates", 2019, unplayed: 3);
+		var done = Series("Reactor Night", 2019, unplayed: 0, played: true);
 		var film = Film("Arrival", 2016, played: true);
 		var plays = new Dictionary<Guid, SeriesPlays> { [shadows.Id] = new(36, Now.AddDays(-2)), [done.Id] = new(5, Now.AddDays(-20)) };
 
 		var anchors = AnchorFinder.Of(BuildContext.For(Index([shadows, done, film], plays), Now), new Facts());
 
-		Assert.Equal("You watched 36 of 39 episodes of What We Do in the Shadows", anchors.Single(x => x.Title.Id == shadows.Id).Said);
-		Assert.Equal("You finished Chernobyl", anchors.Single(x => x.Title.Id == done.Id).Said);
+		Assert.Equal("You watched 36 of 39 episodes of Moonlit Flatmates", anchors.Single(x => x.Title.Id == shadows.Id).Said);
+		Assert.Equal("You finished Reactor Night", anchors.Single(x => x.Title.Id == done.Id).Said);
 		Assert.Equal("You finished Arrival", anchors.Single(x => x.Title.Id == film.Id).Said);
 		Assert.Equal("You watched 1,204 of 1,300 episodes of Long Show", ReasonFacts.WatchedEpisodes("Long Show", 1204, 1300));
 	}
 
 	// 1.8.1 (the owner's library, fix 2): More like leaves out what the user started, not only what they finished: a show with
-	// any episode played (It's Always Sunny, 168 episodes in, was in two of them) and a film begun
+	// any episode played (a sitcom 168 episodes in was in two of them) and a film begun
 	[Fact]
 	public void MoreLike_LeavesOutWhatTheUserStarted_AShowWithAnEpisodePlayed_AFilmBegun()
 	{
@@ -568,7 +568,8 @@ public sealed class AnchorsTests(ITestOutputHelper output)
 		var dragons = Enumerable.Range(1, 10).Select(i => Film($"Other Dragons {i}", 1990 + i, ["Fantasy"], ["dragon"], played: i == 10)).ToList();
 		var index = Index([.. saga, .. dragons, .. Common()]);
 
-		var slots = Slots(index, new Facts());
+		// 1.9 (Phase 3, R1): the saga's first played yesterday, so its More like comes first (an older one leaves out what it shows)
+		var slots = Slots(index, new Facts(new() { [saga[0].Id] = new TitlePlays(1, Now.AddDays(-1)) }));
 
 		var like = Assert.Single(slots, x => x.Title == "More like Dragon Saga 1");
 		Assert.Equal(dragons.Take(9).Select(x => x.Id).Order(), like.ItemIds.Order()); // not the saga's, not the watched one

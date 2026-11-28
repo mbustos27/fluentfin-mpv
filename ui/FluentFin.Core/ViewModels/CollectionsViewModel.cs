@@ -252,8 +252,84 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	{
 		CollectionsSection.Server or CollectionsSection.Playlists => OrderRuns.AToZ,
 		CollectionsSection.MadeByNixie when Place.Kind == SmartCollectionKind.Franchise => OrderRuns.AToZ,
+		// 1.9 (the owner: "i dont think the categories should be alphabetical"): For you (the lineup's ranking), or A to Z when chosen
+		CollectionsSection.MadeByNixie when Place.Kind == CategoryKind => GridAToZ ? OrderRuns.AToZ : OrderRuns.ForYou,
 		_ => OrderRuns.FirstToLast,
 	};
+
+	// ---- 1.9: the categories' See all order: For you, or A to Z ----------------------------------------------------------------
+
+	/// <summary>
+	/// 1.9 (the owner, trying the test copy: "i dont think the categories should be alphabetical"): the categories' See all offers
+	/// two orders: "For you" (the lineup's own ranking of them, <see cref="Lineup.CategoryRanking"/>: how far what the user watched
+	/// lifts each, times its quality; with no history, quality) by default, and A to Z. The direction button reverses either.
+	/// </summary>
+	public bool HasGridOrder => Place.SeeAll && Place.Kind == CategoryKind;
+
+	/// <summary>
+	/// 1.9: A to Z chosen over For you. Kept as the direction is (for the session, per user and grid: Back, Forward and R show it
+	/// the same); a user who never chose gets For you.
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(GridRuns), nameof(GridDirectionName), nameof(GridDirectionTip), nameof(GridDirectionGlyph), nameof(GridDirectionWords),
+		nameof(GridOrderWords), nameof(GridOrderName), nameof(GridOrderTip))]
+	public partial bool GridAToZ { get; private set; }
+
+	/// <summary>The order button's words: "For you" or "A to Z".</summary>
+	public string GridOrderWords => GridAToZ ? AToZWords : ForYouWords;
+
+	/// <summary>Its Narrator name, the order first and then what a press does: "For you, switch to A to Z".</summary>
+	public string GridOrderName => $"{GridOrderWords}, switch to {(GridAToZ ? ForYouWords : AToZWords)}";
+
+	/// <summary>Its tooltip: "Switch to A to Z".</summary>
+	public string GridOrderTip => $"Switch to {(GridAToZ ? ForYouWords : AToZWords)}";
+
+	public const string ForYouWords = "For you";
+
+	public const string AToZWords = "A to Z";
+
+	private string GridOrderView => GridView + ":order";
+
+	/// <summary>The order button: For you and A to Z swap, kept for this grid (the user's press only); the direction stays.</summary>
+	public void SwitchGridOrder()
+	{
+		if (!HasGridOrder)
+		{
+			return;
+		}
+
+		GridAToZ = !GridAToZ;
+		SortDirections.Remember(JellyfinClient.UserId, GridOrderView, GridAToZ);
+		GridTiles = [.. SortDirections.Apply(CategoryGrid(GridTiles), GridReversed)]; // the same tiles in the other order (no read, no build)
+	}
+
+	// the categories' tiles See all shows, in the chosen order, before the direction. The critical review's cut 1 (the owner: the
+	// long list "isnt very useful"): only those of the lineup's ranking (the ones the user's history lifts, and the week's explore
+	// pick), For you in its order; with none ranked (no history), the row's (CategoriesOfTheWeek). A to Z sorts the same ones
+	private List<CollectionTile> CategoryGrid(IEnumerable<CollectionTile> tiles)
+	{
+		var made = tiles.ToList();
+		var rank = new Dictionary<string, int>(StringComparer.Ordinal);
+		foreach (var id in _categoryRanking)
+		{
+			rank.TryAdd(id, rank.Count);
+		}
+
+		List<CollectionTile> shown = [.. made.Where(x => x.Nixie is { } c && rank.ContainsKey(c.Id)).DistinctBy(x => x.Nixie!.Id).OrderBy(x => rank[x.Nixie!.Id])];
+		if (shown.Count == 0)
+		{
+			// the row's, in its order (with no week chosen, none past the lineup's gates, the row shows its first as made: those)
+			shown = CategoriesOfTheWeek(made) is { Count: > 0 } week ? week : [.. made.Take(RowLength)];
+		}
+
+		return GridAToZ ? [.. shown.OrderBy(x => x.Title, StringComparer.CurrentCultureIgnoreCase)] : shown;
+	}
+
+	// 1.9: the lineup's ranking of the categories See all shows, as last shown (its For you; the critical review's cut 1)
+	private IReadOnlyList<string> _categoryRanking = [];
+
+	// 1.9 (Collections 2): the categories' kind
+	private const SmartCollectionKind CategoryKind = SmartCollectionKind.MicroGenre;
 
 	/// <summary>The direction button's Narrator name: "A to Z, switch to Z to A".</summary>
 	public string GridDirectionName => SortDirections.ButtonName(GridRuns, GridReversed);
@@ -329,8 +405,9 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	}
 
 	/// <summary>What the line says when Made by Nixie made nothing (rule 11: what Nixie looks for, nothing about the server).</summary>
-	public const string NixieEmptyText = "Made by Nixie has nothing to show yet. It makes collections of films in one franchise, titles that share a keyword, "
-		+ "and well-rated titles you haven't watched, and found too few of them in your libraries.";
+	/// 1.9 (Collections 2): the categories first, as the page lists them
+	public const string NixieEmptyText = "Made by Nixie has nothing to show yet. It makes categories such as crime dramas from the 1970s, collections of films "
+		+ "in one franchise, titles that share a keyword, and well-rated titles you haven't watched, and found too few of them in your libraries.";
 
 	/// <summary>When every kind of Made by Nixie collection is turned off.</summary>
 	public const string NixieOffText = "Every kind of Made by Nixie collection is turned off in Settings > Collections.";
@@ -383,6 +460,8 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		index.Changed -= OnIndexChanged;
 		index.Progress -= OnIndexProgress; // 1.7.1
 		Outside.OutsideListsSnapshot.SharedChanged -= OnOutsideChanged; // 1.7 keyless
+		TextMatches.SharedChanged -= OnTextChanged; // 1.9 (the text stream's step 1b)
+		_textLeft = TextMatches.Shared; // 1.9 (the review's Minor 2): Back sees summary matches that changed meanwhile
 		UnwatchTrending(); // 1.7 trending
 		return Task.CompletedTask;
 	}
@@ -406,6 +485,8 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		index.Progress += OnIndexProgress;
 		Outside.OutsideListsSnapshot.SharedChanged -= OnOutsideChanged;
 		Outside.OutsideListsSnapshot.SharedChanged += OnOutsideChanged;
+		TextMatches.SharedChanged -= OnTextChanged; // 1.9: the shows' summaries matched (the categories made of them)
+		TextMatches.SharedChanged += OnTextChanged;
 		WatchTrending();
 
 		// Nixie 1.7.5 (review Major 2): what the page left may have changed of the page's own: a saved filter removed (its page goes
@@ -428,6 +509,9 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		}
 
 		changed |= KindsOffNow() != _kindsOffLeft;
+		// 1.9 (the review's Minor 2): the shows' summaries matched anew while the page was away (the pass finished, or the
+		// categories went off): the page listened to none of it, so its categories are made again from them
+		changed |= !ReferenceEquals(TextMatches.Shared, _textLeft);
 		if (stale)
 		{
 			var boxSets = JellyfinClient.GetBoxSets();
@@ -486,6 +570,9 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	// Nixie 1.7.5 (review Major 2): the kinds turned off when the page was left (OnNavigatedFrom), against the ones now
 	private string _kindsOffLeft = "";
 
+	// 1.9 (the review's Minor 2): the summary matches when the page was left (OnNavigatedFrom), against the ones now
+	private TextMatches _textLeft = TextMatches.Empty;
+
 	private string KindsOffNow()
 	{
 		try
@@ -505,6 +592,8 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		OnPropertyChanged(nameof(IsSeeAll));
 		// 1.8: this grid's direction as the user left it this session (R makes a new page: it reads it back here)
 		GridReversed = Place.SeeAll && SortDirections.Recall(JellyfinClient.UserId, GridView) == true;
+		GridAToZ = HasGridOrder && SortDirections.Recall(JellyfinClient.UserId, GridOrderView) == true; // 1.9: For you unless A to Z was chosen
+		OnPropertyChanged(nameof(HasGridOrder));
 		OnPropertyChanged(nameof(GridRuns));
 		OnPropertyChanged(nameof(GridDirectionName));
 		OnPropertyChanged(nameof(GridDirectionTip));
@@ -524,6 +613,8 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		// 1.7 keyless: the outside lists (awards, TMDb's names) as they arrive, and a refresh of the stale ones
 		Outside.OutsideListsSnapshot.SharedChanged -= OnOutsideChanged;
 		Outside.OutsideListsSnapshot.SharedChanged += OnOutsideChanged;
+		TextMatches.SharedChanged -= OnTextChanged; // 1.9: the shows' summaries matched (the categories made of them)
+		TextMatches.SharedChanged += OnTextChanged;
 		_ = Outside.OutsideLists.App?.RefreshInBackground();
 		// end 1.7 keyless
 		WatchTrending(); // 1.7 trending
@@ -539,6 +630,10 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 			OnIndexChanged(this, current);
 		}
 	}
+
+	// 1.9 (the text stream's step 1b): the shows' summaries matched anew (a pass's, or deleted when the categories went off): the
+	// categories are made again from the index the page has, as for new outside lists (never a read)
+	private void OnTextChanged(TextMatches matches) => OnOutsideChanged(Outside.OutsideListsSnapshot.Shared);
 
 	// 1.7.1: what new lists are matched against: the whole index; during a first read, its pages so far. Review (Minor): never
 	// the pages of a first read that stopped, which brought back their reading line with nothing reading
@@ -756,7 +851,21 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 
 		/// <summary>The re-review: the week's Spotlight still being made (the page shows it after: ShowSpotlightLater).</summary>
 		public Task<IReadOnlyList<SmartCollection>>? Later { get; init; }
+
+		/// <summary>1.9 (fix 6): the Franchises row's order (<see cref="FranchiseRelevance"/>), by id; See all stays A to Z.</summary>
+		public IReadOnlyDictionary<string, int> FranchiseRank { get; init; } = new Dictionary<string, int>();
+
+		/// <summary>1.9 (Collections 2): the Categories row: the week's categories, in the lineup's order (<see cref="Lineup.Categories"/>), by id.</summary>
+		public IReadOnlyList<string> CategoryRow { get; init; } = [];
+
+		/// <summary>1.9: every category past the lineup's gates by its ranking (<see cref="Lineup.CategoryRanking"/>): See all's For you.</summary>
+		public IReadOnlyList<string> CategoryRanking { get; init; } = [];
 	}
+
+	// 1.9 (fix 6): the order the Franchises row was last shown in (ShowLocked reads it; made with the collections, off the UI
+	// thread). 1.9 (Collections 2): and the Categories row's categories (the lineup's choice for the week)
+	private IReadOnlyDictionary<string, int> _franchiseRank = new Dictionary<string, int>();
+	private IReadOnlyList<string> _categoryRow = [];
 
 	// 1.7.1: every collection of this index, the boxed franchises too (Unboxed leaves them out), so it can be made before the
 	// server's sets are in. 1.8 (P1-1): and This week's lineup, made with them off the UI thread, of the same candidates as
@@ -799,7 +908,25 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 			made = await CollectionLineup.AssembleAsync(snapshot, [.. made.All, .. spotlight], extra, SmartCollectionCatalog.Now(_time), fallback: made);
 		}
 
-		return new Built([.. made.All.Where(x => SmartCollectionCatalog.Published.Contains(x.Kind)), .. lists], made.Lineup) { Later = pending }; // 1.7.3 (P0-3): the published kinds only
+		IReadOnlyList<SmartCollection> all = [.. made.All.Where(x => SmartCollectionCatalog.Published.Contains(x.Kind)), .. lists]; // 1.7.3 (P0-3): the published kinds only
+		// 1.9 (fix 6): the Franchises row by relevance, off the UI thread (each franchise's films, the index's scores as the lineup
+		// made them); a throw leaves the row A to Z
+		IReadOnlyDictionary<string, int> rank = new Dictionary<string, int>();
+		try
+		{
+			rank = await Task.Run(() =>
+			{
+				var data = LineupData.Of(snapshot);
+				return FranchiseRelevance.Rank(all.Where(x => x.Kind == SmartCollectionKind.Franchise), data.Titles, data.Quality);
+			});
+		}
+		catch (Exception ex) when (ex is not OperationCanceledException)
+		{
+			_log.LogWarning("Collections: the Franchises row couldn't be put in order ({Error}); it shows A to Z", ex.GetType().Name);
+		}
+
+		// 1.9 (Collections 2): the Categories row is the lineup's week of categories (Lineup.Categories: This week's first)
+		return new Built(all, made.Lineup) { Later = pending, FranchiseRank = rank, CategoryRow = [.. made.Lineup.Categories.Select(x => x.Id)], CategoryRanking = made.Lineup.CategoryRanking };
 	}
 
 	// 1.8 (the re-review): the Spotlight made after the page showed: the page again (This week with it; its later build is in, so
@@ -971,6 +1098,9 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 			IReadOnlyList<SmartCollection> pinned = [];
 			var lineup = Lineup.Empty; // 1.8 (P1-1)
 			Task<IReadOnlyList<SmartCollection>>? later = null; // the re-review
+			IReadOnlyDictionary<string, int>? rank = null; // 1.9 (fix 6)
+			IReadOnlyList<string>? categories = null; // 1.9 (Collections 2)
+			IReadOnlyList<string>? ranking = null; // 1.9: See all's For you
 			if (snapshot is not null)
 			{
 				try
@@ -979,6 +1109,9 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 					later = both.Later;
 					made = Unboxed(both.All);
 					lineup = both.Lineup;
+					rank = both.FranchiseRank;
+					categories = both.CategoryRow;
+					ranking = both.CategoryRanking;
 					pinned = await PinnedOnDemand(snapshot, made); // 1.7.3
 				}
 				catch (Exception ex) when (ex is not OperationCanceledException)
@@ -995,6 +1128,9 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 				}
 
 				_shown = asked;
+				_franchiseRank = rank ?? _franchiseRank; // 1.9 (fix 6): a show without an index keeps the order it had
+				_categoryRow = categories ?? _categoryRow; // 1.9 (Collections 2)
+				_categoryRanking = ranking ?? _categoryRanking;
 				ShowLocked(made, pinned, lineup);
 				// 1.7.3 fix round (BH-173-m1): a whole index that made nothing says so (none of a first read's pages, nor a show
 				// without an index: a read that failed)
@@ -1051,6 +1187,9 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 				CollectionsSection.Server => server,
 				CollectionsSection.Playlists => playlists,
 				CollectionsSection.Saved => saved,
+				// 1.9 (Collections 2): every category
+				// 1.9 (the owner: not alphabetical): For you (the lineup's ranking), or A to Z when chosen
+				_ when Place.Kind == CategoryKind => CategoryGrid(nixie.Where(x => x.Nixie!.Kind == CategoryKind)),
 				_ when Place.Kind is { } kind => [.. nixie.Where(x => x.Nixie!.Kind == kind)],
 				_ => nixie,
 			};
@@ -1100,14 +1239,55 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 			heading = "";
 		}
 
+		// 1.9 (Phase 3, R1; the critical review's option 5): the More like row, after the Categories row: the lineup's, one a title
+		// played in the last 30 days, the newest first, none opening on what a category of the row opens on (This week shows two
+		// of them at most; See all every one). Before a lineup (or when it couldn't be made), as made
+		var likesShown = false;
+		void MoreLikeRow()
+		{
+			likesShown = true;
+			var all = nixie.Where(x => x.Nixie!.Kind == SmartCollectionKind.MoreLike).ToList();
+			var likes = ReferenceEquals(lineup, Lineup.Empty) ? all : InOrder(all, lineup.MoreLike);
+			if (likes.Count > 0)
+			{
+				rows.Add(new CollectionsRow(SmartCollectionKinds.Plural(SmartCollectionKind.MoreLike), CollectionsSection.MadeByNixie, SmartCollectionKind.MoreLike,
+					[.. likes.Take(RowLength)], all.Count > Math.Min(likes.Count, RowLength)) { Heading = heading });
+				heading = "";
+			}
+		}
+
 		foreach (var kind in SmartCollectionKinds.PageOrder)
 		{
+			if (kind != CategoryKind && !likesShown)
+			{
+				MoreLikeRow();
+			}
+
 			var ofKind = nixie.Where(x => x.Nixie!.Kind == kind).ToList();
+			if (kind == SmartCollectionKind.Franchise)
+			{
+				ofKind = RowOrder(ofKind, _franchiseRank); // 1.9 (fix 6): by relevance (See all stays A to Z)
+			}
+			else if (kind == CategoryKind && CategoriesOfTheWeek(ofKind) is { Count: > 0 } ofWeek)
+			{
+				// 1.9 (Collections 2): the lineup's categories of the week, in its order (This week's first); See all has those the
+				// user's history lifts (CategoryGrid; the row's with no history). With none chosen (none past the lineup's gates) the row shows them as made, so See all
+				// is still reached
+				rows.Add(new CollectionsRow(SmartCollectionKinds.Plural(kind), CollectionsSection.MadeByNixie, kind, ofWeek, ofKind.Count > ofWeek.Count) { Heading = heading });
+				heading = "";
+				continue;
+			}
+
 			if (ofKind.Count > 0)
 			{
 				Add(SmartCollectionKinds.Plural(kind), CollectionsSection.MadeByNixie, kind, ofKind, heading);
 				heading = "";
 			}
+		}
+
+		if (!likesShown)
+		{
+			MoreLikeRow();
 		}
 
 		// 1.7 trending: Trending, Popular, Most anticipated and Box office this week (a row only when it has a collection)
@@ -1166,6 +1346,34 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 
 		FocusRow = Place.Section == CollectionsSection.All ? Rows.FirstOrDefault() : Rows.FirstOrDefault(x => x.Section == Place.Section) ?? Rows.FirstOrDefault();
 	}
+
+	// 1.9 (Collections 2): the tiles of the week's categories (_categoryRow) still made, in the lineup's order, a row's length at most
+	private List<CollectionTile> CategoriesOfTheWeek(List<CollectionTile> made)
+	{
+		var byId = new Dictionary<string, CollectionTile>(StringComparer.Ordinal);
+		foreach (var tile in made)
+		{
+			byId.TryAdd(tile.Nixie!.Id, tile);
+		}
+
+		return [.. _categoryRow.Distinct().Select(id => byId.GetValueOrDefault(id)).OfType<CollectionTile>().Take(RowLength)];
+	}
+
+	// 1.9 (Phase 3, R1): the tiles of the given ids, in their order (an id with no tile is skipped)
+	private static List<CollectionTile> InOrder(List<CollectionTile> tiles, IReadOnlyList<string> ids)
+	{
+		var byId = new Dictionary<string, CollectionTile>(StringComparer.Ordinal);
+		foreach (var tile in tiles)
+		{
+			byId.TryAdd(tile.Nixie!.Id, tile);
+		}
+
+		return [.. ids.Distinct().Select(id => byId.GetValueOrDefault(id)).OfType<CollectionTile>()];
+	}
+
+	// 1.9 (fix 6): a row's tiles in the order given by their collections' ids; one it doesn't rank keeps its place after them (A to Z)
+	private static List<CollectionTile> RowOrder(List<CollectionTile> tiles, IReadOnlyDictionary<string, int> rank) =>
+		rank.Count == 0 ? tiles : [.. tiles.OrderBy(x => x.Nixie is { } c && rank.TryGetValue(c.Id, out var at) ? at : int.MaxValue)];
 
 	/// <summary>A tile opened: a server's set on the Collection page (or a playlist), a Nixie collection on it too.</summary>
 	public void Open(CollectionTile tile)

@@ -19,8 +19,8 @@ public sealed record IndexPerson(string Name, [property: System.Text.Json.Serial
 
 /// <summary>
 /// Nixie 1.6: one title of the library index, lean: what the builders read and a card needs (no overview, no paths). Tags
-/// keep only those the builders read (the keyword allowlist and the seasonal ones), so the saved index stays small on a
-/// 25,800-film library.
+/// keep only those the builders read (the keyword allowlist and the seasonal ones; 1.9, and the categories' matchable ones,
+/// <see cref="Keywords.Matchable"/>: the saved index's revision 4), so the saved index stays small on a 25,800-film library.
 /// </summary>
 public sealed record IndexEntry
 {
@@ -291,6 +291,37 @@ public sealed record IndexSnapshot(
 	/// the rating alone (<see cref="RatingBacking"/>) until the index is read again.
 	/// </summary>
 	public bool BackingKnown { get; init; } = true;
+
+	/// <summary>
+	/// 1.9 (Collections 2): the index keeps each title's matchable keywords (<see cref="Keywords.Matchable"/>: the saved index's
+	/// revision 4, and every read). False for an index saved before 1.9 (its tags the allowlist's and the seasonal ones only):
+	/// it shows at once and keeps until its day's read brings revision 4 (none is made for the keywords alone), and meanwhile a
+	/// category whose rule names another keyword waits
+	/// (<see cref="Builders.MicroGenreVerdict.WaitsForKeywords"/>: missing data is not a decision, rule 4).
+	/// </summary>
+	public bool KeywordsKnown { get; init; } = true;
+
+	// 1.9 (the index's load on a server that isn't the user's)
+	/// <summary>
+	/// 1.9: when the read that last brought the titles up to date began (a read of every title, or of what changed since); the
+	/// next read of what changed asks from here (less <see cref="IndexRead.SavedSinceMargin"/>). <see cref="ReadAt"/> stays the
+	/// date of the last read of every title. An index saved before 1.9's has none: its <see cref="ReadAt"/>.
+	/// </summary>
+	public DateTimeOffset TitlesAt { get => field == default ? ReadAt : field; init; }
+
+	/// <summary>
+	/// 1.9: a read of what changed found a library with fewer titles than the index has of it (titles removed, which a read of
+	/// what changed can't name): the index isn't complete until the next read of every title, at most once a day. Saved.
+	/// </summary>
+	public bool RemovalsDue { get; init; }
+
+	/// <summary>
+	/// 1.9 (the review of wip/190-index, item 6): when the read that last brought the user's marks up to date began (a read of every
+	/// title, or of the marks that came whole); the next read of the marks asks from here. Advances only when that read succeeds.
+	/// An index saved before it has none: its <see cref="TitlesAt"/>.
+	/// </summary>
+	public DateTimeOffset MarksAt { get => field == default ? TitlesAt : field; init; }
+	// end 1.9
 }
 
 /// <summary>Nixie 1.7.1: how far a first read of the index has got: titles read, of how many (null until every library's count is in).</summary>

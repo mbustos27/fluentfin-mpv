@@ -850,7 +850,7 @@ public sealed class CollectionsPageTests : IDisposable
 
 		// the next visit, from the saved index: the same line at once; every kind turned off: that is why
 		var settings = new SwitchSettings();
-		settings.SaveSetting(CollectionSettingKeys.KindsOff, "Franchise,Keyword,HighlyRated,UnfinishedSeries,Seasonal,ShortFilms,NextIn,MoreLike,MoreFrom,Spotlight"); // 1.8 (BH-180-M2): and 1.8's kinds
+		settings.SaveSetting(CollectionSettingKeys.KindsOff, "MicroGenre,Franchise,Keyword,HighlyRated,UnfinishedSeries,Seasonal,ShortFilms,NextIn,MoreLike,MoreFrom,Spotlight"); // 1.8 (BH-180-M2): and 1.8's kinds; 1.9: and the categories
 		var again = new CollectionsViewModel(_client.Object, Commands(), index, store, settings);
 		await again.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All));
 		Assert.True(again.ShowsReadingLine);
@@ -1139,7 +1139,11 @@ public sealed class CollectionsPageTests : IDisposable
 		await vm.SpotlightLater; // 1.8 re-review: the week's Spotlight comes after the page
 
 		Assert.True(vm.State.IsLoaded);
-		Assert.Equal(["The server's collections", CollectionsViewModel.ThisWeekTitle, "Picks", "Franchises"], vm.Rows.Select(r => r.Title)); // 1.8: This week first
+		// 1.8: This week first. 1.9: the categories (any the shipped catalogue makes of this library) after the picks, before the
+		// franchises (PageOrder)
+		var categories = SmartCollectionKinds.Plural(SmartCollectionKind.MicroGenre);
+		Assert.Equal(["The server's collections", CollectionsViewModel.ThisWeekTitle, "Picks", "Franchises"], vm.Rows.Select(r => r.Title).Where(t => t != categories));
+		Assert.True(vm.Rows.All(r => r.Title != categories) || vm.Rows.Select(r => r.Title).SkipWhile(t => t != "Picks").Skip(1).First() == categories);
 		Assert.All(vm.Rows.SelectMany(r => r.Tiles).Where(t => t.IsNixie), t => Assert.DoesNotContain(t.Nixie!.Kind, SmartCollectionCatalog.OnDemandOnly));
 		// 1.8: This week holds collections of the rows under it: each counted once
 		var published = vm.Rows.Where(r => r.Section == CollectionsSection.MadeByNixie).SelectMany(r => r.Tiles).Select(t => t.Nixie!.Id).Distinct().Count();
@@ -1214,7 +1218,7 @@ public sealed class CollectionsPageTests : IDisposable
 		var settings = new SwitchSettings();
 		var page = new CollectionsSettingsViewModel(settings);
 
-		Assert.Equal(["Franchises", "Keywords", "Acclaimed, not seen yet", "Unfinished series", "In season", "Under 90 minutes", "Next in a franchise", "More like", "More from", "Spotlight"], page.Kinds.Select(x => x.Name)); // 1.8 (BH-180-M2): 1.8's kinds
+		Assert.Equal(["Categories", "Franchises", "Keywords", "Acclaimed, not seen yet", "Unfinished series", "In season", "Under 90 minutes", "Next in a franchise", "More like", "More from", "Spotlight"], page.Kinds.Select(x => x.Name)); // 1.8 (BH-180-M2): 1.8's kinds; 1.9: the categories first
 		Assert.Equal(["Acclaimed, not seen yet", "Unfinished series", "In season", "This week's picks", "A third row of picks"], page.HomeRows.Select(x => x.Name)); // 1.8: the lineup's
 		Assert.Equal(["Decades", "Genre mixes", "Countries"], page.LibraryFilters.Select(x => x.Name)); // fix round (BH-173-m2): the strip's switches
 		Assert.All(page.HomeRows.Concat(page.Kinds).Concat(page.LibraryFilters), x => Assert.DoesNotContain("your server", x.Description, StringComparison.OrdinalIgnoreCase)); // rule 11
@@ -1231,8 +1235,9 @@ public sealed class CollectionsPageTests : IDisposable
 		Assert.Equal(saves, settings.Saves);
 		Assert.All(page.LibraryFilters, x => Assert.False(x.IsOn, x.Name));
 		// the way back for what stayed off: its switch
-		Assert.False(page.Kinds[0].IsOn);
-		page.Kinds[0].IsOn = true;
+		var franchises = page.Kinds.Single(x => x.Name == "Franchises"); // 1.9: the categories' switch is first now
+		Assert.False(franchises.IsOn);
+		franchises.IsOn = true;
 		Assert.DoesNotContain(SmartCollectionKind.Franchise, CollectionSettings.KindsOff(settings));
 		page.LibraryFilters[0].IsOn = true;
 		Assert.DoesNotContain(SmartCollectionKind.Decade, CollectionSettings.KindsOff(settings));

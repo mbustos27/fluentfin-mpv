@@ -23,6 +23,9 @@ public enum OrderRuns
 
 	/// <summary>Scores, highest first (a rating, Made by Nixie's best first); reversed, lowest first.</summary>
 	HighestFirst,
+
+	/// <summary>1.9: the categories "For you" (the lineup's ranking: the best fit first); reversed, the best fit last.</summary>
+	ForYou,
 }
 
 /// <summary>
@@ -50,6 +53,8 @@ public static class SortDirections
 		(OrderRuns.OldestFirst, true) or (OrderRuns.NewestFirst, false) => "Newest first",
 		(OrderRuns.HighestFirst, false) => "Highest first",
 		(OrderRuns.HighestFirst, true) => "Lowest first",
+		(OrderRuns.ForYou, false) => "Best fit first", // 1.9
+		(OrderRuns.ForYou, true) => "Best fit last",
 		(_, false) => "First to last",
 		(_, true) => "Last to first",
 	};
@@ -68,7 +73,7 @@ public static class SortDirections
 	public static string ToolTip(OrderRuns runs, bool reversed) => $"Switch to {Lower(OtherWords(runs, reversed))}";
 
 	/// <summary>Whether the cards run up (A to Z, oldest first, first to last, lowest first): the arrow's way.</summary>
-	public static bool RunsUp(OrderRuns runs, bool reversed) => (runs is OrderRuns.NewestFirst or OrderRuns.HighestFirst) == reversed;
+	public static bool RunsUp(OrderRuns runs, bool reversed) => (runs is OrderRuns.NewestFirst or OrderRuns.HighestFirst or OrderRuns.ForYou) == reversed;
 
 	/// <summary>The arrow on the button, the Library's (Segoe Fluent Icons): up while the cards run up, down while they run down.</summary>
 	public static string Glyph(OrderRuns runs, bool reversed) =>

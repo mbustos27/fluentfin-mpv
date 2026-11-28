@@ -37,7 +37,7 @@ public sealed record Anchor(IndexEntry Title, AnchorWhy Why, DateTimeOffset? Whe
 	/// <summary>
 	/// The reason's fact (stream t's <see cref="ReasonFacts"/>): "You finished Arrival", "A favourite: Arrival". Review (Major):
 	/// never "You watched Heat twice": the play count counts starts (<see cref="AnchorWhy.Rewatched"/>). 1.8.1 (fix 3): a show
-	/// with episodes left says how far: "You watched 36 of 39 episodes of What We Do in the Shadows", not "You finished".
+	/// with episodes left says how far: "You watched 36 of 39 episodes of Moonlit Flatmates", not "You finished".
 	/// </summary>
 	public string Said => !Why.HasFlag(AnchorWhy.Finished) ? ReasonFacts.Favourite(Title.Name)
 		: Episodes is { } episodes && episodes.Played < episodes.Of ? ReasonFacts.WatchedEpisodes(Title.Name, episodes.Played, episodes.Of)

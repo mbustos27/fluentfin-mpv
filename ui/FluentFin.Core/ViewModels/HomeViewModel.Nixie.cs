@@ -94,6 +94,14 @@ public partial class HomeViewModel
 	/// 1.8 (P1-1): the trending row follows its sources' switches only (Settings → Look up lists online), as it did when Home
 	/// added it apart; "This week's picks" governs the lineup's other picks. Review (Minor 4): under its own stored name (Picks),
 	/// not 1.7's "A collection a day" (Rotating): turned off in 1.7, that hid one row a day, and now hid every personal row.
+	/// <summary>
+	/// 1.9 (Collections 2; the review of wip/190-wire, Minor 3): the kinds Home's build leaves out: those turned off, and the
+	/// categories, which Home never shows (the plan: Home unchanged; they are the Collections page's row and This week's). Their
+	/// build cost Home's first rows about 40 ms at 31,000 titles for nothing.
+	/// </summary>
+	internal static IReadOnlySet<SmartCollectionKind> HomeBuildOff(IReadOnlySet<SmartCollectionKind> kindsOff) =>
+		kindsOff.Contains(SmartCollectionKind.MicroGenre) ? kindsOff : new HashSet<SmartCollectionKind>(kindsOff) { SmartCollectionKind.MicroGenre };
+
 	internal static bool NixieRowShown(SmartCollection collection, IReadOnlySet<NixieHomeRow> rowsOff, IReadOnlySet<SmartCollectionKind> kindsOff) =>
 		(SmartCollectionCatalog.Published.Contains(collection.Kind) || Outside.TrendingBuilder.PageOrder.Contains(collection.Kind))
 		&& !kindsOff.Contains(collection.Kind) && (collection.Kind switch
@@ -152,6 +160,9 @@ public partial class HomeViewModel
 	/// <summary>Tests: what Home's first Made by Nixie row of this visit came from (as its log line says); null before it.</summary>
 	internal string? FirstNixieRowFrom { get; private set; }
 
+	/// <summary>1.9 (fix H): this visit's rows of the whole index had none to show, and the summaries' pass was told to begin.</summary>
+	internal bool NoNixieRowSaid { get; private set; }
+
 	private void SayFirstNixieRow(string from)
 	{
 		if (_firstNixieRowSaid || NixieRows.Count == 0)
@@ -161,6 +172,7 @@ public partial class HomeViewModel
 
 		_firstNixieRowSaid = true;
 		FirstNixieRowFrom = from;
+		SmartCollections.TextPass.FirstRowShown(); // 1.9 (stream text, rule 1): the summaries' pass may begin
 		SmartCollectionCatalog.Log?.LogInformation("Home: its first Made by Nixie row in {Ms} ms since Home opened, from {From}", _opened.ElapsedMilliseconds, from);
 	}
 
@@ -369,13 +381,13 @@ public partial class HomeViewModel
 		if (provisional)
 		{
 			// the re-review: of a first read's pages, only the full picks (Provisional); no trending row, no Spotlight
-			var all = await CollectionLineup.BuildAsync(snapshot, now, boxed, kindsOff, [], homeShown: Shown);
+			var all = await CollectionLineup.BuildAsync(snapshot, now, boxed, HomeBuildOff(kindsOff), [], homeShown: Shown); // 1.9 (review Minor 3): no category
 			made = await CollectionLineup.AssembleAsync(snapshot, Provisional(all.All), [], now, Shown, fallback: new LineupBuild([], Lineup.Empty));
 		}
 		else
 		{
 			later = LaterBuild(snapshot, now, kindsOff);
-			made = await CollectionLineup.BuildAsync(snapshot, now, boxed, kindsOff, extra, homeShown: Shown);
+			made = await CollectionLineup.BuildAsync(snapshot, now, boxed, HomeBuildOff(kindsOff), extra, homeShown: Shown); // 1.9 (review Minor 3): no category
 			spotlightIn = NixieRows.Count > 0 || later.IsCompleted;
 			if (spotlightIn)
 			{
@@ -396,6 +408,15 @@ public partial class HomeViewModel
 			SmartCollectionCatalog.Log?.LogInformation("Home: {Rows} Made by Nixie rows in {Ms} ms from {From} (made in {BuildMs} ms, their cards in {CardsMs} ms)",
 				rows, t.Asked.ElapsedMilliseconds, t.From, built, build.ElapsedMilliseconds - built);
 			SayFirstNixieRow(t.From);
+		}
+
+		// 1.9 (the pre-release fix H, BH-190-m1): the whole index's rows, and none to show (Home's rows off, or none made): Home's
+		// first screen is in all the same, and the summaries' pass needn't wait two minutes for a row that won't come
+		if (!provisional && snapshot.Reading is null && NixieRows.Count == 0 && !NoNixieRowSaid)
+		{
+			NoNixieRowSaid = true;
+			SmartCollections.TextPass.FirstRowShown();
+			SmartCollectionCatalog.Log?.LogInformation("Home: no Made by Nixie row to show, {Ms} ms since Home opened", _opened.ElapsedMilliseconds);
 		}
 
 		if (!spotlightIn)

@@ -37,6 +37,24 @@ DOC_GENRES = ["Documentary", "History", "Nature", "Science", "Music", "Sport"]
 TAGS = ["based on novel", "time travel", "heist", "coming of age", "road trip", "found family", "space",
         "small town", "revenge", "dystopia", "friendship", "survival"]
 MOVIE_RATINGS = ["G", "PG", "PG-13", "R", "NR"]
+# Nixie 1.9 (stream text): the first sentence of a show's summary, so the categories' summary word lists (micro-genres.json's
+# textAny: "office", "best friends", "hospital"...) have something to match; a show's own by a hash of its id (no draw of the
+# fixture's random source, so every other value stays as it was), about a third with none of them
+SHOW_THEMES = [
+    "An office manager and his co-workers try to keep a struggling paper company afloat.",
+    "Four best friends share an apartment, a coffee shop and too much of each other's lives.",
+    "Two parents and their three kids outgrow a tiny house, and each other.",
+    "A first-year teacher takes on the toughest class at a high school.",
+    "Surgeons and nurses at a city hospital face long nights and harder choices.",
+    "Detectives in a big-city precinct chase a killer through the homicide files.",
+    "The crew of a starship explores the far reaches of space.",
+    "Lawyers at a downtown law firm take a case that could ruin them.",
+    "In a small town, the sheriff learns that everyone has a secret.",
+    "After the outbreak, a band of survivors holds off the zombies.",
+    "A time machine sends a teenager back in time to save her family.",
+    "Aliens land outside a farming village, and nobody believes the one who saw them.",
+    "A mafia family runs its empire from the back of a quiet restaurant.",
+]
 TV_RATINGS = ["TV-Y7", "TV-PG", "TV-14", "TV-MA"]
 STUDIOS = ["Northlight Pictures", "Blue Kite Films", "Harborview Studios", "Paper Moon", "Ironwood Media",
            "Studio Kestrel", "Lantern House", "Seventh Wave"]
@@ -332,6 +350,10 @@ class Library:
         # 1.6 collections: TmdbCollection ids, countries, recurring directors, a show left a while ago, and (with
         # FAKESERVER_COLLECTIONS) the admin's box set with its franchise's Tmdb id (smartdata.py)
         smartdata.apply(self, _id("view", "Movies"))
+        # Nixie 1.9 (stream text): FAKESERVER_BIG_SHOWS=<n> adds a big shows library after smartdata's picks ("Shows Archive"), summaries and all (the rest as it was)
+        big_shows = self.int_of(os.environ.get("FAKESERVER_BIG_SHOWS"), 0)
+        if big_shows > 0:
+            self._big_shows(big_shows)
         # Nixie 1.7.5 (the basics gate, g3): FAKESERVER_REAL_SHAPE=1 adds the real-shaped titles (seasons of 13 and 24
         # episodes, long titles and names, a cast of 48, a person in 40 films, a box set of 40); after everything else,
         # with random sources of its own, so the rest of the fixture is unchanged
@@ -596,6 +618,41 @@ class Library:
             self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
         finally:
             self.rng = saved
+
+    # Nixie 1.9 (stream text)
+    @staticmethod
+    def show_theme(item_id):
+        """A show's theme sentence (SHOW_THEMES) by a hash of its id, or None (about a third): no random draw."""
+        k = int(hashlib.sha1(("theme:" + item_id).encode()).hexdigest(), 16) % (len(SHOW_THEMES) + 6)
+        return SHOW_THEMES[k] if k < len(SHOW_THEMES) else None
+
+    def _big_shows(self, n):
+        """FAKESERVER_BIG_SHOWS=<n>: a big shows library ("Shows Archive") of n shows, a season of one episode each, every
+        summary themed or plain and about 8 % with none (the survey's 4,975 shows; with FAKESERVER_BIG_LIBRARY=25877 the
+        owner's library's shape). Its own random source, after everything else: the rest of the fixture is unchanged."""
+        saved = self.rng
+        self.rng = random.Random(9191)
+        try:
+            rng = self.rng
+            vid = _id("view", "Shows Archive")
+            start = self.now - datetime.timedelta(days=6 * 365)
+            span = (self.now - start).total_seconds()
+            self.items[vid] = {"Id": vid, "kind": "view", "Name": "Shows Archive", "collection": "tvshows", "parent": None,
+                               "view": vid, "created": start}
+            self.views.append(vid)
+            self.children[vid] = []
+            for i in range(n):
+                name = "%s %s %d" % (rng.choice(ADJECTIVES), rng.choice(NOUNS), i + 1)
+                self._names.add(name)
+                self._series(vid, "Shows Archive", name, start + datetime.timedelta(seconds=rng.uniform(0, span)),
+                             rng.randint(1960, 2026), None, seasons=1, episodes=1)
+                sid = _id("series", "Shows Archive", name)
+                if int(hashlib.sha1(("plain:" + sid).encode()).hexdigest(), 16) % 12 == 0:
+                    self.items[sid]["overview"] = ""   # no summary (rule 4: unknown, never "not workplace")
+            self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
+        finally:
+            self.rng = saved
+    # end 1.9 (stream text)
 
     # UXCAP (the library and collections review's captures): a big movies library ("Archive") of n titles, for density and scrolling
     def _big_library(self, n):
@@ -866,6 +923,10 @@ class Library:
             genres.insert(0, "Animation")
         series = self._common(sid, "series", name, vid, vid, created, year, genres, rng.choice(TV_RATINGS))
         series["showcase"] = showcase
+        if not showcase:   # Nixie 1.9 (stream text): a theme the word lists can match (the showcase's summary as it was)
+            theme = self.show_theme(sid)
+            if theme:
+                series["overview"] = theme + " " + series["overview"]
         series["status"] = rng.choice(["Continuing", "Ended"])
         self.items[sid] = series
         self.children[vid].append(sid)
@@ -1331,6 +1392,12 @@ class Library:
         saved_since = self.parse_date(one("mindatelastsaved"))
         if saved_since is not None:
             pool = [i for i in pool if self.saved_at(i) >= saved_since]
+        # Nixie 1.9 (the index's load): MinDateLastSavedForUser as 10.11.11 and 12.4.0 answer it (tools\qa-servers\
+        # live-user-data-since.ps1): by the title's own save date, not the user's data (a film marked played a minute ago
+        # isn't among them), so a client can't take it for the user's marks
+        saved_for_user = self.parse_date(one("mindatelastsavedforuser"))
+        if saved_for_user is not None:
+            pool = [i for i in pool if self.saved_at(i) >= saved_for_user]
         # 1.5 search: matched as 12.4 matches (search.py), not as one plain substring of the name
         raw_term = one("searchterm") or ""
         # 1.5 search: a person's titles (/Items?personIds=)

@@ -37,9 +37,23 @@ public sealed class AnswerTrace
 	/// </summary>
 	public bool ServersFault => SawServerError && !SawNoAnswer;
 
+	// 1.9 (the index's load on a server that isn't the user's)
+	private int _notFound;
+
+	/// <summary>
+	/// Nixie 1.9: the server answered that it doesn't have what was asked (404, 410), and every request got an answer with no
+	/// error of its own: a title removed since the library index was read (it reads every title at most once a day).
+	/// </summary>
+	public bool NotOnServer => Volatile.Read(ref _notFound) > 0 && !SawNoAnswer && !SawServerError;
+	// end 1.9
+
 	internal void Answered(HttpStatusCode status, string? mediaType)
 	{
-		if (status == HttpStatusCode.NetworkAuthenticationRequired)
+		if (status is HttpStatusCode.NotFound or HttpStatusCode.Gone)
+		{
+			Interlocked.Increment(ref _notFound); // 1.9
+		}
+		else if (status == HttpStatusCode.NetworkAuthenticationRequired)
 		{
 			// 511: a captive portal (a hotel's or a café's Wi-Fi) wants its own sign-in first: the connection, not the server
 			Interlocked.Increment(ref _noAnswers);

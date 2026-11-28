@@ -1,0 +1,19 @@
+{
+  "about": "1.9 pre-release (2026-11-26): the data fixes of the offline run on the owner's library (its report's fixes, item 3): documentaries, talk shows, reality shows and news out of shows categories they made untrue. TMDb's \"Talk\" beside \"Talk Show\" wherever a rule refuses one. Applied to draft.json with: Census --catalogue draft.json --patch patches\\pre-release-190.json --format draft.json, then cut by kept.txt into the shipped file. Names, reasons and word lists unchanged: the summaries' fingerprint stays, and nothing is read again.",
+  "patches": [
+    { "id": "tv-historical-mini-series", "why": "This week's explore pick was a documentary shelf: The World at War, The Civil War, Apocalypse: World War II after Band of Brothers",
+      "rule": { "genresAll": ["Mini-Series", "History"], "genresNone": ["Documentary"] } },
+    { "id": "tv-mystery-dramedies", "why": "a horror-host talk show (Svengoolie) in its first five",
+      "rule": { "genresAll": ["Comedy", "Drama", "Mystery"], "genresNone": ["Animation", "Anime", "Talk Show", "Talk", "Reality"] } },
+    { "id": "tv-horror-comedies", "why": "horror-host talk shows and reality investigations (The Last Drive-in, BuzzFeed Unsolved)",
+      "rule": { "genresAll": ["Comedy", "Horror"], "genresNone": ["Animation", "Anime", "Talk Show", "Talk", "Reality"] } },
+    { "id": "tv-sci-fi-dramas-1990s", "why": "talk and reality shows tagged science fiction",
+      "rule": { "genresAll": ["Drama"], "genresAny": ["Science Fiction", "Sci-Fi & Fantasy"], "genresNone": ["Animation", "Anime", "Talk Show", "Talk", "Reality"], "years": [1990, 1999] } },
+    { "id": "tv-rated-mini-series", "why": "a talk show (Costa Del Linse)",
+      "rule": { "genresAll": ["Mini-Series"], "genresNone": ["Documentary", "Talk Show", "Talk"], "communityMin": 7.8 } },
+    { "id": "tv-sports-dramas", "why": "wrestling documentaries (Dark Side of the Ring) and sports reality shows",
+      "rule": { "genresAll": ["Drama", "Sport"], "genresNone": ["Animation", "Anime", "Documentary", "Reality"] } },
+    { "id": "tv-sports-comedies", "why": "highlight shows and sports talk (Olympic Highlights)",
+      "rule": { "genresAll": ["Comedy", "Sport"], "genresNone": ["Animation", "Anime", "Talk Show", "Talk", "News"] } }
+  ]
+}

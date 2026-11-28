@@ -46,7 +46,31 @@ public readonly record struct SpotlightWeek(int Year, int Week, DateOnly Monday,
 /// here in the Spotlight's order (the best-scored unwatched first, watched at the end), how many are unwatched, and their
 /// coherence (the mean similarity of their best 12 on everything but the defining name).
 /// </summary>
-public sealed record SpotlightCandidate(string Id, SpotlightSubject Subject, string Name, IReadOnlyList<IndexEntry> Titles, int Unwatched, double Coherence);
+public sealed record SpotlightCandidate(string Id, SpotlightSubject Subject, string Name, IReadOnlyList<IndexEntry> Titles, int Unwatched, double Coherence)
+{
+	/// <summary>
+	/// 1.9 (the owner's library, fix 8): how near the candidate's titles are to what the user watched (<see cref="SmartCollections.Taste"/>),
+	/// <see cref="SpotlightBuilder.TasteLeast"/> to <see cref="SpotlightBuilder.TasteMost"/>, 1 for the candidates' average (and
+	/// for everyone, with no history): the week's draw is weighted by it.
+	/// </summary>
+	public double Taste { get; init; } = 1;
+
+	// 1.9 (Phase 3, R5)
+	/// <summary>
+	/// The likeness <see cref="Taste"/> is made of, as measured: the mean nearness of the candidate's best titles to what the user
+	/// watched, before the shrink and the clamp (so the nearest stay apart where their tastes are all <see cref="SpotlightBuilder.TasteMost"/>);
+	/// null with no history.
+	/// </summary>
+	public double? Likeness { get; init; }
+
+	/// <summary>
+	/// Among the nearest by <see cref="Likeness"/> (<see cref="SpotlightBuilder.NearestMost"/> to <see cref="SpotlightBuilder.NearestLeast"/> of the candidates): when any candidate is, the week's
+	/// draw takes only these. None is with no history (the draw is then 1.8's), nor on a library whose candidates are all the
+	/// nearest anyway.
+	/// </summary>
+	public bool Nearest { get; init; }
+	// end 1.9
+}
 
 /// <summary>
 /// Nixie 1.8 (P1-3, the report's "one weekly director or actor spotlight", "a short curated list of house-style studios
@@ -64,7 +88,8 @@ public sealed record SpotlightCandidate(string Id, SpotlightSubject Subject, str
 /// each subject's candidates: a filmography that shares nothing but the name isn't a retrospective.</item>
 /// </list>
 /// The week's pick is drawn by the week's seed among those left (highest random weight, so a candidate joining or leaving
-/// elsewhere in the library doesn't move it), never last week's while others remain (<see cref="Pick"/>). A
+/// elsewhere in the library doesn't move it), never last week's while others remain (<see cref="Pick"/>); 1.9: with the user's
+/// history, among the nearest to what they watched only (<see cref="SpotlightCandidate.Nearest"/>). A
 /// person who passes as director and actor is a director. Counts only in the census, never a name.
 /// </summary>
 /// <param name="picks">
@@ -89,6 +114,34 @@ public sealed class SpotlightBuilder(IReadOnlyDictionary<string, string>? picks 
 
 	/// <summary>The most titles a Spotlight holds (a short retrospective; MUBI's shelf was about 30): the best first.</summary>
 	public const int Most = 30;
+
+	// 1.9 (the owner's library, fix 8)
+	/// <summary>The least a candidate's taste weighs in the draw (one sharing nothing with what the user watched).</summary>
+	public const double TasteLeast = 0.25;
+
+	/// <summary>The most a candidate's taste weighs in the draw.</summary>
+	public const double TasteMost = 4;
+
+	// Phase 3 (R5: "the Spotlight from their taste, not random")
+	/// <summary>The share of the candidates the week's draw takes, the nearest first, with the least evidence.</summary>
+	public const double NearestMost = 0.05;
+
+	/// <summary>The share of the candidates the week's draw takes with the most evidence.</summary>
+	public const double NearestLeast = 0.01;
+
+	/// <summary>
+	/// The fewest the draw takes from: more than the weeks kept (<see cref="SmartCollectionStore.SpotlightWeeksKept"/>), so none of
+	/// them comes back while it is kept and there is still a choice. A library with no more candidates than this draws from all.
+	/// </summary>
+	public const int NearestFewest = 12;
+
+	/// <summary>
+	/// 1.9 (the rebuild's blocker 3): inside the nearest, a candidate's weight in the draw halves about every this many places
+	/// by likeness (<c>exp(-place / NearestDecay)</c>): the 20 most alike get most of the weeks (on the owner's 394 nearest a draw
+	/// by taste gave them 7 % of a week, the tastes all 2.4 to 4).
+	/// </summary>
+	public const double NearestDecay = 10;
+	// end 1.9
 
 	public SmartCollectionKind Kind => SmartCollectionKind.Spotlight;
 
@@ -267,8 +320,15 @@ public sealed class SpotlightBuilder(IReadOnlyDictionary<string, string>? picks 
 
 		// 4. coherence: the bottom third of each subject's go
 		var tops = passed.ToDictionary(x => x.Group, x => Top(x.Group.Titles, scores), ReferenceEqualityComparer.Instance);
-		var similarity = new Similarity(catalogue, tops.Values.SelectMany(x => x));
-		var coherent = new List<SpotlightCandidate>();
+		// 1.9 (fix 8): the titles the user watched are measured too: each candidate's taste is its likeness to them
+		var taste = Taste.Of(context.Titles, context.Index.SeriesPlays);
+		// 1.9 (the Phase 3 review, item 8): a show counts toward the nearness from three episodes played, or finished (as it
+		// anchors More like): one sampled episode weighed a third of a binge, and the shows of a few voice actors tried once each
+		// put all of them among the nearest
+		var watched = taste.Any ? titles.Where(x => taste.WeightOf(x.Id) > 0
+			&& (x.Kind != IndexKind.Series || Anchors.AnchoredSlots.AnchorsMoreLike(x, context.Titles, context.Index.SeriesPlays))).ToList() : [];
+		var similarity = new Similarity(catalogue, tops.Values.SelectMany(x => x).Concat(watched));
+		var coherent = new List<(SpotlightCandidate Candidate, List<IndexEntry> Top)>();
 		foreach (var subject in passed.GroupBy(x => x.Group.Subject))
 		{
 			var scored = subject
@@ -278,16 +338,74 @@ public sealed class SpotlightBuilder(IReadOnlyDictionary<string, string>? picks 
 			foreach (var ((group, key, unwatched), coherence) in scored.Skip(scored.Count / 3))
 			{
 				counts.Add(group.Subject, SpotlightGate.Coherent);
-				coherent.Add(new SpotlightCandidate(IdOf(group.Subject, key), group.Subject, group.Name, Ordered(group.Titles, scores, finished), unwatched, coherence));
+				coherent.Add((new SpotlightCandidate(IdOf(group.Subject, key), group.Subject, group.Name, Ordered(group.Titles, scores, finished), unwatched, coherence), tops[group]));
 			}
 		}
 
+		var weighed = Weighed(coherent, similarity, watched, taste);
+
 		// a person who passes as director and actor is a director; two names with one key ("Jean-Pierre", "Jean Pierre") are one,
 		// the one with more titles
-		var directors = coherent.Where(x => x.Subject == SpotlightSubject.Director).Select(x => x.Id["spotlight:director:".Length..]).ToHashSet(StringComparer.Ordinal);
-		return [.. coherent.Where(x => x.Subject != SpotlightSubject.Actor || !directors.Contains(x.Id["spotlight:actor:".Length..]))
+		var directors = weighed.Where(x => x.Subject == SpotlightSubject.Director).Select(x => x.Id["spotlight:director:".Length..]).ToHashSet(StringComparer.Ordinal);
+		var made = Nearest([.. weighed.Where(x => x.Subject != SpotlightSubject.Actor || !directors.Contains(x.Id["spotlight:actor:".Length..]))
 			.GroupBy(x => x.Id, StringComparer.Ordinal).Select(g => g.OrderByDescending(x => x.Titles.Count).ThenBy(x => x.Name, StringComparer.Ordinal).First())
-			.OrderBy(x => x.Id, StringComparer.Ordinal)];
+			.OrderBy(x => x.Id, StringComparer.Ordinal)], taste);
+		counts.Nearest = made.Count(x => x.Nearest); // 1.9 (R5): the census says how many the draw takes from
+		return made;
+	}
+
+	// 1.9 (Phase 3, R5: "the Spotlight from their taste, not random"): the week's draw takes only the nearest by likeness, the
+	// top 5 % of the candidates narrowing to 1 % as the evidence grows (the share Taste's shrink leaves, Smoothing / (evidence +
+	// Smoothing): 3 % for the owner's), at least NearestFewest. Weighting alone wasn't enough on a big library with thin
+	// metadata: the owner's 11,812 candidates gave the 983 with a taste of 2 or more only a quarter of the draw, and the weeks
+	// went to a 1970s anime voice actor and a 1990s kickboxing actor. The likeness is a mean over each candidate's best
+	// CoherenceOf titles (Weighed), so a subject of 300 titles doesn't win on volume. With no history none is the nearest, and
+	// the draw is 1.8's
+	private static List<SpotlightCandidate> Nearest(List<SpotlightCandidate> candidates, Taste taste)
+	{
+		if (!taste.Any || !candidates.Any(x => x.Likeness is not null))
+		{
+			return candidates;
+		}
+
+		var share = Math.Clamp(Taste.Smoothing / (taste.Total + Taste.Smoothing), NearestLeast, NearestMost);
+		var take = Math.Max(NearestFewest, (int)Math.Ceiling(share * candidates.Count));
+		if (take >= candidates.Count)
+		{
+			return candidates; // a library whose candidates are all among the nearest: 1.9's weighted draw over them all
+		}
+
+		var nearest = candidates.OrderByDescending(x => x.Likeness ?? 0).ThenBy(x => x.Id, StringComparer.Ordinal).Take(take).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+		return [.. candidates.Select(x => nearest.Contains(x.Id) ? x with { Nearest = true } : x)];
+	}
+
+	// 1.9 (the owner's library, fix 8: "Give the Spotlight some taste"): each candidate's taste is how like what the user watched
+	// its best titles are, over the candidates' mean, so the average candidate weighs 1. Little evidence counts little (shrunk
+	// toward 1 by evidence / (evidence + Taste.Smoothing)). With no history every candidate weighs 1 and the draw is 1.8's. On
+	// the owner's library, Ealing (British films of the 1940s and 50s, nothing near what they watch) was drawn over an anime studio
+	// whose show they had watched 46 episodes of, by chance.
+	// Phase 3 (R5): the likeness is the mean of its best titles' nearness to the watched title each is most like (each
+	// feature weighted by its rarity here, the defining name included: a studio whose show they watched 46 episodes of is
+	// near; Similarity.Nearness), not fix 8's cosine against all they watched at once. That one profile leaned to the kinds
+	// sharing the most genres: on the owner-shaped test library (SpotlightTop190Tests) none of its nearest 43 was horror or
+	// prestige drama, 23 of the 87 shows played. A mean, not a sum: a subject of 300 titles doesn't win on volume
+	private static List<SpotlightCandidate> Weighed(List<(SpotlightCandidate Candidate, List<IndexEntry> Top)> coherent, Similarity similarity, List<IndexEntry> watched, Taste taste)
+	{
+		if (!taste.Any || coherent.Count == 0)
+		{
+			return [.. coherent.Select(x => x.Candidate)];
+		}
+
+		var near = similarity.Nearness([.. watched.Select(x => (x, taste.WeightOf(x.Id)))]);
+		var likeness = coherent.Select(x => x.Top.Count == 0 ? 0 : x.Top.Average(near)).ToList();
+		var mean = likeness.Average();
+		if (mean <= 0)
+		{
+			return [.. coherent.Select(x => x.Candidate)];
+		}
+
+		var shrink = taste.Total / (taste.Total + Taste.Smoothing);
+		return [.. coherent.Select((x, i) => x.Candidate with { Taste = Math.Clamp(1 + (((likeness[i] / mean) - 1) * shrink), TasteLeast, TasteMost), Likeness = likeness[i] })]; // 1.9 (R5): the likeness kept
 	}
 
 	/// <summary>A Spotlight's id: "spotlight:director:jeanpierremelville", "spotlight:studio:studioghibli" (never a retired kind's prefix).</summary>
@@ -304,36 +422,66 @@ public sealed class SpotlightBuilder(IReadOnlyDictionary<string, string>? picks 
 	/// (<see cref="Rounds"/> rounds back; about 1 week in 180 repeats with four candidates, as the review measured), three or
 	/// fewer by turns. It can move mid-week when the candidates change; kept picks can't.
 	/// </para>
+	/// <para>
+	/// 1.9 (Phase 3, R5): with the user's history, both draw only among the nearest by taste (<see cref="SpotlightCandidate.Nearest"/>),
+	/// and with picks kept none of the weeks kept comes again while one of the nearest is left. This week's kept pick still holds,
+	/// wherever it ranks now. With no history it is all as above. 1.9 (the rebuild's blocker 3): among the nearest a candidate
+	/// weighs by its place by likeness (<see cref="NearestDecay"/>), not its taste, so the most alike get most of the weeks.
+	/// </para>
 	/// </summary>
 	public static SpotlightCandidate? Pick(IReadOnlyList<SpotlightCandidate> candidates, SpotlightWeek week, IReadOnlyDictionary<string, string>? picks = null,
 		Func<string, SpotlightCandidate?>? held = null)
 	{
+		// 1.9 (Phase 3, R5): the nearest by taste only, when the user's history marks any (SpotlightCandidate.Nearest); with no
+		// history all, as 1.8
+		var nearest = candidates.Any(x => x.Nearest) ? candidates.Where(x => x.Nearest).ToList() : null;
+		var drawn = nearest ?? candidates;
+		var weight = WeightsOf(nearest); // 1.9 (the rebuild's blocker 3): by place among the nearest; null: each one's taste
 		if (picks is not null)
 		{
 			var kept = picks.GetValueOrDefault(week.Seed);
 			if (kept is not null && (candidates.FirstOrDefault(x => x.Id == kept) ?? held?.Invoke(kept)) is { } holds)
 			{
-				return holds;
+				return holds; // the week's kept pick holds, wherever it ranks now
 			}
 
 			var last = picks.GetValueOrDefault(week.Before(1).Seed);
-			var pool = candidates.Where(x => x.Id != last && x.Id != kept).ToList();
-			return pool.Count == 0 ? null : pool.MaxBy(x => (Weight(week.Seed, x.Id), x.Id), WeightOrder.Instance);
+			if (nearest is not null)
+			{
+				// 1.9 (R5): a draw from the few nearest would come back within weeks: none of the weeks kept on this PC comes
+				// again while one of the nearest is left (NearestFewest is more than the weeks kept)
+				var recent = Enumerable.Range(1, SmartCollectionStore.SpotlightWeeksKept).Select(w => picks.GetValueOrDefault(week.Before(w).Seed)).Append(kept)
+					.OfType<string>().ToHashSet(StringComparer.Ordinal);
+				var fresh = nearest.Where(x => !recent.Contains(x.Id)).ToList();
+				if (fresh.Count > 0)
+				{
+					return fresh.MaxBy(x => Drawn(week.Seed, x, weight), DrawOrder.Instance);
+				}
+			}
+
+			var pool = drawn.Where(x => x.Id != last && x.Id != kept).ToList();
+			return pool.Count == 0 ? null : pool.MaxBy(x => Drawn(week.Seed, x, weight), DrawOrder.Instance);
 		}
 
-		if (candidates.Count == 0)
+		if (drawn.Count == 0)
 		{
 			return null;
 		}
 
-		if (candidates.Count <= 3)
+		if (drawn.Count <= 3)
 		{
-			var turns = candidates.OrderByDescending(x => Weight("turns", x.Id)).ThenBy(x => x.Id, StringComparer.Ordinal).ToList();
+			var turns = drawn.OrderByDescending(x => Weight("turns", x.Id)).ThenBy(x => x.Id, StringComparer.Ordinal).ToList();
 			return turns[Turn(week.Number, turns.Count)];
 		}
 
-		return Round(candidates, week, Rounds);
+		return Round(drawn, week, Rounds, weight);
 	}
+
+	// 1.9 (the rebuild's blocker 3): each of the nearest's weight in the draw by its place among them by likeness, the most alike
+	// first (exp(-place / NearestDecay)); null with no history (each one's taste weighs, as 1.8 and fix 8)
+	private static Dictionary<string, double>? WeightsOf(List<SpotlightCandidate>? nearest) => nearest is null ? null
+		: nearest.OrderByDescending(x => x.Likeness ?? 0).ThenBy(x => x.Id, StringComparer.Ordinal)
+			.Select((x, place) => (x.Id, Weight: Math.Exp(-place / NearestDecay))).ToDictionary(x => x.Id, x => x.Weight, StringComparer.Ordinal);
 
 	/// <summary>A week's turn among <paramref name="count"/>: 0 to count - 1 whatever the week's number (one before 2001 is negative).</summary>
 	internal static int Turn(long number, int count) => (int)(((number % count) + count) % count);
@@ -342,7 +490,7 @@ public sealed class SpotlightBuilder(IReadOnlyDictionary<string, string>? picks 
 	public const int Rounds = 4;
 
 	// round r: the week's draw leaving out last week's rounds 0 to r-1 (round 0: the plain draw)
-	private static SpotlightCandidate Round(IReadOnlyList<SpotlightCandidate> candidates, SpotlightWeek week, int round)
+	private static SpotlightCandidate Round(IReadOnlyList<SpotlightCandidate> candidates, SpotlightWeek week, int round, Dictionary<string, double>? weight = null)
 	{
 		var left = candidates;
 		if (round > 0)
@@ -351,14 +499,14 @@ public sealed class SpotlightBuilder(IReadOnlyDictionary<string, string>? picks 
 			var out_ = new HashSet<string>(StringComparer.Ordinal);
 			for (var r = 0; r < round; r++)
 			{
-				out_.Add(Round(candidates, before, r).Id);
+				out_.Add(Round(candidates, before, r, weight).Id);
 			}
 
 			var fresh = candidates.Where(x => !out_.Contains(x.Id)).ToList();
 			left = fresh.Count > 0 ? fresh : candidates;
 		}
 
-		return left.MaxBy(x => (Weight(week.Seed, x.Id), x.Id), WeightOrder.Instance)!;
+		return left.MaxBy(x => Drawn(week.Seed, x, weight), DrawOrder.Instance)!;
 	}
 
 	/// <summary>The draw's weight of an id in a week: FNV-1a (64-bit) of "2026-W48|spotlight:…" in UTF-8, the same on every PC and the TV.</summary>
@@ -380,19 +528,44 @@ public sealed class SpotlightBuilder(IReadOnlyDictionary<string, string>? picks 
 		return hash;
 	}
 
-	private sealed class WeightOrder : IComparer<(ulong Weight, string Id)>
+	/// <summary>
+	/// 1.9 (the owner's library, fix 8): a candidate's place in a week's draw, highest first: weighted rendezvous hashing,
+	/// <c>ln(U) / taste</c> with U its <see cref="Weight"/>'s top 53 bits read as a number in (0, 1]: an exponential race, so of two
+	/// candidates in a plain draw one of twice the taste wins twice as often (the picks kept on this PC and the rounds that leave
+	/// out last week's change the shares), and one joining or leaving that isn't the pick doesn't move it; ties go by the weight
+	/// and the id, as 1.8's draw. With every taste 1 (no history) the order is 1.8's: ln(U) never falls as the weight rises, and
+	/// equal keys (weights alike in their top 53 bits) go by the weight.
+	/// </summary>
+	/// <param name="weights">1.9 (the rebuild's blocker 3): the nearest's weights by place (<see cref="NearestDecay"/>) in place of the taste; null: the taste.</param>
+	internal static (double Key, ulong Weight, string Id) Drawn(string seed, SpotlightCandidate candidate, IReadOnlyDictionary<string, double>? weights = null)
 	{
-		public static WeightOrder Instance { get; } = new();
+		var weight = Weight(seed, candidate.Id);
+		var u = ((weight >> 11) + 1) * (1.0 / (1UL << 53));
+		var by = weights is not null && weights.TryGetValue(candidate.Id, out var placed) ? placed : Math.Clamp(candidate.Taste, TasteLeast, TasteMost);
+		return (Math.Log(u) / by, weight, candidate.Id);
+	}
 
-		public int Compare((ulong Weight, string Id) x, (ulong Weight, string Id) y)
+	private sealed class DrawOrder : IComparer<(double Key, ulong Weight, string Id)>
+	{
+		public static DrawOrder Instance { get; } = new();
+
+		public int Compare((double Key, ulong Weight, string Id) x, (double Key, ulong Weight, string Id) y)
 		{
+			var byKey = x.Key.CompareTo(y.Key);
+			if (byKey != 0)
+			{
+				return byKey;
+			}
+
 			var byWeight = x.Weight.CompareTo(y.Weight);
 			return byWeight != 0 ? byWeight : string.CompareOrdinal(y.Id, x.Id); // a tie: the first id wins
 		}
 	}
 
 	// the Spotlight's order: the best-scored unwatched first, then the watched ones (best first too); in each, the unrated last,
-	// then by rating, name and id (Best.Of's order, from the scores already worked out)
+	// then by rating, name and id (Best.Of's order, from the scores already worked out). 1.9 (fix 8): the score reads the critics'
+	// view (QualityScore.RatingOf), so two 7.6s with critics' 100 and 34 no longer tie; no tie on the critics' value itself (it
+	// put a title without critics last among equals: missing data ranked low, rule 4)
 	private static List<IndexEntry> Ordered(IEnumerable<IndexEntry> titles, Dictionary<Guid, double> scores, HashSet<Guid> finished) =>
 		[.. titles.OrderBy(x => finished.Contains(x.Id)).ThenBy(x => scores.ContainsKey(x.Id) ? 0 : 1).ThenByDescending(x => scores.GetValueOrDefault(x.Id))
 			.ThenByDescending(x => x.Rating ?? 0).ThenBy(x => x.OrderName, StringComparer.CurrentCultureIgnoreCase).ThenBy(x => x.Id)];
@@ -688,6 +861,73 @@ public sealed class SpotlightBuilder(IReadOnlyDictionary<string, string>? picks 
 			? [.. _studios.Where(n => string.Equals(catalogue.CuratedOf(_features[n].Value)?.Name, subject.Name, StringComparison.Ordinal))]
 			: _number.TryGetValue(new Feature(FeatureKind.Person, subject.Name), out var n) ? [n] : [];
 
+		/// <summary>
+		/// 1.9 (Phase 3, R5): how near each measured title is to what the user watched: its similarity (as <see cref="Mean"/>'s, the
+		/// defining names included) to the watched title it is most like, times that title's weight over a binged show's
+		/// (<see cref="Taste.ShowMost"/>: the shows with the most episodes played count most). A title watched is near itself.
+		/// Each of the watched titles' features lists the watched titles that have it, so a title is one pass over its own features.
+		/// </summary>
+		public Func<IndexEntry, double> Nearness(IReadOnlyList<(IndexEntry Title, double Weight)> watched)
+		{
+			var sets = watched.Select(x => _titles.TryGetValue(x.Title.Id, out var set) ? set : []).ToArray();
+			var totals = sets.Select(set => set.Sum(n => _weight[n])).ToArray();
+			var factors = watched.Select(x => Math.Clamp(x.Weight / Taste.ShowMost, 0, 1)).ToArray();
+			var postings = new List<int>?[_features.Count];
+			for (var i = 0; i < sets.Length; i++)
+			{
+				foreach (var n in sets[i])
+				{
+					(postings[n] ??= []).Add(i);
+				}
+			}
+
+			var shared = new double[sets.Length];
+			var seen = new bool[sets.Length];
+			var touched = new List<int>();
+			var made = new Dictionary<Guid, double>();
+			return title =>
+			{
+				if (made.TryGetValue(title.Id, out var near))
+				{
+					return near;
+				}
+
+				var set = _titles.TryGetValue(title.Id, out var features) ? features : [];
+				var total = 0.0;
+				foreach (var n in set)
+				{
+					total += _weight[n];
+					foreach (var i in postings[n] ?? [])
+					{
+						if (!seen[i])
+						{
+							seen[i] = true;
+							touched.Add(i);
+						}
+
+						shared[i] += _weight[n];
+					}
+				}
+
+				near = 0;
+				foreach (var i in touched)
+				{
+					var either = total + totals[i] - shared[i];
+					if (either > 0)
+					{
+						near = Math.Max(near, shared[i] / either * factors[i]);
+					}
+
+					shared[i] = 0;
+					seen[i] = false;
+				}
+
+				touched.Clear();
+				made[title.Id] = near;
+				return near;
+			};
+		}
+
 		/// <summary>The mean similarity of every pair of <paramref name="titles"/>, leaving the features numbered <paramref name="defining"/> out; 0 for fewer than two.</summary>
 		public double Mean(IReadOnlyList<IndexEntry> titles, int[] defining)
 		{
@@ -828,6 +1068,9 @@ public sealed class SpotlightCounts
 	/// <summary>The index's people weren't all in (<see cref="IndexSnapshot.PeopleCovered"/>): no director or actor was weighed.</summary>
 	public bool PeopleWaiting { get; set; }
 
+	/// <summary>1.9 (Phase 3, R5): how many the week's draw takes from, the nearest to what the user watched; 0: all (no history, or few).</summary>
+	public int Nearest { get; set; }
+
 	/// <summary>Another build's counts as this one's (the candidates made once an index).</summary>
 	public void Take(SpotlightCounts other)
 	{
@@ -837,6 +1080,7 @@ public sealed class SpotlightCounts
 		}
 
 		PeopleWaiting = other.PeopleWaiting;
+		Nearest = other.Nearest;
 	}
 
 	/// <summary>Those notable by count, every subject: the census's candidates.</summary>
@@ -844,8 +1088,9 @@ public sealed class SpotlightCounts
 
 	/// <summary>
 	/// "2026-W48: director 12>9>4>3, actor 30>22>6>4, studio 5>5>3>2; a pick" (count, unwatched, notable, coherent); while the
-	/// people aren't all in, "…, studio 5>5>3>2, people not all in; a pick".
+	/// people aren't all in, "…, studio 5>5>3>2, people not all in; a pick". 1.9 (R5): with the draw among the nearest only,
+	/// "…, studio 5>5>3>2, 43 nearest; a pick".
 	/// </summary>
 	public string Census(SpotlightWeek week, bool picked) =>
-		$"{week.Seed}: {string.Join(", ", Enum.GetValues<SpotlightSubject>().Select(s => string.Create(CultureInfo.InvariantCulture, $"{s.ToString().ToLowerInvariant()} {Of(s, SpotlightGate.Count)}>{Of(s, SpotlightGate.Unwatched)}>{Of(s, SpotlightGate.Notable)}>{Of(s, SpotlightGate.Coherent)}")))}{(PeopleWaiting ? ", people not all in" : "")}; {(picked ? "a pick" : "no pick")}";
+		$"{week.Seed}: {string.Join(", ", Enum.GetValues<SpotlightSubject>().Select(s => string.Create(CultureInfo.InvariantCulture, $"{s.ToString().ToLowerInvariant()} {Of(s, SpotlightGate.Count)}>{Of(s, SpotlightGate.Unwatched)}>{Of(s, SpotlightGate.Notable)}>{Of(s, SpotlightGate.Coherent)}")))}{(PeopleWaiting ? ", people not all in" : "")}{(Nearest > 0 ? string.Create(CultureInfo.InvariantCulture, $", {Nearest} nearest") : "")}; {(picked ? "a pick" : "no pick")}";
 }

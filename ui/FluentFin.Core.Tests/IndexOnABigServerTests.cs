@@ -130,8 +130,13 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 				}
 			});
 
-	private LibraryIndex Index(TimeProvider? time = null, ILogger? log = null) =>
-		new(_client.Object, _homeCache, Path.Combine(_folder, "LibraryIndex"), _messages, log ?? new CoreListLogger<LibraryIndex>(), time ?? TimeProvider.System);
+	// 1.9 (the index's load): wholeAnyTime, R reads every title whenever asked, as before 1.9 (a test of something else that uses
+	// R to read every title again right after the first read); else at most once a day (LibraryIndex.WholeReadEvery)
+	private LibraryIndex Index(TimeProvider? time = null, ILogger? log = null, bool wholeAnyTime = false) =>
+		new(_client.Object, _homeCache, Path.Combine(_folder, "LibraryIndex"), _messages, log ?? new CoreListLogger<LibraryIndex>(), time ?? TimeProvider.System)
+		{
+			WholeReadEvery = wholeAnyTime ? TimeSpan.Zero : LibraryIndex.FreshFor,
+		};
 
 	private CollectionsViewModel Page(LibraryIndex index, ILogger<CollectionsViewModel>? log = null) =>
 		new(_client.Object, new GlobalCommands(Mock.Of<INavigationServiceCore>(), _client.Object, Mock.Of<INavigationViewServiceCore>(), Mock.Of<ISettings>()), index,
@@ -183,8 +188,10 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 	public async Task ASavedIndex_IsReadAgainBehindIt_OnlyWhenTheServersCheckChanged_AndNotWithinTheHour()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		var asked = SavedSince();
 		await ReadAndSave(time);
 		var read = _pages;
+		_films.Add(Added(2500, time.Now + TimeSpan.FromMinutes(5), time.Now + TimeSpan.FromMinutes(5)));
 		_check = "2501:another"; // a film added
 
 		time.Now += TimeSpan.FromMinutes(10);
@@ -192,16 +199,17 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		Assert.NotNull(await soon.GetAsync());
 		await Task.Delay(100);
 		await soon.Settled;
-		Assert.Equal(read, _pages); // changed, but read ten minutes ago: not yet
+		Assert.Equal((read, 0), (_pages, asked.Value)); // changed, but read ten minutes ago: not yet
 
 		time.Now += TimeSpan.FromHours(2);
 		using var later = Index(time);
 		var shown = await later.GetAsync();
 		Assert.Equal(2500, shown!.Entries.Count); // the saved one at once
-		await Task.Delay(100);
+		await WaitForIndex(later, x => x.Check == "2501:another"); // then read again behind it
 		await later.Settled;
-		Assert.True(_pages > read); // then read again behind it
-		Assert.Equal("2501:another", later.Current!.Check);
+		Assert.Equal(2501, later.Current!.Entries.Count);
+		Assert.Equal(read, _pages); // 1.9: what changed, not every title
+		Assert.True(asked.Value > 0);
 	}
 
 	[Fact]
@@ -227,15 +235,17 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		Assert.Equal(read, _pages); // unchanged: nothing read (1.7.0 read the whole library at the next visit after any change)
 	}
 
-	// review M2 (Minor): a change the check confirms reads the titles only (1.7.3: and no people, nor any lent)
+	// review M2 (Minor): a change the check confirms reads the titles only (1.7.3: and no people, nor any lent). 1.9: only what
+	// changed (1.7.5 already, when the counts allowed)
 	[Fact]
 	public async Task AChangeTheCheckConfirms_ReadsTheTitlesOnly()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		var asked = SavedSince();
 		await ReadAndSave(time);
 		var (read, people) = (_pages, _peoplePages);
 		_check = "2501:another";
-		_films.Add(Film(2500)); // a film added
+		_films.Add(Added(2500, time.Now + TimeSpan.FromHours(1), time.Now + TimeSpan.FromHours(1))); // a film added
 
 		time.Now += TimeSpan.FromHours(2);
 		using var index = Index(time); // a start two hours on: the check says the libraries changed
@@ -243,7 +253,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		await WaitForIndex(index, x => x.Entries.Count == 2501);
 		await index.Settled;
 
-		Assert.True(_pages > read);
+		Assert.Equal((read, 1), (_pages, asked.Value)); // 1.9: one page of the titles saved since, no page of every title
 		// 1.8 (P1-2): no library's people again; the new film's alone, by id, the others' lent from the index before
 		Assert.Equal(people, _peoplePages);
 		Assert.Equal((1, 1), (_peopleById, _peopleByIdTitles));
@@ -284,15 +294,21 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 	public async Task RDuringALibraryChangesRead_IsAnsweredByThatRead()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		var since = SavedSince();
 		await ReadAndSave(time);
 		_check = "2501:another";
-		_films.Add(Film(2500));
+		_films.Add(Added(2500, time.Now + TimeSpan.FromHours(1), time.Now + TimeSpan.FromHours(1)));
 		var release = new TaskCompletionSource();
-		Pages(_ => release.Task);
+		_client.Setup(x => x.GetLibraryTitleCount(It.IsAny<BaseItemDto>(), It.IsAny<CancellationToken>())) // 1.9: the change's read held
+			.Returns(async (BaseItemDto _, CancellationToken token) =>
+			{
+				await release.Task.WaitAsync(token);
+				return _films.Count;
+			});
 		time.Now += TimeSpan.FromHours(2);
 		using var index = Index(time);
 		await index.GetAsync();
-		await index.Checking; // the check said the libraries changed: their titles are being read
+		await index.Checking; // the check said the libraries changed: what changed is being read
 		Assert.False(index.Settled.IsCompleted);
 
 		index.MarkStale(); // R, while it reads
@@ -300,13 +316,14 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		release.SetResult();
 		Assert.Equal(2501, (await reading)!.Entries.Count);
 		await index.Settled;
-		var asked = _pages;
+		var asked = (_pages, since.Value);
 		time.Now += TimeSpan.FromMinutes(10);
 		await index.GetAsync(); // the next visit
 		await Task.Delay(100);
 		await index.Settled;
 
-		Assert.Equal(asked, _pages);
+		Assert.Equal(asked, (_pages, since.Value));
+		Assert.Equal(1, since.Value); // 1.9: R within the day read what changed with it, once
 	}
 
 	// review (Minor, 1.7.1): a first read that stopped left its pages so far as the page's newest index; new outside (or
@@ -612,7 +629,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		Assert.Equal(10, (await ReadAndSave()).SeriesPlays.Count);
 		_client.Setup(x => x.GetPlayedEpisodesPage(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
 			.ReturnsAsync((BaseItemDtoQueryResult?)null); // a 500, a dropped connection, over 45 s
-		using (var index = Index())
+		using (var index = Index(wholeAnyTime: true))
 		{
 			await index.GetAsync();
 			var fresh = await index.RefreshAsync(); // R
@@ -785,8 +802,8 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		var file = Directory.GetFiles(Path.Combine(_folder, "LibraryIndex"), "*.json").Single();
 		var text = await File.ReadAllTextAsync(file);
 		Assert.Contains("\"Version\":2", text);
-		Assert.Contains("\"Revision\":3", text);
-		await File.WriteAllTextAsync(file, text.Replace(",\"Revision\":3", "", StringComparison.Ordinal)); // as 1.7.2 left it
+		Assert.Contains("\"Revision\":4", text);
+		await File.WriteAllTextAsync(file, text.Replace(",\"Revision\":4", "", StringComparison.Ordinal)); // as 1.7.2 left it
 		var read = _pages;
 
 		time.Now += TimeSpan.FromMinutes(10); // within the hour of its read: shown, not read yet
@@ -815,7 +832,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		await Task.Delay(100);
 		await later.Settled;
 		Assert.True(_pages > read); // then read again behind it
-		await WaitForSaved(x => x.Contains("\"Revision\":3", StringComparison.Ordinal));
+		await WaitForSaved(x => x.Contains("\"Revision\":4", StringComparison.Ordinal));
 	}
 
 	// 1.7.3 fix round (BH-173-M1): the update from 1.7.2 within the hour of 1.7.2's last read. 1.7.2's index has no Critic or
@@ -846,7 +863,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		await File.WriteAllTextAsync(file, root.ToJsonString()); // as 1.7.2 left it
 		var note = Directory.GetFiles(Path.Combine(folder, "Reads"), "*.json").Single();
 		var reads = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(note))!.AsObject();
-		Assert.Equal(3, (int?)reads["Revision"]);
+		Assert.Equal(4, (int?)reads["Revision"]);
 		reads.Remove("Revision");
 		await File.WriteAllTextAsync(note, reads.ToJsonString()); // 1.7.2's note of its read, ten minutes before the update
 		var read = _pages;
@@ -875,7 +892,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		}
 
 		await index.Settled;
-		await WaitForSaved(x => x.Contains("\"Revision\":3", StringComparison.Ordinal) && x.Contains("\"TagCount\":6", StringComparison.Ordinal));
+		await WaitForSaved(x => x.Contains("\"Revision\":4", StringComparison.Ordinal) && x.Contains("\"TagCount\":6", StringComparison.Ordinal));
 		Assert.True(index.Current!.BackingKnown);
 		Assert.Single(SmartCollectionCatalog.BuildAll(index.Current, time.Now), x => x.Kind == SmartCollectionKind.HighlyRated);
 	}
@@ -889,9 +906,9 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		await ReadAndSave(time);
 		var folder = Path.Combine(_folder, "LibraryIndex");
 		var file = Directory.GetFiles(folder, "*.json").Single();
-		await File.WriteAllTextAsync(file, (await File.ReadAllTextAsync(file)).Replace(",\"Revision\":3", "", StringComparison.Ordinal)); // 1.7.2's index
+		await File.WriteAllTextAsync(file, (await File.ReadAllTextAsync(file)).Replace(",\"Revision\":4", "", StringComparison.Ordinal)); // 1.7.2's index
 		var note = Directory.GetFiles(Path.Combine(folder, "Reads"), "*.json").Single();
-		await File.WriteAllTextAsync(note, (await File.ReadAllTextAsync(note)).Replace(",\"Revision\":3", "", StringComparison.Ordinal)); // and its note
+		await File.WriteAllTextAsync(note, (await File.ReadAllTextAsync(note)).Replace(",\"Revision\":4", "", StringComparison.Ordinal)); // and its note
 		Assert.DoesNotContain("Revision", await File.ReadAllTextAsync(note), StringComparison.Ordinal);
 
 		// the first start after the update: the read begins at once, and the server goes away part way
@@ -910,7 +927,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		}
 
 		Assert.True(_pages > before, "the upgrade read began");
-		Assert.DoesNotContain("\"Revision\":3", await File.ReadAllTextAsync(file), StringComparison.Ordinal); // it never came in
+		Assert.DoesNotContain("\"Revision\":4", await File.ReadAllTextAsync(file), StringComparison.Ordinal); // it never came in
 
 		// the next start, five minutes later: read again at once (the note's read never finished)
 		time.Now += TimeSpan.FromMinutes(5);
@@ -928,9 +945,9 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 			await again.Settled;
 		}
 
-		await WaitForSaved(x => x.Contains("\"Revision\":3", StringComparison.Ordinal));
+		await WaitForSaved(x => x.Contains("\"Revision\":4", StringComparison.Ordinal));
 		var stamped = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(note))!;
-		Assert.Equal(3, (int?)stamped["Revision"]); // this read came in: stamped
+		Assert.Equal(4, (int?)stamped["Revision"]); // this read came in: stamped
 	}
 
 	// 1.7.3 (P0-4): the critics' rating and the tag count before the allowlist (the confidence of a title's score) are kept
@@ -1009,6 +1026,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 	public async Task AReadWhoseCheckDidNotAnswer_ThenARestart_ReadsNothing()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		SavedSince(); // 1.9: a change is read as what changed
 		_check = null; // the check didn't answer while the index was read
 		Assert.Null((await ReadAndSave(time)).Check);
 		var read = (_pages, _peoplePages);
@@ -1185,9 +1203,10 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 	public async Task ALibraryChangesRead_KeepsTheDaysDate_SoTheDaysReadStillComes()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
+		SavedSince(); // 1.9: what changed
 		await ReadAndSave(time);
 		_check = "2501:another";
-		_films.Add(Film(2500));
+		_films.Add(Added(2500, time.Now + TimeSpan.FromHours(20), time.Now + TimeSpan.FromHours(20)));
 
 		time.Now += TimeSpan.FromHours(23); // a change the check confirms: the titles only
 		using (var change = Index(time))
@@ -1509,7 +1528,7 @@ public sealed partial class IndexOnABigServerTests : IDisposable
 		var saved = await ReadAndSave();
 		_client.Setup(x => x.GetLibraryIndexPage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
 			.ReturnsAsync((BaseItemDto _, int start, int limit, bool total, CancellationToken _) => start >= 1200 ? null : new BaseItemDtoQueryResult { Items = [.. _films.Skip(start).Take(limit)], TotalRecordCount = total ? _films.Count : null });
-		using var index = Index();
+		using var index = Index(wholeAnyTime: true);
 		var shown = await index.GetAsync();
 
 		Assert.Null(await index.RefreshAsync()); // R: the read stops

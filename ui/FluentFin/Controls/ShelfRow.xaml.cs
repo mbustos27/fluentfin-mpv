@@ -684,6 +684,97 @@ internal static class SmoothScroll
 		}
 	}
 
+	// ---- Nixie 1.9 (the scroll stream): the newer ScrollView (the Collections page) --------------------------------------------
+	// The owner on the 1.9 test copy: "scrolling the collections page takes a longgg time". The page's wheel (its own handler and
+	// EdgeScroller's, over a row) called ScrollView.ScrollBy, animated, for each notch: ScrollBy counts from where the view is, so
+	// a notch while the last one still glided started again from there, and most of each notch was lost: a quick spin of 27
+	// notches moved the page 314 px of the 2,592 it asked (the scroll gate, scroll190). Each notch now counts from where the
+	// page is going, as SmoothScroll does for a ScrollViewer.
+
+	private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ScrollView, Pending> s_views = new();
+
+	// the scroll the page asked last (ScrollView.ScrollTo's correlation id): its end, or anything that interrupts it, ends the glide
+	private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ScrollView, System.Runtime.CompilerServices.StrongBox<int>> s_viewScrolls = new();
+
+	/// <summary>
+	/// Nixie 1.9: how long a page's glide to where the wheel sends it lasts (ease out). A notch 40 ms after the last finds about
+	/// half the way still to go, so through a quick spin the page trails its target by about a notch, and stops this long after
+	/// the last.
+	/// </summary>
+	internal const double GlideMs = 200;
+
+	/// <summary>Nixie 1.9: where the page is going: its glide's target while one runs, else where it is.</summary>
+	public static double Current(ScrollView view) => NextFrom(StateOf(view), view.VerticalOffset);
+
+	/// <summary>Nixie 1.9: where a notch counts from: the glide's target while the page is still going there, else where it is.</summary>
+	internal static double NextFrom(Pending state, double offset) => state.Moving ? state.Target : offset;
+
+	/// <summary>Nixie 1.9: the page moved by <paramref name="pixels"/> from where it is going (a wheel notch).</summary>
+	public static void By(ScrollView view, double pixels) => To(view, Current(view) + pixels);
+
+	/// <summary>Nixie 1.9: the page glides to <paramref name="offset"/> (clamped; at once when Windows asks for less motion).</summary>
+	public static void To(ScrollView view, double offset)
+	{
+		var state = StateOf(view);
+		var wasMoving = state.Moving;
+		if (!state.Begin(offset, view.ScrollableHeight, view.VerticalOffset) && !wasMoving)
+		{
+			return;
+		}
+
+		// (a glide back to where the page is still stops the one going elsewhere)
+		state.Moving = true;
+		var animation = SafeMotion.Allowed ? ScrollingAnimationMode.Auto : ScrollingAnimationMode.Disabled;
+		s_viewScrolls.GetOrCreateValue(view).Value = view.ScrollTo(view.HorizontalOffset, state.Target, new ScrollingScrollOptions(animation, ScrollingSnapPointsMode.Ignore));
+	}
+
+	private static Pending StateOf(ScrollView view)
+	{
+		var state = s_views.GetOrCreateValue(view);
+		if (!state.Hooked)
+		{
+			state.Hooked = true;
+			var asked = s_viewScrolls.GetOrCreateValue(view);
+			// the glide asked last ended, or something else took over and interrupted it (a finger, the scroll bar, the keyboard's
+			// bring into view): the next notch counts from where the page is
+			view.ScrollCompleted += (_, e) =>
+			{
+				if (e.CorrelationId == asked.Value)
+				{
+					state.Moving = false;
+				}
+			};
+			// the glide's own animation, short and quick off the mark: ScrollView's own lasts longer the further it goes (up to a
+			// second) and starts slowly, so a page asked again at every notch of a quick spin trailed its target by over a second
+			view.ScrollAnimationStarting += (_, e) =>
+			{
+				if (e.CorrelationId == asked.Value && e.Animation is Microsoft.UI.Composition.Vector3KeyFrameAnimation stock)
+				{
+					var glide = stock.Compositor.CreateVector3KeyFrameAnimation();
+					glide.InsertKeyFrame(0f, new System.Numerics.Vector3(e.StartPosition, 0f));
+					glide.InsertKeyFrame(1f, new System.Numerics.Vector3(e.EndPosition, 0f),
+						stock.Compositor.CreateCubicBezierEasingFunction(new System.Numerics.Vector2(0.1f, 0.7f), new System.Numerics.Vector2(0.3f, 1f)));
+					glide.Duration = TimeSpan.FromMilliseconds(GlideMs);
+					e.Animation = glide;
+				}
+			};
+			view.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => state.Moving = false), true);
+			view.StateChanged += (sender, _) =>
+			{
+				if (sender.State == ScrollingInteractionState.Interaction)
+				{
+					state.Moving = false;
+				}
+			};
+			// a page left mid-glide (a tile opened) and come back to by Back: the next notch counts from where Back put it, never
+			// from the glide it left
+			view.Loaded += (_, _) => state.Moving = false;
+			view.Unloaded += (_, _) => state.Moving = false;
+		}
+
+		return state;
+	}
+
 	private static Pending StateOf(ScrollViewer viewer, bool horizontal)
 	{
 		var table = horizontal ? s_horizontal : s_vertical;

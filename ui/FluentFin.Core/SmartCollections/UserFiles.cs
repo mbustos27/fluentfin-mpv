@@ -60,6 +60,18 @@ internal sealed class UserFiles
 		}
 	}
 
+	// 1.9 (stream text)
+	/// <summary>
+	/// Nixie 1.9 (rule 9): what was kept here is no longer wanted (Settings turned it off): every user's file goes, and a write
+	/// that began before this is refused, as after a sign-out. <see cref="Deleted"/> is raised.
+	/// </summary>
+	internal Task ForgetAll()
+	{
+		Forgot(key: "", login: null); // "" starts every key: each write that began before is refused
+		return Delete(_ => true);
+	}
+	// end 1.9 (stream text)
+
 	/// <summary>Raised when files were deleted (a sign-out, a removed login): what is in memory for them goes too.</summary>
 	public event Action? Deleted;
 

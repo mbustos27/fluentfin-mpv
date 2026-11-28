@@ -47,6 +47,12 @@ public enum SmartCollectionKind
 	/// <summary>1.8: "Spotlight: Jean-Pierre Melville": the week's person or studio (stream s).</summary>
 	Spotlight = 203,
 	// end 1.8
+
+	// 1.9 (Collections 2): the catalogue's categories, numbered apart as 1.8's kinds are (Home's saved page keeps a kind by its
+	// number)
+	/// <summary>1.9: "Crime Dramas from the 1970s": a category of the shipped catalogue (<see cref="MicroGenres"/>, <c>micro:&lt;id&gt;</c>).</summary>
+	MicroGenre = 300,
+	// end 1.9
 }
 
 /// <summary>
@@ -135,8 +141,10 @@ public static class SmartCollectionKinds
 	/// </summary>
 	/// 1.7.3 (P0-3, the owner: "too many, too generic"): franchises, keywords and awards only. The seven single-fact kinds
 	/// (<see cref="SmartCollectionCatalog.OnDemandOnly"/>) are no longer published.
+	/// 1.9 (Collections 2): the categories first, the keyword collections (their parents) after the franchises, as before.
 	public static IReadOnlyList<SmartCollectionKind> PageOrder { get; } =
 	[
+		SmartCollectionKind.MicroGenre, // 1.9
 		SmartCollectionKind.Franchise, SmartCollectionKind.Keyword,
 		SmartCollectionKind.Award, // 1.7 keyless: the last of the page's kinds, as the plan's 4.1 orders them
 	];
@@ -190,6 +198,7 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.MoreFrom => "More from a person",
 		SmartCollectionKind.Spotlight => "Spotlight",
 		// end 1.8
+		SmartCollectionKind.MicroGenre => "Category", // 1.9
 		_ => "Collection",
 	};
 
@@ -223,6 +232,7 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.MoreFrom => "More from",
 		SmartCollectionKind.Spotlight => "Spotlight",
 		// end 1.8
+		SmartCollectionKind.MicroGenre => "Categories", // 1.9
 		_ => "Collections",
 	};
 

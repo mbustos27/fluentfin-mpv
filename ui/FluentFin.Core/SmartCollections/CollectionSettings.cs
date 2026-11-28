@@ -20,6 +20,9 @@ public static class CollectionSettingKeys
 
 	/// <summary>The Home rows turned off, by name ("HighlyRated,Rotating").</summary>
 	public static Key<string> HomeRowsOff { get; } = new("CollectionsHomeRowsOff", "");
+
+	/// <summary>1.9 (wire's review, Minor 9): the categories' one-time step ran (<see cref="CollectionSettings.Migrate"/>).</summary>
+	public static Key<bool> CategoriesSettled { get; } = new("CollectionsCategoriesSettled", false);
 }
 
 /// <summary>Nixie 1.6: the Made by Nixie rows Home can show (the owner's decision: the first three on, a rotating one a day).</summary>
@@ -48,6 +51,49 @@ public static class CollectionSettings
 	{
 		CollectionNames.Tidy = !settings.ReadSetting(CollectionSettingKeys.KeepServerNames);
 	}
+
+	// 1.9 (wire's review, Minor 9)
+	/// <summary>1.9: the kinds 1.8.1 had a switch for (every one off was Made by Nixie off).</summary>
+	public static IReadOnlyList<SmartCollectionKind> Kinds181 { get; } =
+	[
+		SmartCollectionKind.Franchise, SmartCollectionKind.Keyword, SmartCollectionKind.HighlyRated, SmartCollectionKind.UnfinishedSeries,
+		SmartCollectionKind.Seasonal, SmartCollectionKind.ShortFilms, SmartCollectionKind.NextIn, SmartCollectionKind.MoreLike,
+		SmartCollectionKind.MoreFrom, SmartCollectionKind.Spotlight,
+	];
+
+	/// <summary>
+	/// 1.9, at start, once: a user who turned every Made by Nixie kind off in 1.8.1 keeps Made by Nixie off. The categories are a
+	/// new kind, on by default (the off-list names the kinds turned off), so they came on after the update and the Collections
+	/// page stopped saying every kind is off. With every 1.8.1 kind off, Categories goes off too. It runs once (a note on this
+	/// PC): a user who turns Categories on afterwards, everything else off, keeps it on.
+	/// <para>
+	/// The review of 1.9's ui (Minor 1): it runs unguarded at start, so a setting of the wrong kind ("CollectionsKindsOff": 5,
+	/// "CollectionsCategoriesSettled": "yes") or a settings file that can't be written stopped Nixie from starting, every time.
+	/// Such a failure is said (its type only) and the step is left for the next start, not marked done.
+	/// </para>
+	/// </summary>
+	public static void Migrate(ILocalSettingsService settings, ILogger? log = null)
+	{
+		try
+		{
+			if (settings.ReadSetting(CollectionSettingKeys.CategoriesSettled))
+			{
+				return;
+			}
+
+			if (Kinds181.All(KindsOff(settings).Contains))
+			{
+				Set(settings, CollectionSettingKeys.KindsOff, SmartCollectionKind.MicroGenre, on: false);
+			}
+
+			settings.SaveSetting(CollectionSettingKeys.CategoriesSettled, true);
+		}
+		catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException or IOException or UnauthorizedAccessException)
+		{
+			log?.LogWarning("Collections: the categories' one-time step couldn't read or write the settings ({Error}); it runs again at the next start", ex.GetType().Name);
+		}
+	}
+	// end 1.9
 
 	public static IReadOnlySet<SmartCollectionKind> KindsOff(ILocalSettingsService? settings) =>
 		Parse<SmartCollectionKind>(settings?.ReadSetting(CollectionSettingKeys.KindsOff));
@@ -123,7 +169,7 @@ public sealed class CollectionsSettingsViewModel
 			// Fix round (BH-173-q1): nothing counts raters; what backs a rating is a critics' rating, tags, copies and outside lists
 			Row(NixieHomeRow.HighlyRated, SmartCollectionKinds.Plural(SmartCollectionKind.HighlyRated), HighlyRatedText),
 			Row(NixieHomeRow.UnfinishedSeries, "Unfinished series", "Shows you watched three or more episodes of, then none for a month."), // 1.8.1 (fix 5)
-			Row(NixieHomeRow.Seasonal, "In season", $"Halloween in October, Christmas from {Builders.SeasonalBuilder.ChristmasOpensText} to the end of December."), // 1.8.1 (fix 4)
+			Row(NixieHomeRow.Seasonal, "In season", Builders.SeasonalBuilder.SeasonsText), // 1.8.1 (fix 4); 1.9: and Thanksgiving
 			// 1.8 (P1-1): Home's rows come from the week's lineup (CollectionLineup). Review (Minor 4): under a name of their own
 			// ("Picks"): 1.7's "A collection a day" turned off hid a row a day, not every personal, theme and canon row
 			Row(NixieHomeRow.Picks, PicksName, PicksText),
@@ -145,10 +191,23 @@ public sealed class CollectionsSettingsViewModel
 			on =>
 			{
 				CollectionSettings.Set(settings, CollectionSettingKeys.KindsOff, kind, on);
-				_homeCache?.MarkStale();
+				// 1.9 (the pre-release nit): not for the categories, which Home never shows (HomeViewModel.HomeBuildOff): a stale Home
+				// asks the server for its page again for nothing; the Collections page sees the switch itself (KindsOffNow)
+				if (kind != SmartCollectionKind.MicroGenre)
+				{
+					_homeCache?.MarkStale();
+				}
+
 				if (CollectionSettings.PeopleKinds.Contains(kind))
 				{
 					ViewModels.SmartCollectionServices.Index?.PeopleSwitched();
+				}
+
+				// 1.9 (the text stream's review, Major 1; rule 9): the categories' switch turns the shows' summaries pass off and on
+				// at once: off cancels it and deletes the matches (in memory and LibraryIndex\Summaries), on reads them now
+				if (kind == TextPass.Kind)
+				{
+					TextPass.App?.Switched();
 				}
 			}))];
 		// fix round (BH-173-m2): the presets strip's own kinds, with the switches 1.7.2 had for them (the same setting)
@@ -164,8 +223,14 @@ public sealed class CollectionsSettingsViewModel
 		SmartCollectionKind.MoreLike => "Titles like one you finished.",
 		SmartCollectionKind.MoreFrom => "More of a director or actor of a title you finished. Off with Spotlight, Nixie doesn't read the titles' people.",
 		SmartCollectionKind.Spotlight => "A director, actor or studio each week. Off with More from, Nixie doesn't read the titles' people.",
+		// 1.9 (Collections 2): what the categories are, and that they are matched on this PC (nothing is sent anywhere)
+		SmartCollectionKind.MicroGenre => CategoriesText,
 		_ => "",
 	};
+
+	/// <summary>1.9 (Collections 2): the Categories switch's words.</summary>
+	public const string CategoriesText = "Films or shows that share a genre and a decade, a country or a subject, such as crime dramas from the 1970s. "
+		+ "Matched on this PC from the server's own data. Off, the Collections page and This week show none.";
 
 	/// <summary>Acclaimed's Home row switch, its words (fix round, BH-173-q1).</summary>
 	public const string HighlyRatedText = "The best-rated titles on the server that you haven't watched. Titles with more behind their rating come first.";

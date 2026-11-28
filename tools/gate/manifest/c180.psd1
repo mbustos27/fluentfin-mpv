@@ -79,7 +79,7 @@
         Then     = 'tools\ui-harness\offscreen\then-180-off.ps1'
         Steps    = 'home'
         SignIn   = 'quickconnect'
-        Settings = @('CollectionsKindsOff=Franchise,Keyword,HighlyRated,UnfinishedSeries,Seasonal,ShortFilms,NextIn,MoreLike,MoreFrom,Spotlight')
+        Settings = @('CollectionsKindsOff=MicroGenre,Franchise,Keyword,HighlyRated,UnfinishedSeries,Seasonal,ShortFilms,NextIn,MoreLike,MoreFrom,Spotlight')  # 1.9: and the categories (their switch is first)
         Env      = @{}
         Themes   = @('Classic')
         Sizes    = 'none'

@@ -25,10 +25,18 @@ public sealed class TitleSimilarity
 	/// <summary>A shared feature counts as rare when at most this share of the titles of its kind has it.</summary>
 	public const double RareShare = 0.1;
 
+	/// <summary>
+	/// 1.9 (the rebuild's blocker 2): a reason line names a feature only when at least this many of the titles it speaks for
+	/// share it (all of them when fewer): a reason named two actors and a genre of a row whose first seven shared only a
+	/// studio, the actors one title's.
+	/// </summary>
+	public const int NamedLeast = 2;
+
 	private static readonly double RareIdf = Math.Log(1 / RareShare);
 
 	private readonly Dictionary<(FeatureKind Kind, string Text), int> _ids = new(new KeyComparer());
 	private readonly List<(FeatureKind Kind, string Label)> _features = [];
+	private readonly List<bool> _sayable = []; // 1.9 (stream wire): a feature a reason line may name (a keyword: the allowlist's only)
 	private readonly Dictionary<Guid, int> _at = [];
 	private readonly IReadOnlyList<IndexEntry> _titles;
 	private readonly int[][] _of;
@@ -101,7 +109,10 @@ public sealed class TitleSimilarity
 			_idf[kind] = idf;
 		}
 
-		_hook = [.. _features.Select(x => x.Kind is FeatureKind.Keyword or FeatureKind.Director or FeatureKind.Actor)];
+		// 1.9 (the review of wip/190-wire, Major 1): a keyword is a hook only when it is the allowlist's (_sayable): since revision 4
+		// the index keeps 292 matchable keywords, and a common one ("suspenseful") opened the rare gate for titles that shared it
+		// alone, a More like row whose reason named only the genre and the decade. Others count as hooks by their rarity only
+		_hook = [.. _features.Select((x, id) => x.Kind is FeatureKind.Director or FeatureKind.Actor || (x.Kind == FeatureKind.Keyword && _sayable[id]))];
 		for (var i = 0; i < titles.Count; i++)
 		{
 			if (titles[i] is { } title && _idf.TryGetValue(title.Kind, out var idf))
@@ -127,7 +138,8 @@ public sealed class TitleSimilarity
 	/// <summary>
 	/// The titles of <paramref name="anchor"/>'s kind like it, most alike first, that <paramref name="keep"/> keeps and that
 	/// share a rare feature with it (a keyword, a person, or anything at most <see cref="RareShare"/> of its kind has):
-	/// two dramas of the same decade aren't alike.
+	/// two dramas of the same decade aren't alike. 1.9: a keyword of the allowlist; a matchable one only by its rarity; a
+	/// studio or network only beside another trait they share (the rebuild's blocker 2).
 	/// </summary>
 	public IReadOnlyList<(IndexEntry Title, double Similarity)> Like(IndexEntry anchor, Func<IndexEntry, bool> keep)
 	{
@@ -163,7 +175,10 @@ public sealed class TitleSimilarity
 	/// <paramref name="most"/>: "space", "anime", "Megumi Hayashibara". A feature weighs its rarity times how many of them share
 	/// it, times its namespace's <see cref="HookWeight"/>: a keyword or a person is a hook, a genre less, a country or a
 	/// decade only context (labels naming a genre or a release date are the ones viewers like least). 1.8.1 (BH-180-q3): never
-	/// a country: "Shares Germany, …" read as a trait the titles share (it still counts toward how alike they are).
+	/// a country: "Shares Germany, …" read as a trait the titles share (it still counts toward how alike they are). 1.9 (stream
+	/// wire): never a keyword beyond the allowlist (<see cref="Keywords.IsNamed"/>): the index keeps the categories' matchable
+	/// ones since its revision 4, and they count toward how alike titles are, unsaid. 1.9 (the rebuild's blocker 2): only what at
+	/// least <see cref="NamedLeast"/> of <paramref name="titles"/> share: what the titles shown actually share.
 	/// </summary>
 	public IReadOnlyList<(FeatureKind Kind, string Label)> Shared(IndexEntry anchor, IEnumerable<IndexEntry> titles, int most)
 	{
@@ -173,6 +188,8 @@ public sealed class TitleSimilarity
 		}
 
 		var weight = new Dictionary<int, double>();
+		var sharing = new Dictionary<int, int>(); // 1.9 (the rebuild's blocker 2): how many of the titles share each
+		var seen = 0;
 		foreach (var title in titles)
 		{
 			if (title is null || !_at.TryGetValue(title.Id, out var t))
@@ -180,16 +197,21 @@ public sealed class TitleSimilarity
 				continue;
 			}
 
+			seen++;
 			foreach (var id in _of[a])
 			{
-				if (_features[id].Kind != FeatureKind.Country && Array.BinarySearch(_of[t], id) >= 0)
+				// 1.9 (stream wire): a keyword beyond the allowlist (the index keeps the categories' matchable ones since revision 4)
+				// counts toward how alike titles are, but is never said: only hand-picked keywords name anything (1.7's review #1)
+				if (_features[id].Kind != FeatureKind.Country && _sayable[id] && Array.BinarySearch(_of[t], id) >= 0)
 				{
 					weight[id] = weight.GetValueOrDefault(id) + (idf[id] * HookWeight(_features[id].Kind));
+					sharing[id] = sharing.GetValueOrDefault(id) + 1;
 				}
 			}
 		}
 
-		var ranked = weight.Where(x => x.Value > 0)
+		var least = Math.Min(NamedLeast, seen);
+		var ranked = weight.Where(x => x.Value > 0 && sharing[x.Key] >= least)
 			.OrderByDescending(x => x.Value).ThenBy(x => _features[x.Key].Label, StringComparer.OrdinalIgnoreCase)
 			.Select(x => _features[x.Key])
 			.ToList();
@@ -215,7 +237,10 @@ public sealed class TitleSimilarity
 		_ => 0.7,
 	};
 
-	// the cosine of two titles' weights (both of one kind), and whether a feature they share is rare
+	// the cosine of two titles' weights (both of one kind), and whether a feature they share is rare. 1.9 (the rebuild's blocker
+	// 2, queued as 10a): a rare studio or network alone isn't: it must come with another trait they share (a genre, a keyword, a
+	// person; a decade or a country is context). A streaming platform's studio, rare on a server of production companies, let
+	// documentaries and a short film into a More like
 	private double Cosine(int a, int b, out bool rare)
 	{
 		rare = false;
@@ -223,6 +248,8 @@ public sealed class TitleSimilarity
 		{
 			return 0;
 		}
+
+		bool studio = false, trait = false;
 
 		var fa = _of[a];
 		var fb = _of[b];
@@ -236,7 +263,17 @@ public sealed class TitleSimilarity
 			{
 				var w = idf[x];
 				dot += w * w;
-				rare |= _hook[x] || w >= RareIdf;
+				var kind = _features[x].Kind;
+				if (kind == FeatureKind.Studio)
+				{
+					studio |= w >= RareIdf;
+				}
+				else
+				{
+					rare |= _hook[x] || w >= RareIdf;
+					trait |= kind is FeatureKind.Genre or FeatureKind.Keyword or FeatureKind.Director or FeatureKind.Actor;
+				}
+
 				i++;
 				j++;
 			}
@@ -250,6 +287,7 @@ public sealed class TitleSimilarity
 			}
 		}
 
+		rare |= studio && trait;
 		return dot / (_norm[a] * _norm[b]);
 	}
 
@@ -303,11 +341,14 @@ public sealed class TitleSimilarity
 		{
 			_ids[key] = id = _features.Count;
 			_features.Add((kind, LabelOf(kind, key.Item2)));
+			_sayable.Add(kind != FeatureKind.Keyword || Keywords.IsNamed(key.Item2)); // 1.9 (stream wire)
 		}
 
 		into.Add(id);
 	}
 
+	// 1.9 (stream wire): a keyword's label is its allowlist name; one beyond the allowlist keeps its own text here, and Shared
+	// never names it (_sayable)
 	private static string LabelOf(FeatureKind kind, string text) => kind switch
 	{
 		FeatureKind.Genre => Lower(text),

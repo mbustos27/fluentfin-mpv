@@ -173,7 +173,7 @@ public sealed class LiveIndexTests
 			var addedLog = new CoreListLogger<LibraryIndex>();
 			var count = IndexRead.CountOf(saved.Check);
 			watch.Restart();
-			var (merged, why) = await new IndexRead(client, TimeProvider.System, addedLog).AddedAsync(saved, count, count, saved.Check!, CancellationToken.None);
+			var (merged, why) = await new IndexRead(client, TimeProvider.System, addedLog).ChangedAsync(saved, saved.Check!, CancellationToken.None); // 1.9
 			summary["addedSince"] = new JsonObject
 			{
 				["ms"] = watch.ElapsedMilliseconds,

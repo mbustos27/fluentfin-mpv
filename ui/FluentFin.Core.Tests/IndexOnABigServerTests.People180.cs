@@ -111,9 +111,10 @@ public sealed partial class IndexOnABigServerTests
 	public async Task NewTitlesWhosePeopleDidntCome_AreAskedAgainOnTheirOwn_AfterTheHour()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 24, 8, 0, 0, TimeSpan.Zero));
+		SavedSince(); // 1.9: a change is read as what changed
 		await ReadAndSave(time);
 		_check = "2501:another";
-		_films.Add(Film(2500)); // a film added
+		_films.Add(Added(2500, time.Now + TimeSpan.FromHours(1), time.Now + TimeSpan.FromHours(1))); // a film added
 		_peopleByIdFails = true;
 
 		time.Now += TimeSpan.FromHours(2);
@@ -189,7 +190,7 @@ public sealed partial class IndexOnABigServerTests
 	{
 		var release = new TaskCompletionSource();
 		PeoplePages(token => release.Task.WaitAsync(token));
-		using var index = Index();
+		using var index = Index(wholeAnyTime: true); // 1.9: R reads every title again, as before (the day's limit: IndexOnABigServerTests.Load190.cs)
 		Assert.NotNull(await index.GetAsync().WaitAsync(TimeSpan.FromSeconds(20))); // the titles; the people held
 		var titles = _pages;
 
@@ -204,8 +205,8 @@ public sealed partial class IndexOnABigServerTests
 	}
 
 	// 1.8 review: an index whose people step keeps what came at every page (tests: no minute's wait)
-	private LibraryIndex KeepingIndex(TimeProvider time) =>
-		new(_client.Object, _homeCache, Path.Combine(_folder, "LibraryIndex"), _messages, new CoreListLogger<LibraryIndex>(), time) { PeopleKeptEvery = TimeSpan.Zero };
+	private LibraryIndex KeepingIndex(TimeProvider time, bool wholeAnyTime = false) =>
+		new(_client.Object, _homeCache, Path.Combine(_folder, "LibraryIndex"), _messages, new CoreListLogger<LibraryIndex>(), time) { PeopleKeptEvery = TimeSpan.Zero, WholeReadEvery = wholeAnyTime ? TimeSpan.Zero : LibraryIndex.FreshFor };
 
 	// the people pages of the 2,500 films; those from `from` on wait for `release` (or the read's end)
 	private void PeoplePagesHeldFrom(int from, Task release) =>
@@ -260,7 +261,7 @@ public sealed partial class IndexOnABigServerTests
 	public async Task RDuringThePeopleStep_KeepsWhatCame_AndTheReadAfterAsksOnlyTheRest()
 	{
 		PeoplePagesHeldFrom(700, new TaskCompletionSource().Task);
-		using var index = KeepingIndex(TimeProvider.System);
+		using var index = KeepingIndex(TimeProvider.System, wholeAnyTime: true);
 		Assert.NotNull(await index.GetAsync());
 		await WaitForIndex(index, x => WithPeople(x) >= 450);
 		var pages = _peoplePages;
@@ -285,6 +286,7 @@ public sealed partial class IndexOnABigServerTests
 	public async Task ASignInElsewhere_EndsThePeopleStep_AndASwitchBackClaimsNoPeopleItDidntGet()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 24, 8, 0, 0, TimeSpan.Zero));
+		SavedSince(); // 1.9: a change is read as what changed
 		await ReadAndSave(time);
 		var asked = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
 		_client.Setup(x => x.GetPeopleByIds(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
@@ -295,7 +297,7 @@ public sealed partial class IndexOnABigServerTests
 				return null;
 			});
 		_check = "2505:another";
-		_films.AddRange(Enumerable.Range(2500, 5).Select(Film)); // five films added
+		_films.AddRange(Enumerable.Range(2500, 5).Select(i => Added(i, time.Now + TimeSpan.FromHours(1), time.Now + TimeSpan.FromHours(1)))); // five films added
 		time.Now += TimeSpan.FromHours(2);
 		using var index = Index(time);
 		await index.GetAsync();
@@ -316,9 +318,10 @@ public sealed partial class IndexOnABigServerTests
 	public async Task MissingPeople_AreAskedAgainAfterTheHour_WhileTheAppStaysOpen()
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 24, 8, 0, 0, TimeSpan.Zero));
+		SavedSince(); // 1.9: a change is read as what changed
 		await ReadAndSave(time);
 		_check = "2501:another";
-		_films.Add(Film(2500));
+		_films.Add(Added(2500, time.Now + TimeSpan.FromHours(1), time.Now + TimeSpan.FromHours(1)));
 		_peopleByIdFails = true;
 		time.Now += TimeSpan.FromHours(2);
 		using var open = Index(time); // the app, open all along from here
@@ -350,7 +353,7 @@ public sealed partial class IndexOnABigServerTests
 	public async Task RBeforeAnyMinuteKeep_KeepsWhatCameByTheCut_AndPeopleSlotsWaitForTheRest()
 	{
 		PeoplePagesHeldFrom(700, new TaskCompletionSource().Task);
-		using var index = Index(); // a minute between keeps
+		using var index = Index(wholeAnyTime: true); // a minute between keeps
 		Assert.NotNull(await index.GetAsync());
 		await WaitFor(() => Volatile.Read(ref _peoplePages) >= 5); // the pages before 700 in, those from 700 waiting
 		Assert.Equal(0, WithPeople(index.Current!)); // no minute's keep yet
@@ -405,6 +408,7 @@ public sealed partial class IndexOnABigServerTests
 		PeoplePagesHeldFrom(700, new TaskCompletionSource().Task);
 		using var index = new LibraryIndex(_client.Object, _homeCache, Path.Combine(_folder, "LibraryIndex"), _messages, new CoreListLogger<LibraryIndex>(), TimeProvider.System)
 		{
+			WholeReadEvery = TimeSpan.Zero, // 1.9: R reads every title again, as before
 			// the cut-short save (the first written with titles still to ask) waits until R's read has written everything
 			BeforeSave = async snapshot =>
 			{

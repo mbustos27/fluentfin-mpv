@@ -17,9 +17,9 @@ public sealed partial class IndexOnABigServerTests
 		await ReadAndSave(time);
 		var folder = Path.Combine(_folder, "LibraryIndex");
 		var file = Directory.GetFiles(folder, "*.json").Single();
-		await File.WriteAllTextAsync(file, (await File.ReadAllTextAsync(file)).Replace(",\"Revision\":3", "", StringComparison.Ordinal)); // 1.7.2's index
+		await File.WriteAllTextAsync(file, (await File.ReadAllTextAsync(file)).Replace(",\"Revision\":4", "", StringComparison.Ordinal)); // 1.7.2's index
 		var note = Directory.GetFiles(Path.Combine(folder, "Reads"), "*.json").Single();
-		await File.WriteAllTextAsync(note, (await File.ReadAllTextAsync(note)).Replace(",\"Revision\":3", "", StringComparison.Ordinal)); // and its note
+		await File.WriteAllTextAsync(note, (await File.ReadAllTextAsync(note)).Replace(",\"Revision\":4", "", StringComparison.Ordinal)); // and its note
 
 		// the first start after the update: the upgrade read begins at once, and the server goes away part way
 		time.Now += TimeSpan.FromMinutes(10);
@@ -34,7 +34,7 @@ public sealed partial class IndexOnABigServerTests
 
 		await index.Settled;
 		Assert.True(_pages > before, "the upgrade read began");
-		Assert.DoesNotContain("\"Revision\":3", await File.ReadAllTextAsync(file), StringComparison.Ordinal); // it never came in
+		Assert.DoesNotContain("\"Revision\":4", await File.ReadAllTextAsync(file), StringComparison.Ordinal); // it never came in
 
 		// pages opened within the hour: the old index shows, nothing is read (a failing server isn't asked at every visit)
 		Pages(_ => Task.CompletedTask);
@@ -58,7 +58,7 @@ public sealed partial class IndexOnABigServerTests
 
 		await index.Settled;
 		Assert.True(_pages > failed, "the upgrade read was tried again after the hour, without a restart");
-		await WaitForSaved(x => x.Contains("\"Revision\":3", StringComparison.Ordinal));
+		await WaitForSaved(x => x.Contains("\"Revision\":4", StringComparison.Ordinal));
 		Assert.True(index.Current!.BackingKnown);
 
 		// and once it is in, nothing more: the next visit reads nothing
@@ -79,6 +79,7 @@ public sealed partial class IndexOnABigServerTests
 	{
 		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
 		var asked = MoviesAndShows(() => false); // the played episodes never come
+		var since = SavedSince(); // 1.9: a change is read as what changed
 		var first = await ReadAndSave(time);
 		Assert.True(first.PlaysDue);
 		await WaitForSaved(x => x.Contains("\"PlaysDue\":true", StringComparison.Ordinal));
@@ -89,14 +90,14 @@ public sealed partial class IndexOnABigServerTests
 		time.Now += TimeSpan.FromHours(2);
 		using var later = Index(time);
 		Assert.NotNull(await later.GetAsync());
-		for (var i = 0; i < 400 && _pages == pages; i++)
+		for (var i = 0; i < 400 && since.Value == 0; i++)
 		{
 			await Task.Delay(10);
 		}
 
 		await later.Checking;
 		await later.Settled;
-		Assert.True(_pages > pages, "the change the check confirmed is read at once, not after the day's read");
+		Assert.True(since.Value > 0, "the change the check confirmed is read at once, not after the day's read");
 		Assert.Equal("2501:newer", later.Current!.Check);
 		Assert.Equal(first.ReadAt, later.Current.ReadAt); // a change's read keeps the day's date
 
@@ -133,7 +134,7 @@ public sealed partial class IndexOnABigServerTests
 			});
 
 		var read = await ReadAndSave();
-		await WaitForSaved(x => x.Contains("\"Revision\":3", StringComparison.Ordinal));
+		await WaitForSaved(x => x.Contains("\"Revision\":4", StringComparison.Ordinal));
 		var text = await File.ReadAllTextAsync(Directory.GetFiles(Path.Combine(_folder, "LibraryIndex"), "*.json").Single());
 
 		Assert.Equal(3, text.Split("\"LibraryIds\":").Length - 1); // the three shared titles only, of 2,501
@@ -174,10 +175,11 @@ public sealed partial class IndexOnABigServerTests
 
 		var asked = new System.Runtime.CompilerServices.StrongBox<int>();
 		_client.Setup(x => x.GetLibraryIndexPageSavedSince(It.IsAny<BaseItemDto>(), It.IsAny<DateTimeOffset>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-			.ReturnsAsync((BaseItemDto _, DateTimeOffset since, int start, int limit, bool total, CancellationToken _) =>
+			.ReturnsAsync((BaseItemDto library, DateTimeOffset since, int start, int limit, bool total, CancellationToken _) =>
 			{
 				Interlocked.Increment(ref asked.Value);
-				var saved = _films.Where(x => _savedAt.GetValueOrDefault(x.Id!.Value, FirstAdded) >= since).OrderBy(x => x.SortName).ToList();
+				Interlocked.Exchange(ref _savedSinceAsked, since.Ticks);
+				List<BaseItemDto> saved = library.Id != MoviesId ? [] : _films.Where(x => _savedAt.GetValueOrDefault(x.Id!.Value, FirstAdded) >= since).OrderBy(x => x.SortName).ToList(); // 1.9: Movies' films only
 				return new BaseItemDtoQueryResult { Items = [.. saved.Skip(start).Take(limit)], TotalRecordCount = total ? saved.Count : null };
 			});
 		_client.Setup(x => x.GetLibraryTitleCount(It.IsAny<BaseItemDto>(), It.IsAny<CancellationToken>()))
@@ -193,6 +195,7 @@ public sealed partial class IndexOnABigServerTests
 	// a library's count
 	private readonly List<BaseItemDto> _elsewhere = [];
 	private int _counted;
+	private long _savedSinceAsked; // 1.9: the time the last page of the titles saved since asked from (its ticks)
 
 	// a film added to the library at a scan an hour after the first read: saved then, dated as the server dates it
 	private BaseItemDto Added(int i, DateTimeOffset dated, DateTimeOffset scanned)
@@ -250,84 +253,7 @@ public sealed partial class IndexOnABigServerTests
 		Assert.Equal((pages, 1), (_pages, asked.Value));
 	}
 
-	// what the titles saved since can't explain is read whole, as before: a title removed (the count moved by less), and the
-	// 1.7.5 review's case, a title removed while one is added with an older date and one newest (the first build read newest
-	// first by DateCreated, didn't see the older one, and the count matched: the removed title stayed); 1.8.1 (BH-175-m3): a
-	// title removed while one is added in a library the index skips (a mixed library: the server's check moved by 0, and the
-	// removed title stayed in Made by Nixie until the day's read): Movies' own count moved by -1 with nothing added there; a
-	// library added
-	[Theory]
-	[InlineData("removed")]
-	[InlineData("removed, one older and one newest added")]
-	[InlineData("removed, one added in a skipped library")]
-	[InlineData("library added")]
-	public async Task ALibraryChange_TheTitlesSavedSinceCantExplain_ReadsEveryTitle(string change)
-	{
-		var time = new ManualTime(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
-		var asked = SavedSince();
-		_elsewhere.Add(Film(9001)); // a mixed library's film, there before the first read (counted by the check, never indexed)
-		await ReadAndSave(time);
-		var pages = _pages;
-		var removed = _films[10];
-		var scan = time.Now + TimeSpan.FromHours(1);
-		switch (change)
-		{
-			case "removed":
-				_films.Remove(removed);
-				_films.Add(Added(2500, scan, scan));
-				_check = "2500:newer"; // one gone, one added: the count moved by 0, not 1
-				break;
-			case "removed, one older and one newest added":
-				_films.Remove(removed);
-				_films.AddRange([Added(2500, scan, scan), Added(2501, FirstAdded.AddDays(-400), scan)]);
-				_check = "2501:newer"; // one gone, two added: by 1, not 2
-				break;
-			case "removed, one added in a skipped library":
-				_films.Remove(removed);
-				_elsewhere.Add(Added(9002, scan, scan));
-				_check = "2500:elsewhere"; // one gone from Movies, one added to the mixed library: by 0
-				break;
-			default:
-				var kidsId = Guid.Parse("aaaaaaaa-3333-0000-0000-000000000175");
-				_client.Setup(x => x.GetUserViewsOrNull()).ReturnsAsync([Library(MoviesId, "Movies"), Library(kidsId, "Kids")]);
-				_check = "2500:kids";
-				break;
-		}
-
-		time.Now += TimeSpan.FromHours(2);
-		using var index = Index(time);
-		await index.GetAsync();
-		for (var i = 0; i < 400 && _pages == pages; i++)
-		{
-			await Task.Delay(10);
-		}
-
-		await index.Checking;
-		await index.Settled;
-		Assert.True(_pages > pages, "every title read");
-		var now = index.Current!;
-		switch (change)
-		{
-			case "removed":
-				Assert.DoesNotContain(now.Entries, x => x.Id == removed.Id);
-				Assert.Equal(2500, now.Entries.Count);
-				break;
-			case "removed, one older and one newest added":
-				Assert.DoesNotContain(now.Entries, x => x.Id == removed.Id); // the removed title went, not opened and failed
-				Assert.Contains(now.Entries, x => x.Name == "Film 02501"); // the older-dated one came
-				Assert.Equal(2501, now.Entries.Count);
-				break;
-			case "removed, one added in a skipped library":
-				Assert.DoesNotContain(now.Entries, x => x.Id == removed.Id); // gone from Made by Nixie now, not at the day's read
-				Assert.Equal(2499, now.Entries.Count);
-				Assert.DoesNotContain(now.Entries, x => x.Name is "Film 09001" or "Film 09002"); // never a skipped library's
-				break;
-			default:
-				Assert.Equal(2, now.Libraries.Count);
-				Assert.Equal(0, asked.Value); // the libraries changed: no page of the titles saved since asked
-				break;
-		}
-	}
+	// 1.9: what the titles saved since can't explain (1.7.5's and 1.8.1's read of every title): IndexOnABigServerTests.Load190.cs
 
 	// 1.8.1 (BH-175-m3): a title added to a library the index skips (a mixed library) moves the server's check, but no indexed
 	// library's count: nothing is read whole (1.7.5 read every title for it, 28 requests on the throwaway 25,736-film server),

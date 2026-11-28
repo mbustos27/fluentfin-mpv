@@ -53,6 +53,13 @@ public static class NixiePresets
 	/// </summary>
 	public static IReadOnlyList<SmartCollectionKind> StripOnlyKinds { get; } = [SmartCollectionKind.Decade, SmartCollectionKind.GenreMix, SmartCollectionKind.Country];
 
+	/// <summary>
+	/// 1.9 (Collections 2): published kinds the strip leaves out: the categories (a library's filters are the strip's few broad
+	/// kinds, and a build of the catalogue's 300 rules a library would be work on the library page's path). Categories as a
+	/// library's presets are the survey's optional step, not 1.9's.
+	/// </summary>
+	public static IReadOnlySet<SmartCollectionKind> NotInStrip { get; } = new HashSet<SmartCollectionKind> { SmartCollectionKind.MicroGenre };
+
 	// their ids' first part, as their builders make them ("decade:movie:1980", "genres:movie:comedy+horror", "country:france")
 	private static readonly string[] StripOnlyPrefixes = ["decade:", "genres:", "country:"];
 
@@ -87,7 +94,8 @@ public static class NixiePresets
 		// 1.7.5 (fx1; M2's review of 1.7.3): both in one build of the catalog's (BuildKinds), less the kinds turned off: its gate
 		// counter and its catch, and the library's titles collapsed once (the strip's own kinds had a context, a loop and a catch
 		// of their own, and collapsed the titles again)
-		var kinds = SmartCollectionCatalog.Published.Concat(StripOnlyKinds).Where(x => kindsOff?.Contains(x) != true).ToHashSet();
+		// 1.9 (Collections 2): not the categories (NotInStrip): the Collections page's row, not a library's filters
+		var kinds = SmartCollectionCatalog.Published.Concat(StripOnlyKinds).Where(x => kindsOff?.Contains(x) != true && !NotInStrip.Contains(x)).ToHashSet();
 		var all = SmartCollectionCatalog.BuildKinds(own, now, kinds, boxedFranchises, Outside.OutsideListsSnapshot.Shared, whole: true).Where(x => kinds.Contains(x.Kind));
 		// one of each kind first (the strip shows a mix, not twelve franchises), then the rest in the same order
 		var byKind = all.GroupBy(x => x.Kind).OrderBy(g => Place(g.Key)).Select(g => g.ToList()).ToList();

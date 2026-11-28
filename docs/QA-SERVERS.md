@@ -226,6 +226,12 @@ Never take a pre-release (`preview`, `unstable`) without the owner's yes.
 
 - `tools\ui-harness\live-server-index.ps1` (opt-in, read-only): the library index's request as qa-user, per title, and the
   contrast with a bogus `Fields` name; results in `docs\research\smart-collections-data.md`.
+- `tools\qa-servers\live-user-data-since.ps1` (opt-in, Nixie 1.9, the index's load): a film marked played, another
+  marked favourite and an episode marked played as qa-user, then put back. On 27 Nov 2026, on both 10.11.11 and 12.4.0,
+  `MinDateLastSavedForUser` didn't return them (0 of 7, from a minute or two days back): it follows the titles' own
+  save date, not the user's data. The requests the index uses instead pass: the titles played, latest first, begin
+  with the episode then the film, each with its time played; the favourites hold the film; the show's played episodes
+  count one more. Starts a stopped server in an off-screen slot and stops it after.
 - `tools\qa-servers\live-save-playlist.ps1` (opt-in): Nixie's "Save as playlist" request as qa-user, read back in its
   order, the refusals, and the playlist deleted again (only "QA Playlist" is left). Both versions make a playlist with an
   empty name too (the fake does likewise); `GET /Items/{id}` of a deleted playlist answers 400, not 404.

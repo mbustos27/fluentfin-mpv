@@ -653,6 +653,23 @@ class ServerTests(unittest.TestCase):
         self.assertEqual((200, body["added"]), (status, gone["removed"]))
         self.assertEqual(total, self.get(everything)["TotalRecordCount"])
 
+    # Nixie 1.9 (the index's load): MinDateLastSavedForUser as 10.11.11 and 12.4.0 answer it, by the title's own save date: a
+    # film marked played from another device a moment ago isn't among them; the titles played, latest first, begin with it
+    def test_min_date_last_saved_for_user_follows_the_titles_save_date_and_played_latest_first_has_the_play(self):
+        movie = self.get("/__harness/fixture")["movie"]["id"]
+        since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)).strftime("%Y-%m-%dT%H%%3A%M%%3A%S.0000000%%2B00%%3A00")
+        was = self.get("/UserItems/%s/UserData" % movie)["Played"]
+        self.assertEqual(200, self.request("/__harness/played", "POST", {"id": movie, "played": True})[0])
+        try:
+            for_user = self.get("/Items?includeItemTypes=Movie&recursive=true&enableTotalRecordCount=true&minDateLastSavedForUser=" + since)
+            self.assertEqual(0, for_user["TotalRecordCount"])
+            played = self.get("/Items?includeItemTypes=Movie,Episode&recursive=true&filters=IsPlayed&sortBy=DatePlayed,SortName&sortOrder=Descending,Ascending&limit=3")
+            self.assertEqual(movie, played["Items"][0]["Id"])
+            self.assertTrue(played["Items"][0]["UserData"]["Played"])
+            self.assertIn("LastPlayedDate", played["Items"][0]["UserData"])
+        finally:
+            self.request("/__harness/played", "POST", {"id": movie, "played": was})
+
     def test_user_data_endpoint_and_absent_plugin(self):
         movie = self.get("/__harness/fixture")["movie"]["id"]
         data = self.get("/UserItems/%s/UserData" % movie)
@@ -1013,6 +1030,59 @@ class RealShapeTests(unittest.TestCase):
         big = lib.showcase()["big"][0]
         listed = lib.query({"parentid": [library._id("view", "Archive")], "sortby": ["SortName"]})["Items"]
         self.assertEqual((300, listed[0]["Name"], listed[-1]["Name"]), (big["count"], big["first"], big["last"]))
+
+
+class SummariesTests(unittest.TestCase):
+    """Nixie 1.9 (stream text): the shows' summaries the categories' word lists match, Taglines only when asked, and the big
+    shows library (FAKESERVER_BIG_SHOWS); the rest of the fixture as it was."""
+
+    @staticmethod
+    def _lib(**env):
+        old = {k: os.environ.pop(k, None) for k in [k for k in os.environ if k.startswith("FAKESERVER_")]}
+        try:
+            os.environ.update(env)
+            return library.Library("server", "user", 600)
+        finally:
+            for k in env:
+                os.environ.pop(k, None)
+            for k, v in old.items():
+                if v is not None:
+                    os.environ[k] = v
+
+    def test_most_shows_summaries_begin_with_a_theme_the_word_lists_match_and_the_showcase_is_as_it_was(self):
+        lib = self._lib()
+        shows = [i for i in lib.items.values() if i["kind"] == "series"]
+        themed = [s for s in shows if any(s["overview"].startswith(t) for t in library.SHOW_THEMES)]
+        self.assertTrue(len(shows) * 0.5 < len(themed) < len(shows) * 0.85, (len(themed), len(shows)))
+        self.assertEqual(len(library.SHOW_THEMES), len({t for s in themed for t in library.SHOW_THEMES if s["overview"].startswith(t)}))
+        showcase = next(s for s in shows if s.get("showcase") == "series")
+        self.assertFalse(any(showcase["overview"].startswith(t) for t in library.SHOW_THEMES))
+        # the same theme for a show every run: by its id, no draw of the fixture's random source
+        self.assertEqual([s["overview"] for s in shows], [s["overview"] for s in self._lib().items.values() if s["kind"] == "series"])
+
+    def test_taglines_come_in_a_list_answer_only_when_asked(self):
+        lib = self._lib()
+        shows = library._id("view", "Shows")
+        asked = lib.query({"parentid": [shows], "fields": ["Overview,Taglines"], "enableimages": ["false"]})["Items"]
+        plain = lib.query({"parentid": [shows]})["Items"]
+        self.assertTrue(all("Taglines" in i for i in asked))
+        self.assertTrue(any(i["Taglines"] for i in asked))
+        self.assertFalse(any("Taglines" in i for i in plain))
+        self.assertTrue(all(i["Overview"] for i in asked))
+
+    def test_the_big_shows_library_has_its_shows_their_summaries_and_leaves_the_rest_as_it_was(self):
+        plain = self._lib()
+        big = self._lib(FAKESERVER_BIG_SHOWS="120")
+        self.assertEqual(plain.user, big.user)   # before any query (an answer's user data is made as it is asked)
+        archive = library._id("view", "Shows Archive")
+        listed = big.query({"parentid": [archive], "includeitemtypes": ["Series"], "fields": ["Overview,Taglines"]})
+        self.assertEqual(120, listed["TotalRecordCount"])
+        overviews = [i["Overview"] for i in listed["Items"]]
+        self.assertTrue(1 <= sum(1 for o in overviews if not o) <= 25, sum(1 for o in overviews if not o))   # about 8 % none
+        self.assertTrue(sum(1 for o in overviews if any(o.startswith(t) for t in library.SHOW_THEMES)) > 50)
+        self.assertIn(archive, [v["Id"] for v in big.query({})["Items"]])
+        for vid in plain.views:   # every other library as it was
+            self.assertEqual([plain.items[i]["Name"] for i in plain.children[vid]], [big.items[i]["Name"] for i in big.children[vid]])
 
 
 class SearchTests(unittest.TestCase):

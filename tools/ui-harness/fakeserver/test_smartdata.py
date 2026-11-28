@@ -128,6 +128,29 @@ class DefaultFixtureTests(unittest.TestCase):
         films = [i for i in lib.items.values() if i["kind"] == "movie"]
         self.assertGreaterEqual(len({f["tmdb_collection"] for f in films if f.get("tmdb_collection")}), 6)
         self.assertFalse(any(i.get("tmdb") for i in lib.items.values()))
+        self.assertFalse(any(f.get("tmdb_collection", "").startswith("919") for f in films))   # 1.9's only when asked
+
+    # Nixie 1.9 (the ui stream): FAKESERVER_FRANCHISES190 adds the twins and the started franchise, and changes nothing else
+    def test_the_190_franchises_come_only_when_asked_and_leave_the_rest_as_it_was(self):
+        plain = library.Library("s", "u", 600 * library.TICKS)
+        os.environ["FAKESERVER_FRANCHISES190"] = "1"
+        try:
+            lib = library.Library("s", "u", 600 * library.TICKS)
+        finally:
+            del os.environ["FAKESERVER_FRANCHISES190"]
+        added = {i: v for i, v in lib.items.items() if i not in plain.items}
+        self.assertEqual(24, len(added))
+        by_franchise = {}
+        for film in added.values():
+            by_franchise.setdefault(film["tmdb_collection"], []).append((film["Name"], film["year"]))
+        self.assertEqual({str(n) for n in range(9191, 9199)}, set(by_franchise))
+        self.assertTrue(all(len(films) == 3 for films in by_franchise.values()))
+        self.assertEqual({"Harbor Watch"}, {n for n, _ in by_franchise["9191"]} & {n for n, _ in by_franchise["9192"]})
+        started = [i for i, v in added.items() if lib._ud(i).get("played")]
+        self.assertEqual(["Zenith Lane"], [added[i]["Name"] for i in started])
+        self.assertTrue(lib._ud(started[0])["last_played"])
+        # the rest of the fixture as it was: the same items, with the same names
+        self.assertEqual({i: v["Name"] for i, v in plain.items.items()}, {i: v["Name"] for i, v in lib.items.items() if i in plain.items})
 
 
 if __name__ == "__main__":

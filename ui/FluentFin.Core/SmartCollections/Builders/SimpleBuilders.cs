@@ -315,7 +315,7 @@ public sealed class UnfinishedSeriesBuilder : ISmartCollectionBuilder
 
 	/// <summary>
 	/// 1.8.1 (the owner's library, fix 5): the episodes a show needs played to be one the user drifted away from, not one they
-	/// sampled: 9 of the owner's 35 had one or two (Taskmaster, South Park, 1899, Bridgerton …).
+	/// sampled: 9 of the owner's 35 had one or two.
 	/// </summary>
 	public const int FewestEpisodes = 3;
 
@@ -383,7 +383,9 @@ public sealed class CountryBuilder : ISmartCollectionBuilder
 /// films not watched), Christmas from <see cref="ChristmasOpens"/> to the end of December (the Christmas keywords). Nothing
 /// out of season. 1.8.1 (the owner's library, fix 4): each part best first by the quality score, unwatched first
 /// (<see cref="Best"/>; the raw rating put a new release with a few votes first), and Halloween's tagged titles watched are out
-/// as its horror films are.
+/// as its horror films are. 1.9 (stream wire): Thanksgiving from <see cref="ThanksgivingOpens"/> to US Thanksgiving Day
+/// (<see cref="ThanksgivingDay"/>), TMDb's "thanksgiving" keyword (kept since the index's revision 4); in its last week beside
+/// Christmas, Thanksgiving first (it ends first).
 /// </summary>
 public sealed class SeasonalBuilder : ISmartCollectionBuilder
 {
@@ -403,6 +405,54 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 	public static string ChristmasOpensText =>
 		ChristmasOpens(2000).ToString(System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.MonthDayPattern, System.Globalization.CultureInfo.CurrentCulture);
 
+	// 1.9 (stream wire): the Thanksgiving row (the 1.9 plan's folded-in item; the owner's library has Thanksgiving "[HUB]"
+	// libraries, and 1.8.1's seasonal row was empty until 20 November)
+	/// <summary>1.9: the day the Thanksgiving row opens, each year, on the PC's own date: 1 November. The one place it is set.</summary>
+	public static DateOnly ThanksgivingOpens(int year) => new(year, 11, 1);
+
+	/// <summary>1.9: US Thanksgiving Day, the fourth Thursday of November: the Thanksgiving row's last day.</summary>
+	public static DateOnly ThanksgivingDay(int year)
+	{
+		var first = new DateOnly(year, 11, 1);
+		return first.AddDays((((int)DayOfWeek.Thursday - (int)first.DayOfWeek) + 7) % 7 + 21);
+	}
+
+	/// <summary>1.9: whether <paramref name="now"/> (the local date) is in the Thanksgiving row's window: from 1 November to Thanksgiving Day.</summary>
+	public static bool IsThanksgiving(DateTimeOffset now) =>
+		DateOnly.FromDateTime(now.Date) is var day && day >= ThanksgivingOpens(now.Year) && day <= ThanksgivingDay(now.Year);
+
+	/// <summary>1.9: whether <paramref name="now"/> (the local date) is in the Halloween row's window: October.</summary>
+	public static bool IsHalloween(DateTimeOffset now) => now.Month == 10;
+
+	/// <summary>1.9: a Christmas keyword, as the Christmas row takes them: "christmas…" and "santa claus".</summary>
+	public static bool IsChristmasTag(string tag) =>
+		tag.Trim() is var t && (t.StartsWith("christmas", StringComparison.OrdinalIgnoreCase) || t.Equals("santa claus", StringComparison.OrdinalIgnoreCase));
+
+	/// <summary>
+	/// 1.9 (the review of wip/190-wire, Minor 4): whether a category of the seasonal family (a rule on
+	/// <paramref name="keywords"/>) is in season on <paramref name="now"/>, by the rows' own windows, so their dates live here
+	/// only: Halloween's in October, Christmas's from <see cref="ChristmasOpens"/> to the end of December, Thanksgiving's
+	/// up to the day. A rule on none of those (another seasonal word, "holiday") is in season while any of them is open.
+	/// </summary>
+	public static bool InSeason(IEnumerable<string> keywords, DateTimeOffset now)
+	{
+		var (halloween, christmas, thanksgiving) = (false, false, false);
+		foreach (var keyword in keywords)
+		{
+			halloween |= keyword.Trim().Equals("halloween", StringComparison.OrdinalIgnoreCase);
+			christmas |= IsChristmasTag(keyword);
+			thanksgiving |= keyword.Trim().Equals("thanksgiving", StringComparison.OrdinalIgnoreCase);
+		}
+
+		return halloween || christmas || thanksgiving
+			? (halloween && IsHalloween(now)) || (christmas && IsChristmas(now)) || (thanksgiving && IsThanksgiving(now))
+			: IsHalloween(now) || IsChristmas(now) || IsThanksgiving(now);
+	}
+
+	/// <summary>1.9: the seasonal rows' windows as Settings says them (its "In season" switch).</summary>
+	public static string SeasonsText => $"Halloween in October, Thanksgiving in November up to the day, Christmas from {ChristmasOpensText} to the end of December.";
+	// end 1.9
+
 	public SmartCollectionKind Kind => SmartCollectionKind.Seasonal;
 
 	public IEnumerable<SmartCollection> Build(BuildContext context)
@@ -411,19 +461,36 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 		var made = new List<SmartCollection>();
 		var candidates = 0;
 		var shown = 0;
+		// 1.9 (stream wire): Thanksgiving, in November up to the day; its last week beside Christmas, so not one case of the
+		// month's switch
+		if (IsThanksgiving(context.Now))
+		{
+			var thanksgiving = entries.Where(x => x.Tags.Any(t => t.Trim().Equals("thanksgiving", StringComparison.OrdinalIgnoreCase))).ToList();
+			List<IndexEntry> all = [.. Best.Of(thanksgiving.Where(x => !x.Played), context.Quality), .. Best.Of(thanksgiving.Where(x => x.Played), context.Quality)];
+			candidates += all.Count;
+			if (all.Count >= Fewest)
+			{
+				var titles = all.Take(context.Whole ? int.MaxValue : Most).ToList();
+				shown += titles.Count;
+				made.Add(Make.Of(context, "seasonal:thanksgiving", Kind, "Thanksgiving",
+					ReasonLine.Of("Thanksgiving films and shows", ReasonCount.Of(titles)) with { Until = ThanksgivingDay(context.Now.Year) }, hasOwnOrder: false, titles,
+					why: "Thanksgiving films and shows, up to Thanksgiving Day"));
+			}
+		}
+
 		switch (context.Now.Month)
 		{
-			case 10:
+			case 10 when IsHalloween(context.Now): // 1.9: its window in one place (InSeason)
 				{
 					// 1.8.1 (fix 4): the tagged ones not watched, as the horror films (a watched one led the row), each best first
 					var tagged = Best.Of(entries.Where(x => !x.Played && x.Tags.Contains("halloween", StringComparer.OrdinalIgnoreCase)), context.Quality);
 					var horror = Best.Of(entries.Where(x => x.Kind == IndexKind.Movie && !x.Played && x.Genres.Contains("Horror", StringComparer.OrdinalIgnoreCase)), context.Quality);
 					var all = tagged.Concat(horror).DistinctBy(x => x.Id).ToList();
-					candidates = all.Count;
+					candidates += all.Count;
 					if (all.Count >= Fewest)
 					{
 						var titles = all.Take(context.Whole ? int.MaxValue : Most).ToList(); // fix round (BH-173-M2)
-						shown = titles.Count;
+						shown += titles.Count;
 						made.Add(Make.Of(context, "seasonal:halloween", Kind, "Halloween",
 							ReasonLine.Of("Halloween and horror", ReasonCount.Of(titles)) with { Until = new DateOnly(context.Now.Year, 10, 31) }, hasOwnOrder: false, titles,
 							why: "Halloween and horror, for October"));
@@ -434,14 +501,14 @@ public sealed class SeasonalBuilder : ISmartCollectionBuilder
 
 			case 11 or 12 when IsChristmas(context.Now): // 1.8.1 (fix 4): from 20 November
 				{
-					var christmas = entries.Where(x => x.Tags.Any(t => t.StartsWith("christmas", StringComparison.OrdinalIgnoreCase) || t.Equals("santa claus", StringComparison.OrdinalIgnoreCase))).ToList();
+					var christmas = entries.Where(x => x.Tags.Any(IsChristmasTag)).ToList(); // 1.9: the Christmas keywords in one place
 					// 1.8.1 (fix 4): best first by the quality score, the unwatched before the watched
 					List<IndexEntry> all = [.. Best.Of(christmas.Where(x => !x.Played), context.Quality), .. Best.Of(christmas.Where(x => x.Played), context.Quality)];
-					candidates = all.Count;
+					candidates += all.Count;
 					if (all.Count >= Fewest)
 					{
 						var titles = all.Take(context.Whole ? int.MaxValue : Most).ToList(); // fix round (BH-173-M2)
-						shown = titles.Count;
+						shown += titles.Count;
 						made.Add(Make.Of(context, "seasonal:christmas", Kind, "Christmas",
 							ReasonLine.Of("Christmas films and shows", ReasonCount.Of(titles)) with { Until = new DateOnly(context.Now.Year, 12, 31) }, hasOwnOrder: false, titles,
 							why: "Christmas films and shows, for the holidays"));
